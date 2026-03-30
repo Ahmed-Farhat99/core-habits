@@ -1,0 +1,23 @@
+{
+  "name": "core-habits",
+  "version": "1.0.0",
+  "description": "Obsidian plugin to toggle habits in daily notes with archiving, ordering, and batch renaming, building your core identity.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "echo 'No build needed - using vanilla JS'",
+    "build": "echo 'No build needed - using vanilla JS'"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "habits",
+    "productivity",
+    "tracking"
+  ],
+  "author": "Ahmed Farhat <ahmed9farhat@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "obsidian": "^1.5.7"
+  },
+  "dependencies": {}
+}
