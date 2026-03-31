@@ -3,7 +3,7 @@
   1. Core Initialization — Constants, Imports, Utils, AudioEngine
   2. Plugin Class        — DailyHabitsPlugin (onload, onunload, file locking)
   3. State Management    — DEFAULT_SETTINGS, TRANSLATIONS, TranslationManager, HabitManager
-  4. Habit Logic Engine  — getNoteByDate, scanHabits, toggleHabit, StreakCalculator
+  4. Habit Logic Engine  — getNoteByDate, HabitScanner, toggleHabit, StreakCalculator
   5. UI: Modals          — FileSuggest, AddHabit, RenameProgress, Comment, Reflection
   6. UI: Views           — WeeklyGridView, PluginGuideComponent, DailyHabitsSettingTab
   7. Utilities           — Mutex, TextUtils, DateUtils, helpers
@@ -25,6 +25,7 @@ const {
   Modal,
   debounce,
   PluginSettingTab,
+  Platform,
 } = require("obsidian");
 
 // Use window.moment instead of destructuring from obsidian
@@ -196,7 +197,6 @@ class AudioEngine {
     }
   }
 
-
   async close() {
     if (this.sharedAudioContext) {
       try {
@@ -236,8 +236,6 @@ function resolveHabitColorHex(colorId) {
   return entry ? entry.hex : HABIT_COLORS_PALETTE[0].hex;
 }
 
-
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2. Plugin Class — DailyHabitsPlugin
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -256,6 +254,9 @@ module.exports = class DailyHabitsPlugin extends Plugin {
 
     // Initialize HabitManager
     this.habitManager = new HabitManager(this);
+
+    // Initialize HabitScanner
+    this.habitScanner = new HabitScanner();
 
     this.registerInterval(
       window.setInterval(() => this.cleanStaleLocks(), FILE_LOCK_CLEANUP_INTERVAL)
@@ -318,6 +319,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
   async onunload() {
     this.fileLocks.clear();
     this._sharedStreakCache = null;
+    if (this.habitScanner) this.habitScanner.reset();
     await this.audioEngine.close();
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_WEEKLY);
   }
@@ -405,7 +407,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
     if (!todayNote) return 0;
 
     const content = await this.app.vault.cachedRead(todayNote);
-    const scanned = scanHabits(content, this.settings.marker);
+    const scanned = this.habitScanner.scan(content, this.settings.marker);
 
     let count = 0;
     const todayHabits = this.habitManager.getHabitsForDay(dayOfWeek);
@@ -1048,9 +1050,6 @@ class HabitManager {
     return this.getHabits().filter((h) => h.archived);
   }
 
-
-
-
   /**
    * Get the effective parent ID of a habit (returns null if parent is archived/deleted)
    * @param {string} id - Habit ID
@@ -1071,10 +1070,6 @@ class HabitManager {
   isParent(id) {
     return this.getActiveHabits().some((h) => this.getEffectiveParentId(h.id) === id);
   }
-
-
-
-
 
   /**
    * Get effective siblings of a habit, cleanly resolving orphans to top-level.
@@ -1197,25 +1192,17 @@ class HabitManager {
   }
 
   /**
-   * Rename a habit in all files (Batch Renaming)
-   * @param {string} habitId - Habit ID
-   * @param {string} newName - New habit name
-   * @param {string} oldName - Old habit name (required since habit is updated before calling this)
-   * @returns {Promise<void>}
+   * Identifies all files requiring a rename.
    */
-  async renameHabitInFiles(habitId, newName, oldName) {
+  async prepareBatchRename(habitId, oldName) {
     const habit = this.getHabitById(habitId);
     if (!habit) {
       throw new Error(`Habit not found: ${habitId}`);
     }
 
-    // Collect ALL historical names to ensure deep cleansing
     const historicalNames = [oldName, ...(habit.nameHistory || []).map(n => n.replace(/\[\[|\]\]/g, ""))];
     const uniqueOldNames = [...new Set(historicalNames)];
-
     const oldLinkTexts = uniqueOldNames.map(name => `[[${name}]]`);
-
-
     const filesToUpdate = [];
 
     const resolvedLinks = this.plugin.app.metadataCache.resolvedLinks;
@@ -1223,14 +1210,10 @@ class HabitManager {
     const candidates = new Set();
 
     for (const [sourcePath, links] of Object.entries(resolvedLinks)) {
-      if (uniqueOldNames.some(name => links[name] || links[name + ".md"])) {
-        candidates.add(sourcePath);
-      }
+      if (uniqueOldNames.some(name => links[name] || links[name + ".md"])) candidates.add(sourcePath);
     }
     for (const [sourcePath, links] of Object.entries(unresolvedLinks)) {
-      if (uniqueOldNames.some(name => links[name] || links[name + ".md"])) {
-        candidates.add(sourcePath);
-      }
+      if (uniqueOldNames.some(name => links[name] || links[name + ".md"])) candidates.add(sourcePath);
     }
 
     for (const filePath of candidates) {
@@ -1247,164 +1230,57 @@ class HabitManager {
       }
     }
 
-    if (filesToUpdate.length === 0) {
-      const isAr = this.plugin.settings.language === "ar";
-      new Notice(
-        isAr
-          ? "لم يتم العثور على ملفات تحتوي على هذه العادة (ولا حتى بأسمائها القديمة)"
-          : "No files found containing this habit (not even with old aliases)"
-      );
-      return { updated: 0, errors: 0 };
-    }
-
-    // 2. Confirm with user
-    const confirmed = await this.confirmBatchRename(
-      oldName,
-      newName,
-      filesToUpdate.length
-    );
-
-    if (!confirmed) {
-      return { updated: 0, errors: 0, cancelled: true };
-    }
-
-    // 3. Show progress modal
-    let progressModal = null;
-    let cancelRequested = false;
-
-    try {
-      progressModal = new RenameProgressModal(
-        this.plugin.app,
-        this.plugin,
-        filesToUpdate.length,
-        () => {
-          cancelRequested = true;
-        }
-      );
-      progressModal.open();
-
-      let processed = 0;
-      let errors = 0;
-
-      // 4. Process files in batches (10 files per batch)
-      const regexPatterns = uniqueOldNames.map(name => {
-         const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-         return new RegExp(`\\[\\[${escapedName}(#[^|\\]]*)?(\\|[^\\]]*)?\\]\\]`, 'g');
-      });
-
-      for (let i = 0; i < filesToUpdate.length; i += 10) {
-        if (cancelRequested) break;
-
-        const batch = filesToUpdate.slice(i, i + 10);
-
-        await Promise.all(
-          batch.map(async (file) => {
-            try {
-              await this.plugin.app.vault.process(file, (content) => {
-                let newContent = content;
-                regexPatterns.forEach(regex => {
-                  newContent = newContent.replace(regex, (match, header, alias) => {
-                    // If it has a header or an alias, we preserve them
-                    return `[[${newName}${header || ""}${alias || ""}]]`;
-                  });
-                });
-                return newContent;
-              });
-              processed++;
-            } catch (err) {
-              console.error(`[Core Habits] Failed to update ${file.path}:`, err);
-              errors++;
-            }
-          })
-        );
-
-        // Update progress
-        progressModal.updateProgress(processed + errors, filesToUpdate.length);
-
-        // Small pause to prevent freezing
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-
-      progressModal.close();
-
-      // 5. Show final notice
-      const isAr = this.plugin.settings.language === "ar";
-      if (cancelRequested) {
-        new Notice(
-          isAr
-            ? `⚠️ تم إلغاء العملية. تم تحديث ${processed} ملف.`
-            : `⚠️ Operation cancelled. Updated ${processed} file(s).`
-        );
-      } else {
-        new Notice(
-          isAr
-            ? `✅ تم تحديث ${processed} ملف بنجاح` + (errors > 0 ? `\n⚠️ فشل ${errors} ملف` : "")
-            : `✅ Successfully updated ${processed} file(s)` + (errors > 0 ? `\n⚠️ Failed ${errors} file(s)` : "")
-        );
-      }
-
-      return { updated: processed, errors, cancelled: cancelRequested };
-    } catch (err) {
-      if (progressModal) progressModal.close();
-      console.error("[Core Habits] Batch rename error:", err);
-      const isAr = this.plugin.settings.language === "ar";
-      new Notice(isAr ? "❌ حدث خطأ أثناء تحديث الملفات" : "❌ An error occurred while updating files");
-      return { updated: 0, errors: 0, error: err.message };
-    }
+    return { 
+      needsConfirmation: filesToUpdate.length > 0, 
+      fileCount: filesToUpdate.length, 
+      filesToUpdate, 
+      uniqueOldNames 
+    };
   }
 
   /**
-   * Confirm batch rename with user
-   * @param {string} oldName - Old habit name
-   * @param {string} newName - New habit name
-   * @param {number} fileCount - Number of files to update
-   * @returns {Promise<boolean>} True if confirmed
+   * Executes the batch rename logic.
    */
-  async confirmBatchRename(oldName, newName, fileCount) {
-    return new Promise((resolve) => {
-      const isAr = this.plugin.settings.language === "ar";
-      const modal = new Modal(this.plugin.app);
-      const { contentEl } = modal;
+  async executeBatchRename(newName, uniqueOldNames, filesToUpdate, onProgress, getCancelStatus) {
+    let processed = 0;
+    let errors = 0;
 
-      contentEl.createEl("h2", {
-        text: isAr ? "⚠️ تحديث جميع الملفات" : "⚠️ Update all files"
-      });
-      contentEl.createEl("p", {
-        text: isAr
-          ? `سيتم تغيير "${oldName}" إلى "${newName}" في ${fileCount} ملف.`
-          : `Will change "${oldName}" to "${newName}" in ${fileCount} file(s).`,
-      });
-      contentEl.createEl("p", {
-        text: isAr
-          ? "هذه العملية قد تستغرق بعض الوقت حسب عدد الملفات."
-          : "This operation may take some time depending on the number of files.",
-        cls: "mod-warning",
-      });
-
-      const footer = contentEl.createDiv({ cls: "modal-button-container" });
-
-      const cancelBtn = footer.createEl("button", {
-        text: isAr ? "إلغاء" : "Cancel"
-      });
-      cancelBtn.onclick = () => {
-        modal.close();
-        resolve(false);
-      };
-
-      const confirmBtn = footer.createEl("button", {
-        text: isAr ? "نعم، تحديث الكل" : "Yes, update all",
-        cls: "mod-warning",
-      });
-      confirmBtn.onclick = () => {
-        modal.close();
-        resolve(true);
-      };
-
-      modal.open();
+    const regexPatterns = uniqueOldNames.map(name => {
+      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\[\\[${escapedName}(#[^|\\]]*)?(\\|[^\\]]*)?\\]\\]`, 'g');
     });
+
+    for (let i = 0; i < filesToUpdate.length; i += 10) {
+      if (getCancelStatus && getCancelStatus()) break;
+
+      const batch = filesToUpdate.slice(i, i + 10);
+
+      await Promise.all(
+        batch.map(async (file) => {
+          try {
+            await this.plugin.app.vault.process(file, (content) => {
+              let newContent = content;
+              regexPatterns.forEach(regex => {
+                newContent = newContent.replace(regex, (match, header, alias) => {
+                  return `[[${newName}${header || ""}${alias || ""}]]`;
+                });
+              });
+              return newContent;
+            });
+            processed++;
+          } catch (err) {
+            console.error(`[Core Habits] Failed to update ${file.path}:`, err);
+            errors++;
+          }
+        })
+      );
+
+      if (onProgress) onProgress(processed + errors, filesToUpdate.length);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    return { updated: processed, errors };
   }
-
-
 
   /**
    * Check if a habit is scheduled for a specific day
@@ -1413,7 +1289,7 @@ class HabitManager {
    * @returns {boolean} True if scheduled
    */
   isHabitScheduledForDay(habit, dayOfWeek) {
-    return habit.schedule.days.includes(dayOfWeek);
+    return Array.isArray(habit.schedule?.days) && habit.schedule.days.includes(dayOfWeek);
   }
 
   /**
@@ -1534,7 +1410,7 @@ class HabitManager {
 
           // 5. Generate habits text that MAY need addition
           // Check which habits are missing
-          const existingHabits = scanHabits(content, this.plugin.settings.marker);
+          const existingHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
           let addedCount = 0;
 
           const habitsToAdd = [];
@@ -1592,7 +1468,7 @@ class HabitManager {
    * @returns {Promise<number>} Number of imported habits
    */
   async importHabitsFromContent(content) {
-    const foundHabits = scanHabits(content, this.plugin.settings.marker);
+    const foundHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
     let importedCount = 0;
 
     for (const habit of foundHabits) {
@@ -1623,7 +1499,7 @@ class HabitManager {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 4. Habit Logic Engine — getNoteByDate, scanHabits, toggleHabit, StreakCalculator
+// 4. Habit Logic Engine — getNoteByDate, HabitScanner, toggleHabit, StreakCalculator
 // ═══════════════════════════════════════════════════════════════════════════════
 async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSettings = null) {
   const info = getDailyNotesInfo(app, pluginSettings);
@@ -1680,56 +1556,63 @@ async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSett
   return file;
 }
 
-let _cachedRegexMarker = null;
-let _cachedMarkerString = null;
-let _cachedRegexDataview = null;
-let _cachedSafeMarker = null;
-
-function scanHabits(content, marker) {
-  // Security fix: limit content and marker length
-  if (content && content.length > 1_000_000) return [];
-  const safeMarkerStr = (marker && marker.length > 100) ? marker.substring(0, 100) : marker;
-
-  if (safeMarkerStr !== _cachedMarkerString) {
-    _cachedSafeMarker = Utils.escapeRegExp(safeMarkerStr);
-    _cachedMarkerString = safeMarkerStr;
-
-    _cachedRegexMarker = new RegExp(
-      `^\\s*-\\s*\\[([ x\\-])\\]\\s*(.*?)\\s*${_cachedSafeMarker}`,
-      "i",
-    );
-
-    _cachedRegexDataview = new RegExp(
-      `^\\s*-\\s*\\[([ x\\-])\\]\\s*(.*?)\\s*\\[habit::`,
-      "i",
-    );
+class HabitScanner {
+  constructor() {
+    this.reset();
   }
 
-  const lines = content.split(/\r?\n/);
-  const habits = [];
+  reset() {
+    this._cachedRegexMarker = null;
+    this._cachedMarkerString = null;
+    this._cachedRegexDataview = null;
+    this._cachedSafeMarker = null;
+  }
 
-  lines.forEach((line, i) => {
-    let match = line.match(_cachedRegexMarker);
-    if (!match) {
-      match = line.match(_cachedRegexDataview);
+  scan(content, marker) {
+    if (content && content.length > 1_000_000) return [];
+    const safeMarkerStr = (marker && marker.length > 100) ? marker.substring(0, 100) : marker;
+
+    if (safeMarkerStr !== this._cachedMarkerString) {
+      this._cachedSafeMarker = Utils.escapeRegExp(safeMarkerStr);
+      this._cachedMarkerString = safeMarkerStr;
+
+      this._cachedRegexMarker = new RegExp(
+        `^\\s*-\\s*\\[([ x\\-])\\]\\s*(.*?)\\s*${this._cachedSafeMarker}`,
+        "i",
+      );
+
+      this._cachedRegexDataview = new RegExp(
+        `^\\s*-\\s*\\[([ x\\-])\\]\\s*(.*?)\\s*\\[habit::`,
+        "i",
+      );
     }
 
-    if (match) {
-      let text = match[2].trim();
-      text = text.replace(new RegExp(`${_cachedSafeMarker}$`, "i"), "").trim();
-      text = text.replace(/\[habit::.*?\]$/, "").trim();
+    const lines = content.split(/\r?\n/);
+    const habits = [];
 
-      const char = match[1];
-      habits.push({
-        lineIndex: i,
-        text: text,
-        completed: char.toLowerCase() === "x",
-        skipped: char === "-",
-      });
-    }
-  });
+    lines.forEach((line, i) => {
+      let match = line.match(this._cachedRegexMarker);
+      if (!match) {
+        match = line.match(this._cachedRegexDataview);
+      }
 
-  return habits;
+      if (match) {
+        let text = match[2].trim();
+        text = text.replace(new RegExp(`${this._cachedSafeMarker}$`, "i"), "").trim();
+        text = text.replace(/\[habit::.*?\]$/, "").trim();
+
+        const char = match[1];
+        habits.push({
+          lineIndex: i,
+          text: text,
+          completed: char.toLowerCase() === "x",
+          skipped: char === "-",
+        });
+      }
+    });
+
+    return habits;
+  }
 }
 
 async function toggleHabit(plugin, app, file, habit, marker, targetState = null) {
@@ -1854,7 +1737,7 @@ class StreakCalculator {
         if (this.contentCache) this.contentCache.set(dateKey, content);
       }
 
-      const habits = scanHabits(content, this.plugin.settings.marker);
+      const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
       const entry = findHabitEntry(habits, habit.linkText, habit.nameHistory);
 
       if (entry && entry.skipped) {
@@ -2056,6 +1939,15 @@ class AddHabitModal extends Modal {
 
     // 7. Footer
     this.renderFooter(contentEl, t, isAr);
+
+    // 8. Mobile: scroll focused inputs into view when keyboard appears
+    if (Platform.isMobile) {
+      contentEl.querySelectorAll('input, textarea, select').forEach(el => {
+        el.addEventListener('focus', () => {
+          setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+        });
+      });
+    }
   }
 
   renderTabBar(container, t, isAr) {
@@ -2819,8 +2711,6 @@ class AddHabitModal extends Modal {
   }
 }
 
-
-
 /**
  * Progress modal for batch renaming operations
  */
@@ -2937,11 +2827,15 @@ class HabitCommentPopup extends Modal {
     cancelBtn.onclick = () => this.close();
 
     const submit = () => {
-      const text = input.value.trim();
-      if (text) {
+      const sanitized = input.value
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/^#+\s/gm, '')
+        .substring(0, 2000)
+        .trim();
+      if (sanitized) {
         saveBtn.disabled = true;
         saveBtn.textContent = isAr ? "جاري..." : "Saving...";
-        this.onSave(text).then((savedFile) => {
+        this.onSave(sanitized).then((savedFile) => {
           new Notice(isAr
             ? `✅ تم حفظ التعليق في: ${savedFile || this.habit.name}`
             : `✅ Saved to: ${savedFile || this.habit.name}`);
@@ -2960,7 +2854,13 @@ class HabitCommentPopup extends Modal {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
     });
-    setTimeout(() => input.focus(), 50);
+    setTimeout(() => {
+      input.focus();
+      // Mobile: scroll input into view when keyboard appears
+      if (Platform.isMobile) {
+        setTimeout(() => input.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+      }
+    }, 50);
   }
 
   onClose() {
@@ -3026,11 +2926,15 @@ class ReflectionPopup extends Modal {
     cancelBtn.onclick = () => this.close();
 
     const submit = () => {
-      const text = input.value.trim();
-      if (text) {
+      const sanitized = input.value
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/^#+\s/gm, '')
+        .substring(0, 2000)
+        .trim();
+      if (sanitized) {
         saveBtn.disabled = true;
         saveBtn.textContent = isAr ? "جاري..." : "Saving...";
-        this.onSave(text).then((savedFile) => {
+        this.onSave(sanitized).then((savedFile) => {
           new Notice(isAr
             ? `✅ تم حفظ التدوين في: ${savedFile || "يومياتي"}`
             : `✅ Saved to: ${savedFile || "Journal"}`);
@@ -3049,15 +2953,19 @@ class ReflectionPopup extends Modal {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
     });
-    setTimeout(() => input.focus(), 50);
+    setTimeout(() => {
+      input.focus();
+      // Mobile: scroll input into view when keyboard appears
+      if (Platform.isMobile) {
+        setTimeout(() => input.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+      }
+    }, 50);
   }
 
   onClose() {
     this.contentEl.empty();
   }
 }
-
-
 
 class WeeklyGridView extends ItemView {
   get isAr() {
@@ -3172,7 +3080,6 @@ class WeeklyGridView extends ItemView {
       this._visualTimers.forEach(clearTimeout);
       this._visualTimers = [];
     }
-
 
     // Clean up memory when view is closed
     this.dailyStats = {};
@@ -3550,7 +3457,6 @@ class WeeklyGridView extends ItemView {
       };
     });
 
-
     await this.updateHeaderPercentages(thead);
     await this.updateUnifiedProgressBar(container);
 
@@ -3628,7 +3534,7 @@ class WeeklyGridView extends ItemView {
       const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
       if (dailyNote) {
         const content = await this.app.vault.cachedRead(dailyNote);
-        const scanned = scanHabits(content, this.plugin.settings.marker);
+        const scanned = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
 
         for (const habit of habits) {
           const isAfterArchive = habit.archived && habit.archivedDate && dayDate.clone().startOf("day").isAfter(window.moment(habit.archivedDate).startOf("day"));
@@ -4104,6 +4010,22 @@ class WeeklyGridView extends ItemView {
 
         commentIcon.onclick = openCommentPopup;
         cell.oncontextmenu = openCommentPopup;
+
+        // Touch long-press for mobile devices (500ms)
+        // Works on Android, iOS, iPad — runs alongside click without conflict
+        let _touchTimer = null;
+        cell.addEventListener('touchstart', (e) => {
+          _touchTimer = setTimeout(() => {
+            _touchTimer = null;
+            openCommentPopup(e);
+          }, 500);
+        }, { passive: true });
+        cell.addEventListener('touchend', () => {
+          if (_touchTimer) { clearTimeout(_touchTimer); _touchTimer = null; }
+        });
+        cell.addEventListener('touchmove', () => {
+          if (_touchTimer) { clearTimeout(_touchTimer); _touchTimer = null; }
+        });
       }
     }
     return row;
@@ -4121,7 +4043,7 @@ class WeeklyGridView extends ItemView {
         return "uncompleted";
       }
 
-      const habits = scanHabits(content, this.plugin.settings.marker);
+      const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
       const habitEntry = findHabitEntry(habits, habit.linkText, habit.nameHistory);
 
       if (!habitEntry) return "uncompleted";
@@ -4214,7 +4136,7 @@ class WeeklyGridView extends ItemView {
       }
 
       const content = await this.app.vault.read(dailyNote);
-      const habits = scanHabits(content, this.plugin.settings.marker);
+      const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
       const habitEntry = findHabitEntry(habits, habit.linkText, habit.nameHistory);
 
       if (habitEntry) {
@@ -4398,7 +4320,7 @@ class WeeklyGridView extends ItemView {
         const batchResults = await Promise.all(batch.map(async (file) => {
           const content = await this.app.vault.cachedRead(file);
           if (!content.includes(this.plugin.settings.marker)) return 0;
-          const habits = scanHabits(content, this.plugin.settings.marker);
+          const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
           return habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
         }));
         totalCompleted += batchResults.reduce((sum, n) => sum + n, 0);
@@ -4462,7 +4384,7 @@ class WeeklyGridView extends ItemView {
           if (!dailyNote) return null;
 
           const content = await this.app.vault.cachedRead(dailyNote);
-          const scanned = scanHabits(content, this.plugin.settings.marker);
+          const scanned = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
 
           const results = [];
           for (const habit of habits) {
@@ -4573,9 +4495,16 @@ class WeeklyGridView extends ItemView {
         : "Tip: If you make a new decision based on these trends, write it immediately in today's note or the habit file."
     });
 
-    // Render Data Placeholders while crunching
-    const loadingState = container.createDiv({ cls: "dh-loading-spinner text-center" });
-    loadingState.textContent = isAr ? "جاري تحليل أداء الأسابيع الماضية... ⏳" : "Analyzing past weeks' performance... ⏳";
+    // Render skeleton loader while data crunches (prevents UI freeze feeling)
+    const loadingState = container.createDiv({ cls: "dh-skeleton-loader" });
+    const skeletonCardsGrid = loadingState.createDiv({ cls: "dh-skeleton-cards-grid" });
+    skeletonCardsGrid.createDiv({ cls: "dh-skeleton-card" });
+    skeletonCardsGrid.createDiv({ cls: "dh-skeleton-card" });
+    loadingState.createDiv({ cls: "dh-skeleton-row" });
+    loadingState.createDiv({ cls: "dh-skeleton-row short" });
+    loadingState.createDiv({ cls: "dh-skeleton-card" });
+    loadingState.createDiv({ cls: "dh-skeleton-row" });
+    loadingState.createDiv({ cls: "dh-skeleton-row short" });
 
     const { weeksData, dayStats, bestHabit, worstHabit } = await this.analyzeLastFourWeeks();
     loadingState.remove();
@@ -4951,8 +4880,6 @@ class WeeklyGridView extends ItemView {
     return Array.from(groupMap.values()).sort((a, b) => b.timestamp - a.timestamp);
   }
 
-
-
 }
 
 class PluginGuideComponent {
@@ -5009,7 +4936,6 @@ class PluginGuideComponent {
     });
   }
 }
-
 
 class DailyHabitsSettingTab extends PluginSettingTab {
   get isAr() {
@@ -5821,9 +5747,47 @@ class DailyHabitsSettingTab extends PluginSettingTab {
               await this.plugin.habitManager.updateHabit(habit.id, updatedData);
 
               if (shouldRenameAll && oldName !== newName) {
-                const result = await this.plugin.habitManager.renameHabitInFiles(habit.id, newName, oldName);
-                if (result && result.updated > 0) {
-                  new Notice(isAr ? `✅ تم تنظيف ${result.updated} رابط تاريخي بنجاح` : `✅ Successfully cleaned ${result.updated} historical links`);
+                const prep = await this.plugin.habitManager.prepareBatchRename(habit.id, oldName);
+                
+                if (!prep.needsConfirmation) {
+                  new Notice(isAr ? "لم يتم العثور على ملفات قديمة للتحديث" : "No old files found to update");
+                } else {
+                   const confirmed = await new Promise((resolve) => {
+                     const confirmModal = new Modal(this.app);
+                     const { contentEl } = confirmModal;
+                     contentEl.createEl("h2", { text: isAr ? "⚠️ تحديث جميع الملفات" : "⚠️ Update all files" });
+                     contentEl.createEl("p", { text: isAr ? `سيتم تغيير "${oldName}" إلى "${newName}" في ${prep.fileCount} ملف.` : `Will change "${oldName}" to "${newName}" in ${prep.fileCount} file(s).` });
+                     const footer = contentEl.createDiv({ cls: "modal-button-container" });
+                     footer.createEl("button", { text: isAr ? "إلغاء" : "Cancel" }).onclick = () => { confirmModal.close(); resolve(false); };
+                     footer.createEl("button", { text: isAr ? "نعم، تحديث الكل" : "Yes, update all", cls: "mod-warning" }).onclick = () => { confirmModal.close(); resolve(true); };
+                     confirmModal.open();
+                   });
+
+                   if (confirmed) {
+                     let cancelRequested = false;
+                     let progressModal = new RenameProgressModal(
+                       this.app, this.plugin, prep.fileCount, () => { cancelRequested = true; }
+                     );
+                     progressModal.open();
+
+                     try {
+                       const result = await this.plugin.habitManager.executeBatchRename(
+                         newName, prep.uniqueOldNames, prep.filesToUpdate,
+                         (curr, total) => progressModal.updateProgress(curr, total),
+                         () => cancelRequested
+                       );
+                       progressModal.close();
+                       if (cancelRequested) {
+                         new Notice(isAr ? `⚠️ تم الإلغاء. المحدث: ${result.updated}` : `⚠️ Cancelled. Updated: ${result.updated}`);
+                       } else {
+                         new Notice(isAr ? `✅ تم تنظيف ${result.updated} رابط تاريخي بنجاح` : `✅ Successfully cleaned ${result.updated} historical links`);
+                       }
+                     } catch (err) {
+                       progressModal.close();
+                       console.error(err);
+                       new Notice(isAr ? "❌ خطأ أثناء التحديث" : "❌ Error during update");
+                     }
+                   }
                 }
               }
 

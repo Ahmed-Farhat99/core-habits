@@ -4194,10 +4194,67 @@ select.form-input option {
   flex-direction: row-reverse;
 }
 
-/* --- 13. MOBILE --- */
+/* --- 13. MOBILE & TOUCH DEVICES --- */
+/*
+   Strategy:
+   - body.is-mobile: Obsidian's built-in class for phones/tablets
+   - body.is-phone: Obsidian's class for phones only (not tablets)
+   - @media (pointer: coarse): Targets ALL touch-screen devices
+   - @media (max-width: 480px): Phone-sized screens
+   - @media (max-width: 768px): Tablet portrait
+   - dvh/svh units: Respect virtual keyboard on iOS/Android
+   ALL rules are scoped — zero impact on desktop.
+*/
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.1 — GRID: Touch-Friendly Cell Sizing                   */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* Phone: compact grid with minimum touch targets */
+body.is-mobile .dh-grid-row {
+  grid-template-columns: 22px minmax(80px, 3fr) repeat(7, minmax(34px, 1fr));
+}
+
+body.is-mobile .dh-grid-cell {
+  padding: 4px 2px !important;
+  font-size: var(--dh-font-sm);
+}
+
+body.is-mobile .day-cell {
+  width: 34px;
+  height: 38px;
+  min-height: 38px;
+  max-height: 42px;
+  font-size: 0.95em;
+}
+
+/* Touch devices: ensure touch target is at least 44px */
+@media (pointer: coarse) {
+  .day-cell {
+    min-width: 34px;
+    min-height: 36px;
+  }
+}
+
+/* Phone-only: even more compact */
+body.is-phone .dh-grid-row {
+  grid-template-columns: 20px minmax(70px, 3fr) repeat(7, minmax(30px, 1fr));
+}
+
+body.is-phone .day-cell {
+  width: 30px;
+  height: 36px;
+  min-height: 34px;
+  font-size: 0.9em;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.2 — HEADER: Compact Day Headers                        */
+/* ═══════════════════════════════════════════════════════════ */
 
 body.is-mobile .weekly-header-controls {
-  padding: var(--dh-space-lg);
+  padding: var(--dh-space-md);
+  gap: var(--dh-space-xs);
 }
 
 body.is-mobile .header-main-stage {
@@ -4205,16 +4262,12 @@ body.is-mobile .header-main-stage {
   gap: var(--dh-space-md);
 }
 
-body.is-mobile .dh-grid-cell {
-  padding: 6px 4px !important;
-  font-size: var(--dh-font-sm);
-}
-
 body.is-mobile .day-header,
 body.is-mobile .day-stat-cell {
-  min-width: 50px;
+  min-width: 36px;
   width: 100%;
   max-width: none;
+  padding: var(--dh-space-xs) 1px;
 }
 
 body.is-mobile .day-name {
@@ -4228,8 +4281,317 @@ body.is-mobile .day-date-hijri {
 }
 
 body.is-mobile .day-stat-badge {
-  padding: 2px 6px;
-  font-size: 0.65rem;
+  padding: 2px 5px;
+  font-size: 0.6rem;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.3 — HABIT NAME: Compact on Mobile                      */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .habit-name-cell {
+  padding: 6px 8px;
+  font-size: var(--dh-font-sm);
+  gap: var(--dh-space-2xs);
+}
+
+body.is-mobile .habit-name-link {
+  font-size: var(--dh-font-sm);
+}
+
+/* Hide non-essential meta on phones to save space */
+body.is-phone .dh-streak-badge-slot,
+body.is-phone .habit-open-page-icon,
+body.is-phone .habit-category-badge {
+  display: none !important;
+}
+
+/* On tablets (mobile but not phone), show streak but hide icon */
+body.is-mobile:not(.is-phone) .habit-open-page-icon {
+  display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.4 — COMMENT ICON: Always Visible on Touch Devices      */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* Touch devices: show comment icon always (no :hover needed) */
+body.is-mobile .dh-comment-hover-icon {
+  display: flex;
+  opacity: 0.35;
+  width: 12px;
+  height: 12px;
+  font-size: 7px;
+}
+
+body.is-mobile .dh-comment-hover-icon:active {
+  opacity: 1;
+  transform: scale(1.3);
+}
+
+/* Also target touch screens via media query (covers PWA, etc.) */
+@media (pointer: coarse) {
+  .dh-comment-hover-icon {
+    display: flex;
+    opacity: 0.35;
+  }
+
+  .dh-comment-hover-icon:active {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.5 — MODALS: Keyboard-Safe on Mobile                    */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* Use dvh (dynamic viewport height) for mobile — shrinks when keyboard appears */
+body.is-mobile .daily-habits-modal.modal .modal-content {
+  max-height: 100dvh;
+  max-height: 100svh; /* Fallback for older iOS */
+}
+
+body.is-mobile .modal {
+  max-height: 100dvh;
+  max-height: 100svh;
+}
+
+/* Ensure modal is scrollable when keyboard is open */
+body.is-mobile .habit-form-container {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 60px; /* Extra space for keyboard */
+}
+
+/* Modal tabs: scrollable on mobile */
+body.is-mobile .dh-modal-tabs-container {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  flex-wrap: nowrap;
+}
+
+body.is-mobile .dh-modal-tabs-container::-webkit-scrollbar {
+  display: none;
+}
+
+body.is-mobile .dh-modal-tab-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: max-content;
+  font-size: 0.75rem;
+  padding: 6px 10px;
+}
+
+/* Popup modals: full-width on phones */
+body.is-phone .modal:has(.dh-popup-compact) {
+  width: 95vw !important;
+  max-width: 95vw !important;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.6 — ANIMATIONS: Speed Up on Mobile                     */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .weekly-grid-container *:not(.day-cell) {
+  animation-duration: 0.1s !important;
+  transition-duration: 0.1s !important;
+}
+
+/* Keep the pulse animation visible but fast */
+body.is-mobile .day-cell.habit-pulse {
+  animation-duration: 0.2s !important;
+}
+
+/* Keep the progress bar animation visible */
+body.is-mobile .weekly-progress-fill {
+  transition-duration: 0.3s !important;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.7 — NAVIGATION: Bigger Touch Targets                   */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .dh-nav-arrow-btn {
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+}
+
+body.is-mobile .dh-header-text-btn {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+body.is-mobile .dh-nav-tab {
+  padding: 8px 10px;
+  font-size: var(--dh-font-sm);
+  min-height: 36px;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.8 — PROGRESS BAR: Compact on Mobile                    */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .unified-progress-wrapper {
+  flex-wrap: wrap;
+  gap: var(--dh-space-sm);
+}
+
+body.is-mobile .weekly-barrier-caption {
+  font-size: 0.7rem;
+  padding: 4px 6px;
+}
+
+body.is-mobile .unified-percent-text {
+  font-size: var(--dh-font-md);
+  min-width: 38px;
+}
+
+body.is-mobile .weekly-count-badge {
+  font-size: var(--dh-font-xs);
+  min-width: 40px;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.9 — SETTINGS TABS: Scrollable on Mobile                */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .dh-settings-tabs-container {
+  flex-wrap: nowrap;
+}
+
+body.is-mobile .dh-tab-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: max-content;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.10 — DASHBOARD: Responsive Cards                       */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .dh-pulse-cards-row {
+  grid-template-columns: 1fr;
+  gap: var(--dh-space-md);
+}
+
+body.is-mobile .dh-pulse-card .pulse-value {
+  font-size: 2rem;
+}
+
+body.is-mobile .dh-habit-focus-box {
+  flex-direction: column;
+}
+
+body.is-mobile .focus-item {
+  padding: var(--dh-space-sm) var(--dh-space-md);
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.11 — SKELETON LOADER (for async data)                  */
+/* ═══════════════════════════════════════════════════════════ */
+
+@keyframes dh-skeleton-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.6; }
+}
+
+.dh-skeleton-loader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-lg);
+  padding: var(--dh-space-xl);
+  animation: dh-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.dh-skeleton-card {
+  height: 80px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-xl);
+}
+
+.dh-skeleton-row {
+  height: 24px;
+  background: var(--background-secondary);
+  border-radius: var(--dh-radius-md);
+  width: 100%;
+}
+
+.dh-skeleton-row.short {
+  width: 60%;
+}
+
+.dh-skeleton-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--dh-space-md);
+}
+
+body.is-mobile .dh-skeleton-cards-grid {
+  grid-template-columns: 1fr;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.12 — TABLET (iPad, Android Tablet) Specific            */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* Tablets have is-mobile but NOT is-phone */
+body.is-mobile:not(.is-phone) .dh-grid-row {
+  grid-template-columns: 26px minmax(120px, 4fr) repeat(7, minmax(40px, 1fr));
+}
+
+body.is-mobile:not(.is-phone) .day-cell {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  font-size: 1em;
+}
+
+body.is-mobile:not(.is-phone) .dh-pulse-cards-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+body.is-mobile:not(.is-phone) .dh-modal-tab-btn {
+  font-size: var(--dh-font-sm);
+  padding: 8px 14px;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.13 — RTL Touch Fixes                                   */
+/* ═══════════════════════════════════════════════════════════ */
+
+[dir="rtl"] body.is-mobile .dh-comment-hover-icon,
+body.is-mobile [dir="rtl"] .dh-comment-hover-icon {
+  inset-inline-end: 1px;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* 13.14 — DIARY VIEW: Mobile Optimized                      */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .dh-diary-view-container {
+  padding: var(--dh-space-md);
+}
+
+body.is-mobile .dh-diary-week-header {
+  padding: 10px 14px;
+  flex-wrap: wrap;
+  gap: var(--dh-space-sm);
+}
+
+body.is-mobile .dh-diary-entry-card {
+  padding: 12px;
+}
+
+body.is-mobile .entry-card-header {
+  flex-wrap: wrap;
+  gap: var(--dh-space-sm);
 }
 
 /* Dashboard Tables bounds */
