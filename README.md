@@ -2,8 +2,6 @@
 
 Core Habits is a visually dynamic and minimal habit tracker designed to natively integrate with your knowledge base, helping you build consistency and maintain your "Core Path".
 
-## Key Features\n\n- **Voice Notes (تسجيل الملاحظات الصوتية):** Record your daily journal entries directly via voice.\n- **Mobile Optimized (متوافق مع الهاتف):** Fully responsive design with sticky tables, swipe gestures, and a native app feel.\n- **Smart Diary:** Reflect on your progress with categorized diary entries.
-
 - **Visual Dashboard**: A clean, responsive week-based dashboard to easily log daily or weekly actions.
 - **Atomic Habits Principles**: Define friction, cue, and reward specifically for each sub-habit.
 - **Smart Progress Analytics**: Review your long-term streak and four-week rolling averages natively.
