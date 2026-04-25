@@ -2299,7 +2299,7 @@ class AddHabitModal extends Modal {
           const tokens = [];
 
           // Process audio voice notes first
-          temp = temp.replace(/!\[\[([^\]]+\.webm)\]\]/i, (match, p1) => {
+          temp = temp.replace(/!\[\[([^\]]+\.webm)\]\]/gi, (match, p1) => {
             tokens.push({ type: 'audio', text: p1 });
             return `__TOKEN_${tokens.length - 1}__`;
           });
@@ -3180,6 +3180,20 @@ class WeeklyGridView extends ItemView {
   async renderGridTable(container, today) {
     // Create wrapper for sticky header functionality
     const tableWrapper = container.createDiv({ cls: "habits-grid-wrapper" });
+
+    // Enable native touch scrolling on mobile
+    if (Platform.isMobile) {
+      let startX = 0, scrollLeft = 0;
+      tableWrapper.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].pageX - tableWrapper.offsetLeft;
+        scrollLeft = tableWrapper.scrollLeft;
+      }, { passive: true });
+      tableWrapper.addEventListener('touchmove', (e) => {
+        const x = e.touches[0].pageX - tableWrapper.offsetLeft;
+        const walk = (x - startX) * 1.5;
+        tableWrapper.scrollLeft = scrollLeft - walk;
+      }, { passive: true });
+    }
     const table = tableWrapper.createDiv({ cls: "habits-grid" });
 
     const weekStartMs = this.currentWeekStart.clone().startOf("day").valueOf();
@@ -4783,39 +4797,36 @@ class WeeklyGridView extends ItemView {
     }
 
     const bodyEl = entryCard.createDiv({ cls: "entry-card-body" });
-    const webmMatch = entry.text.match(/!\[\[([^\]]+\.webm)\]\]/i);
+    const allWebmMatches = [...entry.text.matchAll(/!\[\[([^\]]+\.webm)\]\]/gi)];
 
-    if (webmMatch) {
-      const fileName = webmMatch[1];
-      const audioFile = this.app.metadataCache.getFirstLinkpathDest(fileName, "");
-      
-      if (audioFile) {
-        const src = this.app.vault.getResourcePath(audioFile);
-        const audioEl = bodyEl.createEl("audio", { attr: { controls: true, src: src } });
-                  audioEl.addEventListener('loadedmetadata', () => {
-                    if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
-                      audioEl.currentTime = 1e101;
-                      audioEl.addEventListener('timeupdate', function f() {
-                        audioEl.currentTime = 0;
-                        audioEl.removeEventListener('timeupdate', f);
-                      });
-                    }
-                  });
-
-        audioEl.style.width = "100%";
-        audioEl.style.height = "36px";
-        audioEl.style.marginTop = "4px";
-        audioEl.style.borderRadius = "8px";
-        
-        // Prevent clicking the audio control from opening the daily note
-        audioEl.onclick = (e) => e.stopPropagation();
-
-        const remainingText = entry.text.replace(webmMatch[0], "").trim();
-        if (remainingText) {
-          bodyEl.createDiv({ text: remainingText, cls: "entry-action-text", attr: { style: "margin-top: 6px;" } });
+    if (allWebmMatches.length > 0) {
+      let remainingText = entry.text;
+      allWebmMatches.forEach(webmMatch => {
+        remainingText = remainingText.replace(webmMatch[0], "");
+        const fileName = webmMatch[1];
+        const audioFile = this.app.metadataCache.getFirstLinkpathDest(fileName, "");
+        if (audioFile) {
+          const src = this.app.vault.getResourcePath(audioFile);
+          const audioEl = bodyEl.createEl("audio", { attr: { controls: true, src: src } });
+          audioEl.addEventListener('loadedmetadata', () => {
+            if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
+              audioEl.currentTime = 1e101;
+              audioEl.addEventListener('timeupdate', function f() {
+                audioEl.currentTime = 0;
+                audioEl.removeEventListener('timeupdate', f);
+              });
+            }
+          });
+          audioEl.style.width = "100%";
+          audioEl.style.height = "36px";
+          audioEl.style.marginTop = "4px";
+          audioEl.style.borderRadius = "8px";
+          audioEl.onclick = (e) => e.stopPropagation();
         }
-      } else {
-        bodyEl.setText(entry.text);
+      });
+      remainingText = remainingText.trim();
+      if (remainingText) {
+        bodyEl.createDiv({ text: remainingText, cls: "entry-action-text", attr: { style: "margin-top: 6px;" } });
       }
     } else if (entry.text.includes("![[")) {
       const { MarkdownRenderer } = require("obsidian");

@@ -5273,3 +5273,23 @@ body.is-mobile .level-inputs-col-clean > input {
 body.is-mobile .level-inputs-col-clean > select {
   width: 100% !important;
 }
+
+
+/* --- BROADER MOBILE BOTTOM SAFE AREA --- */
+body.is-mobile .dh-diary-view-container {
+  padding-bottom: 100px !important;
+}
+
+body.is-mobile .dh-diary-entries-list {
+  padding-bottom: 80px !important;
+}
+
+body.is-mobile .dh-diary-timeline-list {
+  padding-bottom: 80px !important;
+}
+
+/* Ensure audio player is properly styled on mobile */
+body.is-mobile audio {
+  min-height: 40px !important;
+  border-radius: 12px !important;
+}
