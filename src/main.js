@@ -3325,7 +3325,7 @@ class WeeklyGridView extends ItemView {
 
     if (this.plugin.settings.enableReflectionJournal) {
       const tfoot = table.createDiv({ cls: "habits-tfoot" });
-      const footerRow = tfoot.createDiv({ cls: "dh-reflection-footer-row dh-grid-row diary-row" });
+      const footerRow = tfoot.createDiv({ cls: "dh-reflection-footer-row dh-grid-row diary-row dh-mobile-card" });
       
       // Index column placeholder
       footerRow.createDiv({ cls: "habit-index-header dh-grid-cell" });
@@ -3637,7 +3637,7 @@ class WeeklyGridView extends ItemView {
       : this.plugin.habitManager.isParent(habit.id);
     const isAr = this.isAr; // define early — used by streak badge & open icon
     const rowCls = isChild ? "habit-row habit-row-child" : "habit-row";
-    const rowClsFinal = `${rowCls} group-${effectiveParentId || habit.id} dh-grid-row`;
+    const rowClsFinal = `${rowCls} group-${effectiveParentId || habit.id} dh-grid-row dh-mobile-card`;
     const row = container.createDiv({ cls: rowClsFinal });
 
     // Inject the exact hex color for CSS unified system

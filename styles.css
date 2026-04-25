@@ -5686,17 +5686,75 @@ body.is-mobile audio {
 }
 
 
-/* ---- v2.2 FIXES: Journal visibility & Footer Overlap ---- */
 
-/* 1. Make Journal buttons visible slots on mobile */
+
+/* ═══════════════════════════════════════════════════════════ */
+/* v2.3 FINAL REPAIR: Journal Slots & Footer Stability         */
+/* ═══════════════════════════════════════════════════════════ */
+
+body.is-mobile .dh-mobile-card {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  flex-direction: row !important; /* Ensure horizontal wrapping */
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: 12px !important;
+  padding: 12px !important;
+  margin-bottom: 12px !important;
+  width: 100% !important;
+  min-width: unset !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
+}
+
+/* Hide the first child (index/placeholder) in ANY card */
+body.is-mobile .dh-mobile-card > .dh-grid-cell:first-child {
+  display: none !important;
+}
+
+/* The Title (Second child): Habit name or "يومياتي" */
+body.is-mobile .dh-mobile-card > .dh-grid-cell:nth-child(2),
+body.is-mobile .dh-mobile-card > .dh-footer-title {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-bottom: 12px !important;
+  font-weight: 700 !important;
+  font-size: 0.95em !important;
+  text-align: right !important;
+  border: none !important;
+  padding: 0 4px !important;
+}
+
+[dir="ltr"] body.is-mobile .dh-mobile-card > .dh-grid-cell:nth-child(2),
+[dir="ltr"] body.is-mobile .dh-mobile-card > .dh-footer-title {
+  text-align: left !important;
+}
+
+/* The 7 Day Slots (Children 3 to 9) */
+body.is-mobile .dh-mobile-card > .day-cell,
+body.is-mobile .dh-mobile-card > .dh-grid-cell:nth-child(n+3) {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  height: 40px !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+/* Journal Button Visibility */
 body.is-mobile .dh-footer-add-btn {
+  width: 34px !important;
+  height: 34px !important;
   background: var(--background-primary) !important;
   border: 1px dashed var(--background-modifier-border) !important;
   border-radius: 8px !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
   color: var(--text-muted) !important;
-  width: 32px !important;
-  height: 32px !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
 }
 
 body.is-mobile .dh-footer-add-btn.has-reflection {
@@ -5705,45 +5763,24 @@ body.is-mobile .dh-footer-add-btn.has-reflection {
   color: var(--interactive-accent) !important;
 }
 
-/* 2. Fix Modal Footer Overlap & Size */
+/* Modal Footer Fix: Extra bottom padding for system bars */
 body.is-mobile .dh-modal-footer,
 body.is-mobile .dh-popup-footer {
-  /* Add safe area padding for mobile bottom bars */
-  padding-bottom: calc(16px + env(safe-area-inset-bottom, 16px)) !important;
-  min-height: 80px !important;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 24px)) !important;
+  background: var(--background-primary) !important;
+  border-top: 1px solid var(--background-modifier-border) !important;
 }
 
 body.is-mobile .dh-save-habit-btn,
 body.is-mobile .dh-popup-btn-save {
-  height: 44px !important; /* Standard touch height */
-  font-size: 1em !important;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+  height: 46px !important;
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
 }
 
-body.is-mobile .dh-popup-btn-cancel {
-  height: 44px !important;
-  font-size: 0.9em !important;
-}
-
-/* 3. Hijri Date wrapping fix */
-body.is-mobile .hijri-date-text {
-  font-size: 0.9em !important;
+/* Reset any desktop grid columns that might be forcing the footer into columns */
+body.is-mobile .habits-tfoot {
   display: block !important;
-}
-
-body.is-mobile .hijri-indicator {
-  display: inline-block !important;
-  margin-top: 2px !important;
-}
-
-/* Ensure the title in diary row doesn't push buttons too much */
-body.is-mobile .diary-row .dh-footer-title {
-  font-size: 0.85em !important;
-  margin-bottom: 8px !important;
-  opacity: 0.8 !important;
-}
-
-/* Adjust grid row spacing */
-body.is-mobile .habits-tbody .dh-grid-row {
-  margin-bottom: 8px !important;
+  width: 100% !important;
 }
