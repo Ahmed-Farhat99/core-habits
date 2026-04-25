@@ -1772,7 +1772,7 @@ class AddHabitModal extends Modal {
     nameGroup.createEl("label", { text: t("habit_name"), cls: "form-label-clean" });
 
     // Wrap input and path to prevent breaking the flex layout of form-group-clean
-    const inputWrapper = nameGroup.createDiv({ cls: "dh-name-input-wrapper", attr: { style: "display: flex; flex-direction: column; width: 100%; gap: 4px;" } });
+    const inputWrapper = nameGroup.createDiv({ cls: "dh-name-input-wrapper" });
 
     const nameInput = inputWrapper.createEl("input", {
       type: "text",
@@ -1782,15 +1782,14 @@ class AddHabitModal extends Modal {
     nameInput.value = this.formState.name;
     const initialName = this.formState.name;
 
-    const pathDisplay = inputWrapper.createDiv({ cls: "dh-habit-file-path", attr: { style: "margin-top: 2px;" } });
+    const pathDisplay = inputWrapper.createDiv({ cls: "dh-habit-file-path" });
 
     // Add checkbox for Rename in all notes
-    const renameContainer = inputWrapper.createDiv({ cls: "dh-rename-checkbox-container", attr: { style: "display: none; align-items: center; gap: 6px; margin-top: 4px; padding: 6px; background: var(--background-secondary); border-radius: 4px; border: 1px solid var(--background-modifier-border);" } });
+    const renameContainer = inputWrapper.createDiv({ cls: "dh-rename-checkbox-container" });
     const renameCheckbox = renameContainer.createEl("input", { type: "checkbox", id: "dh-rename-all-notes" });
     const renameLabel = renameContainer.createEl("label", { text: isAr ? "إعادة التسمية في جميع الملاحظات القديمة؟ (اختياري)" : "Rename in all older notes? (Optional)", attr: { for: "dh-rename-all-notes" }, cls: "dh-atomic-hint" });
-    renameLabel.style.margin = "0";
 
-    const renameHint = inputWrapper.createDiv({ cls: "dh-atomic-hint", attr: { style: "display: none; font-size: 0.8em; opacity: 0.8; margin-top: 2px;" } });
+    const renameHint = inputWrapper.createDiv({ cls: "dh-atomic-hint" });
     renameHint.textContent = isAr
       ? "💡 سيتم استبدال الاسم الحالي وكل الأسماء السابقة لهذه العادة بالاسم الجديد في كل ملفاتك."
       : "💡 This will replace the current name and all previous aliases with the new name across your vault.";
@@ -2225,11 +2224,10 @@ class AddHabitModal extends Modal {
     const logSection = panel.createDiv({ cls: "form-section dh-log-section" });
 
     // Compact Header with Action Button
-    const headerRow = logSection.createDiv({ cls: "dh-log-section-header-row", attr: { style: "display: flex; justify-content: space-between; align-items: center;" } });
+    const headerRow = logSection.createDiv({ cls: "dh-log-section-header-row" });
     headerRow.createEl("h3", {
       text: isAr ? "سجل المتابعة والتعليقات" : "Habit Context Log",
-      cls: "dh-log-section-title",
-      attr: { style: "margin: 0;" }
+      cls: "dh-log-section-title"
     });
 
     const container = logSection.createDiv({ cls: "dh-log-entries-container" });
@@ -3173,16 +3171,11 @@ class WeeklyGridView extends ItemView {
         hijriEnd = hijriEnd.replace(/\s+\d{4}\s*هـ?$/i, '').trim();
       }
 
-      element.textContent = "";
-      const hijriSpan = document.createElement("span");
-      hijriSpan.className = "hijri-date-text";
-      hijriSpan.textContent = `${hijriStart} - ${hijriEnd}`;
-      element.appendChild(hijriSpan);
-      element.appendChild(document.createTextNode(" "));
-      const indicatorSpan = document.createElement("span");
-      indicatorSpan.className = "hijri-indicator";
-      indicatorSpan.textContent = "هـ";
-      element.appendChild(indicatorSpan);
+      // Add RLM (\u200F) to enforce Right-to-Left ordering
+      element.empty();
+      element.createSpan({ cls: "hijri-date-text", text: `${hijriStart} - ${hijriEnd}` });
+      element.createSpan({ text: " " });
+      element.createSpan({ cls: "hijri-indicator", text: "هـ" });
     }
   }
 

@@ -5022,3 +5022,43 @@ body.is-mobile .dh-parent-select {
   font-size: 0.9em;
   width: 100%;
 }
+
+/* ---- 14. INLINE STYLE REPLACEMENTS ---- */
+.dh-name-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 4px;
+}
+
+.dh-habit-file-path {
+  margin-top: 2px;
+}
+
+.dh-rename-checkbox-container {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.dh-atomic-hint {
+  display: none;
+  font-size: 0.8em;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.dh-log-section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dh-log-section-title {
+  margin: 0;
+}

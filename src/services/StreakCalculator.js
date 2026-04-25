@@ -89,7 +89,7 @@ export class StreakCalculator {
         continue;
       }
 
-      if (habit.restoredDate && date.isBefore(moment(habit.restoredDate), "day")) {
+      if (habit.restoredDate && date.isBefore(window.moment(habit.restoredDate), "day")) {
         break;
       }
 
