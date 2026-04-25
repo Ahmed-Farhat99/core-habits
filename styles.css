@@ -4422,111 +4422,9 @@ select.form-input option {
 */
 
 /* ═══════════════════════════════════════════════════════════ */
-/* 13.1 — GRID: Touch-Friendly Cell Sizing                   */
-/* ═══════════════════════════════════════════════════════════ */
-
-/* Phone: compact grid with minimum touch targets */
-body.is-mobile .habits-grid-wrapper .dh-grid-row {
-  grid-template-columns: 22px minmax(80px, 3fr) repeat(7, minmax(34px, 1fr));
-}
-
-body.is-mobile .dh-grid-cell {
-  padding: 4px 2px !important;
-  font-size: var(--dh-font-sm);
-}
-
-body.is-mobile .day-cell {
-  width: 34px;
-  height: 38px;
-  min-height: 38px;
-  max-height: 42px;
-  font-size: 0.95em;
-}
-
-/* Touch devices: ensure touch target is at least 44px */
-@media (pointer: coarse) {
-  .day-cell {
-    min-width: 34px;
-    min-height: 36px;
-  }
-}
-
-/* Phone-only: even more compact */
-body.is-phone .dh-grid-row {
-  grid-template-columns: 20px minmax(70px, 3fr) repeat(7, minmax(30px, 1fr));
-}
-
-body.is-phone .day-cell {
-  width: 30px;
-  height: 36px;
-  min-height: 34px;
-  font-size: 0.9em;
-}
-
-/* ═══════════════════════════════════════════════════════════ */
-/* 13.2 — HEADER: Compact Day Headers                        */
-/* ═══════════════════════════════════════════════════════════ */
-
-body.is-mobile .weekly-header-controls {
-  padding: var(--dh-space-md);
-  gap: var(--dh-space-xs);
-}
-
-body.is-mobile .header-main-stage {
-  flex-direction: column;
-  gap: var(--dh-space-md);
-}
-
-body.is-mobile .day-header,
-body.is-mobile .day-stat-cell {
-  min-width: 36px;
-  width: 100%;
-  max-width: none;
-  padding: var(--dh-space-xs) 1px;
-}
-
-body.is-mobile .day-name {
-  font-size: 0.6rem;
-}
-
-body.is-mobile .day-date,
-body.is-mobile .day-date-hijri {
-  font-size: 0.45rem;
-  min-height: 1em;
-}
-
-body.is-mobile .day-stat-badge {
-  padding: 2px 5px;
-  font-size: 0.6rem;
-}
-
-/* ═══════════════════════════════════════════════════════════ */
-/* 13.3 — HABIT NAME: Compact on Mobile                      */
-/* ═══════════════════════════════════════════════════════════ */
-
-body.is-mobile .habit-name-cell {
-  padding: 6px 8px;
-  font-size: var(--dh-font-sm);
-  gap: var(--dh-space-2xs);
-}
-
-body.is-mobile .habit-name-link {
-  font-size: var(--dh-font-sm);
-}
-
-/* Hide non-essential meta on phones to save space */
-body.is-phone .dh-streak-badge-slot,
-body.is-phone .habit-open-page-icon,
-body.is-phone .habit-category-badge {
-  display: none !important;
-}
-
-/* On tablets (mobile but not phone), show streak but hide icon */
-body.is-mobile:not(.is-phone) .habit-open-page-icon {
-  display: none !important;
-}
-
-/* ═══════════════════════════════════════════════════════════ */
+/* [REMOVED: conflicting mobile grid rules] */
+/* [REMOVED: conflicting mobile grid rules] */
+/* [REMOVED: conflicting mobile grid rules] */
 /* 13.4 — COMMENT ICON: Always Visible on Touch Devices      */
 /* ═══════════════════════════════════════════════════════════ */
 
@@ -4753,31 +4651,7 @@ body.is-mobile .dh-skeleton-cards-grid {
 }
 
 /* ═══════════════════════════════════════════════════════════ */
-/* 13.12 — TABLET (iPad, Android Tablet) Specific            */
-/* ═══════════════════════════════════════════════════════════ */
-
-/* Tablets have is-mobile but NOT is-phone */
-body.is-mobile:not(.is-phone) .dh-grid-row {
-  grid-template-columns: 26px minmax(120px, 4fr) repeat(7, minmax(40px, 1fr));
-}
-
-body.is-mobile:not(.is-phone) .day-cell {
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
-  font-size: 1em;
-}
-
-body.is-mobile:not(.is-phone) .dh-pulse-cards-row {
-  grid-template-columns: 1fr 1fr;
-}
-
-body.is-mobile:not(.is-phone) .dh-modal-tab-btn {
-  font-size: var(--dh-font-sm);
-  padding: 8px 14px;
-}
-
-/* ═══════════════════════════════════════════════════════════ */
+/* [REMOVED: conflicting mobile grid rules] */
 /* 13.13 — RTL Touch Fixes                                   */
 /* ═══════════════════════════════════════════════════════════ */
 
@@ -5062,9 +4936,7 @@ body.is-mobile .entry-card-header {
   width: 100% !important;
 }
 
-.daily-habits-view table, .dh-grid-container {
-  min-width: 600px !important;
-}
+/* [REMOVED: forced min-width on mobile] */
 \n
 /* Modern Select Dropdown for Diary Mode */
 select.dh-diary-mode-select {
@@ -5100,7 +4972,7 @@ select.dh-diary-mode-select:focus {
   align-items: center;
   gap: 6px;
 }
-\n\n/* FIX TABLE SQUISHING */\n.habits-grid {\n  min-width: 600px !important;\n}\n.habits-grid .dh-grid-cell {\n  white-space: nowrap;\n}\n.habits-grid .day-name {\n  white-space: nowrap;\n}\n
+.habits-grid {\n  min-width: 600px !important;\n}\n.habits-grid .dh-grid-cell {\n  white-space: nowrap;\n}\n.habits-grid .day-name {\n  white-space: nowrap;\n}\n
 
 /* --- MOBILE HABITS SETTINGS CARDS --- */
 body.is-mobile .dh-habit-row.dh-list-header {
@@ -5260,34 +5132,29 @@ body.is-mobile .habits-tbody .dh-grid-row[style*="display: none"] {
   display: none !important;
 }
 
-/* Habit Index Badge: Position absolute in top-right */
+/* Habit Index Badge: Inline next to name */
 body.is-mobile .habits-tbody .habit-index-cell {
-  position: absolute !important;
-  top: 6px !important;
-  right: 8px !important;
-  left: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   background: rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.12) !important;
   color: var(--interactive-accent) !important;
-  font-size: 0.6em !important;
+  font-size: 0.65em !important;
   font-weight: 700 !important;
   padding: 2px 6px !important;
   border-radius: 6px !important;
-  min-width: unset !important;
+  min-width: 18px !important;
+  height: 18px !important;
   width: auto !important;
-  height: auto !important;
-  display: block !important;
-  z-index: 5 !important;
+  position: static !important;
+  flex-shrink: 0 !important;
+  margin-left: 4px !important;
 }
 
-[dir="ltr"] body.is-mobile .habits-tbody .habit-index-cell {
-  right: auto !important;
-  left: 8px !important;
-}
-
-/* Habit Name: Full width first line */
+/* Habit Name: Full width first line, flex row for index+name */
 body.is-mobile .habits-tbody .habit-name-cell {
-  flex: 0 0 100% !important;
-  width: 100% !important;
+  flex: 0 0 calc(100% - 30px) !important;
+  width: calc(100% - 30px) !important;
   margin-bottom: 8px !important;
   padding: 0 !important;
   border: none !important;
