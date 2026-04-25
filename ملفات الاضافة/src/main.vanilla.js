@@ -35,6 +35,15 @@ const FILE_LOCK_CLEANUP_INTERVAL = 5 * 60 * 1000;
 const LOCK_STALE_MS = 10 * 60 * 1000;
 
 const DEFAULT_MARKER = "[habit:: true]";
+const DEFAULT_PARENT_HEADING = "## 🌟 يومياتي";
+const DEFAULT_REFLECTION_HEADING = "### 📝 تدوينات اليوم";
+const DEFAULT_HABIT_NOTES_HEADING = "### 💬 ملاحظات العادات";
+const REFLECTION_ENTRY_TYPES = ["Good", "Bad", "Lesson", "Idea"];
+
+function normalizeReflectionType(type) {
+  const cleanType = String(type || "").trim();
+  return REFLECTION_ENTRY_TYPES.includes(cleanType) ? cleanType : "Idea";
+}
 
 const DEBOUNCE_DELAY_MS = 300;
 
@@ -90,7 +99,11 @@ class Utils {
 
     const confirmBtn = document.createElement("button");
     confirmBtn.className = "dh-confirm-delete-btn";
-    confirmBtn.textContent = confirmText || (isAr ? "نعم، احذف" : "Yes, Delete");
+    confirmBtn.textContent = confirmText || (isAr ? "نعم، متأكد" : "Yes, sure");
+    confirmBtn.onclick = () => {
+      container.remove();
+      if (onConfirm) onConfirm();
+    };
     btnContainer.appendChild(confirmBtn);
 
     const cancelBtn = document.createElement("button");
@@ -103,6 +116,67 @@ class Utils {
     confirmBtn.onclick = async () => { if (notice) notice.hide(); if (onConfirm) await onConfirm(); };
     cancelBtn.onclick = () => { if (notice) notice.hide(); if (onCancel) onCancel(); };
     return notice;
+  }
+
+  static insertNestedContent(content, parentHeading, subHeading, newText) {
+    if (!newText) return content;
+    const cleanSub = subHeading.trim();
+    if (!parentHeading) {
+      // Flat logic
+      const headingRegex = new RegExp(`^${Utils.escapeRegExp(cleanSub)}\\s*$`, "m");
+      const match = content.match(headingRegex);
+      if (match) {
+        const insertPos = match.index + match[0].length;
+        const headingLevel = cleanSub.match(/^#+/)?.[0]?.length || 2;
+        const nextHeadingRegex = new RegExp(`\\n#{1,${headingLevel}} `, 'm');
+        const afterHeading = content.substring(insertPos);
+        const nextMatch = afterHeading.match(nextHeadingRegex);
+        const sectionEnd = nextMatch ? insertPos + nextMatch.index : content.length;
+        return content.substring(0, sectionEnd) + "\n" + newText + content.substring(sectionEnd);
+      } else {
+        const separator = content.trim().length > 0 ? "\n\n" : "";
+        return content + separator + cleanSub + "\n" + newText + "\n";
+      }
+    }
+
+    // Nested logic
+    const cleanParent = parentHeading.trim();
+    const parentRegex = new RegExp(`^${Utils.escapeRegExp(cleanParent)}\\s*$`, "m");
+    const parentMatch = content.match(parentRegex);
+
+    if (!parentMatch) {
+      const separator = content.trim().length > 0 ? "\n\n" : "";
+      return content + separator + cleanParent + "\n" + cleanSub + "\n" + newText + "\n";
+    }
+
+    const parentInsertPos = parentMatch.index + parentMatch[0].length;
+    const parentLevel = cleanParent.match(/^#+/)?.[0]?.length || 2;
+    const nextParentRegex = new RegExp(`\\n#{1,${parentLevel}} `, 'm');
+    const afterParent = content.substring(parentInsertPos);
+    const nextParentMatch = afterParent.match(nextParentRegex);
+    const parentEnd = nextParentMatch ? parentInsertPos + nextParentMatch.index : content.length;
+
+    const parentBlock = content.substring(parentInsertPos, parentEnd);
+    const subRegex = new RegExp(`^${Utils.escapeRegExp(cleanSub)}\\s*$`, "m");
+    const subMatch = parentBlock.match(subRegex);
+
+    if (subMatch) {
+      const subInsertPos = parentInsertPos + subMatch.index + subMatch[0].length;
+      const subLevel = cleanSub.match(/^#+/)?.[0]?.length || 3;
+      const nextSubRegex = new RegExp(`\\n#{1,${subLevel}} `, 'm');
+      const afterSub = content.substring(subInsertPos, parentEnd);
+      const nextSubMatch = afterSub.match(nextSubRegex);
+      const subEnd = nextSubMatch ? subInsertPos + nextSubMatch.index : parentEnd;
+      
+      let appendPos = subEnd;
+      while (appendPos > 0 && content.charAt(appendPos - 1) === '\n') appendPos--;
+      return content.substring(0, appendPos) + "\n" + newText + "\n\n" + content.substring(appendPos).replace(/^\n+/, '');
+    } else {
+      let appendPos = parentEnd;
+      while (appendPos > 0 && content.charAt(appendPos - 1) === '\n') appendPos--;
+      const separator = "\n\n";
+      return content.substring(0, appendPos) + separator + cleanSub + "\n" + newText + "\n\n" + content.substring(appendPos).replace(/^\n+/, '');
+    }
   }
 }
 
@@ -203,6 +277,72 @@ class AudioEngine {
         await this.sharedAudioContext.close();
       } catch (e) { }
     }
+  }
+}
+
+class VoiceRecorderUtility {
+  static isRecording = false;
+  static mediaRecorder = null;
+  static stream = null;
+  static chunks = [];
+
+  static async startRecording() {
+    if (this.isRecording) return false;
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'audio/webm' });
+      this.chunks = [];
+      this.mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) this.chunks.push(e.data);
+      };
+      this.mediaRecorder.start();
+      this.isRecording = true;
+      return true;
+    } catch (e) {
+      console.error("[Core Habits] Failed to start voice recording:", e);
+      return false;
+    }
+  }
+
+  static async stopAndSaveRecording(app) {
+    if (!this.isRecording || !this.mediaRecorder) return null;
+    
+    return new Promise((resolve) => {
+      this.mediaRecorder.onstop = async () => {
+        if (this.stream) {
+          this.stream.getTracks().forEach(t => t.stop());
+        }
+        this.isRecording = false;
+        const blob = new Blob(this.chunks, { type: 'audio/webm' });
+        
+        try {
+          const buffer = await blob.arrayBuffer();
+          const folderPath = app.vault.getConfig("attachmentFolderPath") || "/";
+          const dFolders = ["./", "/", ""];
+          let normalizedFolder = dFolders.includes(folderPath) ? "" : folderPath;
+          if (normalizedFolder && normalizedFolder.startsWith("./")) {
+            normalizedFolder = normalizedFolder.substring(2);
+          }
+          
+          if (normalizedFolder) {
+            const folderExists = app.vault.getAbstractFileByPath(normalizedFolder);
+            if (!folderExists) {
+              await app.vault.createFolder(normalizedFolder);
+            }
+          }
+          
+          const fileName = `Voice-Comment-${window.moment().format("YYYYMMDD-HHmmss")}.webm`;
+          const fullPath = normalizedFolder ? `${normalizedFolder}/${fileName}` : fileName;
+          
+          await app.vault.createBinary(fullPath, buffer);
+          resolve(fileName);
+        } catch(e) {
+          console.error("[Core Habits] Failed to save voice note:", e);
+          resolve(null);
+        }
+      };
+      this.mediaRecorder.stop();
+    });
   }
 }
 
@@ -360,7 +500,32 @@ module.exports = class DailyHabitsPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const savedData = await this.loadData() || {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
+    delete this.settings.reflectionJournalPath;
+
+    if (savedData.dailyParentHeading === undefined) {
+      if (this.settings.habitHeading.startsWith("## ")) {
+        this.settings.habitHeading = this.settings.habitHeading.replace(/^##\s+/, "### ");
+      }
+      if ((this.settings.reflectionHeading || "").startsWith("## ")) {
+        this.settings.reflectionHeading = this.settings.reflectionHeading.replace(/^##\s+/, "### ");
+      }
+      if ((this.settings.habitLogHeading || "").startsWith("## ")) {
+        this.settings.habitLogHeading = this.settings.habitLogHeading.replace(/^##\s+/, "### ");
+      }
+      await this.saveSettings();
+    }
+
+    if (!this.settings.reflectionHeading || this.settings.reflectionHeading.includes("يومياتي")) {
+      this.settings.reflectionHeading = DEFAULT_REFLECTION_HEADING;
+    }
+    if (!this.settings.habitLogHeading || this.settings.habitLogHeading.includes("سجل المتابعة")) {
+      this.settings.habitLogHeading = DEFAULT_HABIT_NOTES_HEADING;
+    }
+    if (!["grouped", "timeline", "types"].includes(this.settings.diaryViewMode)) {
+      this.settings.diaryViewMode = "grouped";
+    }
   }
 
   handleVaultRename(file, oldPath) {
@@ -444,8 +609,8 @@ module.exports = class DailyHabitsPlugin extends Plugin {
         if (habit.id && habit.id.startsWith("habit-")) {
           const parts = habit.id.split("-");
           if (parts.length > 1) {
-             const parsed = parseInt(parts[1], 10);
-             if (!isNaN(parsed)) createdAt = parsed;
+            const parsed = parseInt(parts[1], 10);
+            if (!isNaN(parsed)) createdAt = parsed;
           }
         }
         habit.createdAt = createdAt;
@@ -571,7 +736,8 @@ const DEFAULT_SETTINGS = {
   weekStartDay: 6,
   showHijriDate: true,
 
-  habitHeading: "## 🎯 تتبع العادات",
+  dailyParentHeading: DEFAULT_PARENT_HEADING,
+  habitHeading: "### 🔄 تتبع العادات",
   autoWriteHabits: true,
 
   dailyNotesFolder: "",
@@ -593,12 +759,12 @@ const DEFAULT_SETTINGS = {
 
   // Habit Context (Comments)
   enableHabitContext: true,
-  habitLogHeading: "## 📖 سجل المتابعة",
+  habitLogHeading: DEFAULT_HABIT_NOTES_HEADING,
 
-  // Reflection Journal
+  // Daily Note Journal
   enableReflectionJournal: true,
-  reflectionJournalPath: "يومياتي",
-  reflectionHeading: "## 📝 يومياتي",
+  reflectionHeading: DEFAULT_REFLECTION_HEADING,
+  diaryViewMode: "grouped",
 };
 
 const TRANSLATIONS = {
@@ -662,17 +828,15 @@ const TRANSLATIONS = {
 
     // --- Habit Context (Comments) Translations ---
     enable_habit_context: "Enable habit context",
-    enable_habit_context_desc: "Allow adding timestamped comments directly injected into the habit's own page for qualitative tracking.",
+    enable_habit_context_desc: "Allow adding timestamped habit comments inside the matching Daily Note.",
     habit_log_heading: "Habit log heading",
-    habit_log_heading_desc: "The heading inside the habit page where comments will be injected.",
+    habit_log_heading_desc: "The heading inside each Daily Note where comments will be injected.",
 
-    // --- Reflection Journal Translations ---
+    // --- Daily Note Journal Translations ---
     enable_reflection_journal: "Enable daily journal",
-    enable_reflection_journal_desc: "Allow writing daily logs that are injected into a central journal page.",
-    reflection_journal_path: "Journal note name",
-    reflection_journal_path_desc: "The name of the central note where your daily logs will be saved.",
+    enable_reflection_journal_desc: "Allow writing daily logs into the matching Daily Note.",
     reflection_heading: "Daily logs heading",
-    reflection_heading_desc: "The heading inside the journal note where daily entries will be listed.",
+    reflection_heading_desc: "The heading inside each Daily Note where daily entries will be listed.",
     reflection_modal_title: "How was your day?",
   },
   ar: {
@@ -735,17 +899,15 @@ const TRANSLATIONS = {
 
     // --- Habit Context (Comments) Translations ---
     enable_habit_context: "تفعيل تعليقات العادة (سياق العادة)",
-    enable_habit_context_desc: "السماح بكتابة تعليقات بالوقت والتاريخ تُحقن مباشرة في صفحة العادة.",
-    habit_log_heading: "عنوان سجل العادة",
-    habit_log_heading_desc: "العنوان داخل صفحة العادة الذي سيتم حقن التعليقات تحته.",
+    enable_habit_context_desc: "السماح بكتابة تعليقات العادات داخل ملف اليوم نفسه.",
+    habit_log_heading: "عنوان تعليقات العادات",
+    habit_log_heading_desc: "العنوان داخل ملف اليوم الذي ستُحفظ تحته تعليقات العادات.",
 
-    // --- Reflection Journal Translations ---
+    // --- Daily Note Journal Translations ---
     enable_reflection_journal: "تفعيل سجل اليوميات",
-    enable_reflection_journal_desc: "السماح بكتابة يوميات تُحقن تلقائياً في ملاحظة مجمعة لسهولة مراجعتها وتحليلها باستخدام Dataview.",
-    reflection_journal_path: "ملف اليوميات",
-    reflection_journal_path_desc: "اسم الملاحظة المركزية التي ستُجمع فيها اليوميات (بدون مسار المجلد أو صيغة .md).",
+    enable_reflection_journal_desc: "السماح بكتابة اليوميات داخل ملف اليوم نفسه بدل ملف مركزي.",
     reflection_heading: "عنوان قسم اليوميات",
-    reflection_heading_desc: "العنوان داخل ملاحظة اليوميات الذي ستُضاف الإدخالات تحته بترتيب زمني.",
+    reflection_heading_desc: "العنوان داخل ملف اليوم الذي ستُضاف تحته تدوينات اليوم.",
     reflection_modal_title: "كيف كان يومك تقييماً عاماً؟",
   },
 };
@@ -1230,11 +1392,11 @@ class HabitManager {
       }
     }
 
-    return { 
-      needsConfirmation: filesToUpdate.length > 0, 
-      fileCount: filesToUpdate.length, 
-      filesToUpdate, 
-      uniqueOldNames 
+    return {
+      needsConfirmation: filesToUpdate.length > 0,
+      fileCount: filesToUpdate.length,
+      filesToUpdate,
+      uniqueOldNames
     };
   }
 
@@ -1393,23 +1555,7 @@ class HabitManager {
 
           if (scheduledHabits.length === 0) return originalContent;
 
-          // 4. Check/Add Heading
-          const heading = this.plugin.settings.habitHeading;
-          const cleanHeading = heading.replace(/^#+\s+/, "");
-
-          const headingRegex = new RegExp(
-            `^(#+)\\s+${Utils.escapeRegExp(cleanHeading)}\\s*$`,
-            "m",
-          );
-          const hasHeading = headingRegex.test(content);
-
-          if (!hasHeading) {
-            if (content.trim().length > 0) content += "\n\n";
-            content += `${heading}\n`;
-          }
-
-          // 5. Generate habits text that MAY need addition
-          // Check which habits are missing
+          // Generate habits text that MAY need addition
           const existingHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
           let addedCount = 0;
 
@@ -1421,37 +1567,21 @@ class HabitManager {
             ];
             const exists = existingHabits.some((h) => allNames.some(name => h.text.includes(name)));
             if (!exists) {
-              habitsToAdd.push(
-                `- [ ] ${habit.linkText} ${this.plugin.settings.marker}`,
-              );
+              habitsToAdd.push(`- [ ] ${habit.linkText} ${this.plugin.settings.marker}`);
               addedCount++;
             }
           }
 
           if (addedCount > 0) {
-            const currentLines = content.split(/\r?\n/);
-            let targetLine = -1;
-            for (let i = 0; i < currentLines.length; i++) {
-              if (headingRegex.test(currentLines[i])) {
-                targetLine = i + 1;
-                break;
-              }
-            }
-            if (targetLine === -1) {
-              // If heading was just added at bottom
-              targetLine = currentLines.length;
-            }
-
-            if (targetLine !== -1) {
-              currentLines.splice(targetLine, 0, ...habitsToAdd);
-              const newContent = currentLines.join("\n");
-              if (newContent !== originalContent) {
-                Utils.debugLog(
-                  this.plugin,
-                  `Added ${addedCount} habits to ${dailyNote.basename}`,
-                );
-                return newContent;
-              }
+            const newContent = Utils.insertNestedContent(
+              content,
+              this.plugin.settings.dailyParentHeading,
+              this.plugin.settings.habitHeading,
+              habitsToAdd.join("\n")
+            );
+            if (newContent !== originalContent) {
+              Utils.debugLog(this.plugin, `Added ${addedCount} habits to ${dailyNote.basename}`);
+              return newContent;
             }
           }
           return originalContent;
@@ -1554,6 +1684,39 @@ async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSett
     }
   }
   return file;
+}
+
+/**
+ * Superfast extraction of habit logs from exactly the X most recent Daily Notes.
+ * Completely decouples the habit log from the habit's own file.
+ */
+async function extractHabitHistoryFromDailyNotes(app, plugin, habitName, daysToLookBack = 30) {
+  const entries = [];
+  const cleanHabitName = TextUtils.clean(habitName);
+  const now = window.moment();
+  
+  for (let i = 0; i < daysToLookBack; i++) {
+    const targetDate = now.clone().subtract(i, 'days');
+    const file = await getNoteByDate(app, targetDate, false, plugin.settings);
+    if (!file) continue;
+
+    const content = await app.vault.cachedRead(file);
+    const lines = content.split('\n');
+    
+    for (const line of lines) {
+      if (line.includes(`[habit-note:: ${cleanHabitName}]`)) {
+        let cleanLine = line.trim();
+        if (cleanLine.startsWith('- ')) {
+          cleanLine = cleanLine.substring(2).trim();
+        }
+        // Remove the habit label text the user already knows they're looking at
+        cleanLine = cleanLine.replace(new RegExp(`\\[habit-note:: ${Utils.escapeRegExp(cleanHabitName)}\\] .*? - `, "i"), "");
+        
+        entries.push({ date: targetDate, text: cleanLine });
+      }
+    }
+  }
+  return entries;
 }
 
 class HabitScanner {
@@ -2540,105 +2703,137 @@ class AddHabitModal extends Modal {
   async renderLogSection(panel, t, isAr) {
     const logSection = panel.createDiv({ cls: "form-section dh-log-section" });
 
-    // Header for log
-    logSection.createEl("h3", {
+    // Compact Header with Action Button
+    const headerRow = logSection.createDiv({ cls: "dh-log-section-header-row", attr: { style: "display: flex; justify-content: space-between; align-items: center;" } });
+    headerRow.createEl("h3", {
       text: isAr ? "سجل المتابعة والتعليقات" : "Habit Context Log",
-      cls: "dh-log-section-title"
+      cls: "dh-log-section-title",
+      attr: { style: "margin: 0;" }
     });
 
     const container = logSection.createDiv({ cls: "dh-log-entries-container" });
-    container.textContent = isAr ? "جاري تحميل السجل..." : "Loading log...";
 
-    try {
-      const linkMatch = this.existingHabit.linkText?.match(/\[\[([^\]]+)\]\]/);
-      if (!linkMatch || !linkMatch[1]) {
-        container.textContent = isAr ? "هذه العادة غير مرتبطة بصفحة لقراءة السجل." : "This habit is not linked to a page to read the log from.";
-        return;
-      }
-
-      const file = this.app.metadataCache.getFirstLinkpathDest(linkMatch[1], "");
-      if (!file) {
-        container.textContent = isAr ? `لم يتم العثور على ملف: ${linkMatch[1]}` : `File not found: ${linkMatch[1]}`;
-        return;
-      }
-
-      const content = await this.app.vault.read(file);
-      const heading = this.plugin.settings.habitLogHeading;
-      const cleanHeading = Utils.escapeRegExp(heading.trim());
-
-      // Try to find the section under the heading
-      const headingRegex = new RegExp(`^${cleanHeading}\\s*$`, "m");
-      const match = content.match(headingRegex);
-
-      if (!match) {
-        container.textContent = isAr ? "لا توجد تعليقات حتى الآن." : "No comments yet.";
-        return;
-      }
-
-      const startIndex = match.index + match[0].length;
-      const restOfFile = content.substring(startIndex);
-
-      // Stop at the next heading of same or higher level
-      const headingLevel = heading.match(/^#+/)?.[0]?.length || 2;
-      const nextHeadingRegex = new RegExp(`^#{1,${headingLevel}}\\s+`, "m");
-      const nextMatch = restOfFile.match(nextHeadingRegex);
-
-      let sectionContent = nextMatch ? restOfFile.substring(0, nextMatch.index) : restOfFile;
-
-      // Extract bullet points that look like log entries
-      const entries = [];
-      const lines = sectionContent.split('\n');
-      for (const line of lines) {
-        if (line.trim().startsWith('- ')) {
-          entries.push(line.trim().substring(2));
+    const addNoteBtn = headerRow.createEl("button", {
+      text: isAr ? "🎙️ أضف ملاحظة لليوم" : "🎙️ Add Note Today",
+      cls: "dh-log-add-note-btn dh-brand-btn"
+    });
+    
+    addNoteBtn.onclick = () => {
+      new HabitCommentPopup(
+        this.app,
+        this.plugin,
+        this.existingHabit || this.formState,
+        window.moment(),
+        async (text) => {
+          await injectHabitCommentIntoDailyNote(this.app, this.plugin, this.existingHabit || this.formState, window.moment(), text);
+          this.renderLogSectionOnly(container, isAr);
         }
+      ).open();
+    };
+
+    container.textContent = isAr ? "جاري تحميل السجل..." : "Loading log...";
+    this.renderLogSectionOnly(container, isAr);
+  }
+
+  async renderLogSectionOnly(container, isAr) {
+    try {
+      const habitName = this.existingHabit?.linkText || this.existingHabit?.name || this.formState.name;
+      if (!habitName) {
+        container.empty();
+        return;
       }
+      
+      const entries = await extractHabitHistoryFromDailyNotes(this.app, this.plugin, habitName, 90);
 
       container.empty();
 
       if (entries.length === 0) {
         container.createDiv({
           cls: "dh-log-empty-state",
-          text: isAr ? "السجل فارغ. أضف تعليقاتك اليومية من الشاشة الرئيسية." : "Log is empty. Add daily comments from the main view."
+          text: isAr ? "السجل فارغ. استمر في العادة ووثق تقدمك يوماً بيوم!" : "Log is empty. Keep tracking and document your progress day by day!"
         });
         return;
       }
 
-      // Render entries
+      // Group entries by Month
+      const grouped = {};
       entries.forEach(entry => {
-        const entryDiv = container.createDiv({ cls: "dh-log-entry" });
+        const monthKey = entry.date.locale(isAr ? 'ar' : 'en').format("MMMM YYYY");
+        if (!grouped[monthKey]) grouped[monthKey] = [];
+        grouped[monthKey].push(entry);
+      });
 
-        // Safe DOM-based parsing to avoid innerHTML
-        const tokens = [];
-        let temp = entry;
-        // Replace links
-        temp = temp.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
-          tokens.push({ type: 'link', text: p1 });
-          return `__TOKEN_${tokens.length - 1}__`;
-        });
-        // Replace rates
-        temp = temp.replace(/\[Rate:: (.*?)\]/g, (match, p1) => {
-          tokens.push({ type: 'rate', text: p1 });
-          return `__TOKEN_${tokens.length - 1}__`;
-        });
-        // Replace bold
-        temp = temp.replace(/\*\*(.*?)\*\*/g, (match, p1) => {
-          tokens.push({ type: 'bold', text: p1 });
-          return `__TOKEN_${tokens.length - 1}__`;
-        });
+      Object.keys(grouped).forEach((monthKey, idx) => {
+        const details = container.createEl("details", { cls: "dh-log-month-group" });
+        if (idx === 0) details.open = true;
+        
+        details.createEl("summary", { text: monthKey, cls: "dh-log-month-summary" });
+        const groupDiv = details.createDiv({ cls: "dh-log-month-content" });
 
-        // Append nodes securely
-        const parts = temp.split(/(__TOKEN_\d+__)/);
-        parts.forEach(part => {
-          const tokenMatch = part.match(/__TOKEN_(\d+)__/);
-          if (tokenMatch) {
-            const token = tokens[parseInt(tokenMatch[1])];
-            if (token.type === 'link') entryDiv.createSpan({ cls: "dh-log-link", text: token.text });
-            else if (token.type === 'rate') entryDiv.createSpan({ cls: "dh-log-rate-badge", text: token.text });
-            else if (token.type === 'bold') entryDiv.createEl("strong", { text: token.text });
-          } else if (part) {
-            entryDiv.appendChild(document.createTextNode(part));
-          }
+        grouped[monthKey].forEach(entry => {
+          const entryDiv = groupDiv.createDiv({ cls: "dh-log-entry" });
+
+          const dateFormatted = entry.date.locale(isAr ? 'ar' : 'en').format("DD MMM");
+          let temp = `**${dateFormatted}** | ${entry.text}`;
+
+          const tokens = [];
+
+          // Process audio voice notes first
+          temp = temp.replace(/!\[\[([^\]]+\.webm)\]\]/i, (match, p1) => {
+            tokens.push({ type: 'audio', text: p1 });
+            return `__TOKEN_${tokens.length - 1}__`;
+          });
+
+          // Replace links
+          temp = temp.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
+            tokens.push({ type: 'link', text: p1 });
+            return `__TOKEN_${tokens.length - 1}__`;
+          });
+          // Replace rates
+          temp = temp.replace(/\[Rate:: (.*?)\]/g, (match, p1) => {
+            tokens.push({ type: 'rate', text: p1 });
+            return `__TOKEN_${tokens.length - 1}__`;
+          });
+          // Replace bold
+          temp = temp.replace(/\*\*(.*?)\*\*/g, (match, p1) => {
+            tokens.push({ type: 'bold', text: p1 });
+            return `__TOKEN_${tokens.length - 1}__`;
+          });
+
+          // Append nodes securely
+          const parts = temp.split(/(__TOKEN_\d+__)/);
+          parts.forEach(part => {
+            const tokenMatch = part.match(/__TOKEN_(\d+)__/);
+            if (tokenMatch) {
+              const token = tokens[parseInt(tokenMatch[1])];
+              if (token.type === 'link') entryDiv.createSpan({ cls: "dh-log-link", text: token.text });
+              else if (token.type === 'audio') {
+                const audioFile = this.app.metadataCache.getFirstLinkpathDest(token.text, "");
+                if (audioFile) {
+                  const src = this.app.vault.getResourcePath(audioFile);
+                  const audioEl = entryDiv.createEl("audio", { attr: { controls: true, src: src } });
+                  audioEl.style.width = "100%";
+                  audioEl.style.height = "36px";
+                  audioEl.style.marginTop = "8px";
+                  audioEl.style.borderRadius = "8px";
+                  audioEl.onclick = (e) => e.stopPropagation();
+                  
+                  // Mutual exclusion for audio playback
+                  audioEl.addEventListener('play', () => {
+                    document.querySelectorAll('audio').forEach(a => {
+                      if (a !== audioEl && !a.paused) a.pause();
+                    });
+                  });
+                } else {
+                  entryDiv.createSpan({ text: token.text });
+                }
+              }
+              else if (token.type === 'rate') entryDiv.createSpan({ cls: "dh-log-rate-badge", text: token.text });
+              else if (token.type === 'bold') entryDiv.createEl("strong", { text: token.text });
+            } else if (part) {
+              entryDiv.appendChild(document.createTextNode(part));
+            }
+          });
         });
       });
 
@@ -2782,12 +2977,11 @@ class RenameProgressModal extends Modal {
  * Small popup modal for adding a comment to a specific habit execution
  */
 class HabitCommentPopup extends Modal {
-  constructor(app, plugin, habit, date, dailyPercent, onSave) {
+  constructor(app, plugin, habit, date, onSave) {
     super(app);
     this.plugin = plugin;
     this.habit = habit;
     this.date = date;
-    this.dailyPercent = dailyPercent;
     this.onSave = onSave;
   }
 
@@ -2808,25 +3002,82 @@ class HabitCommentPopup extends Modal {
     headerText.createDiv({ cls: "dh-popup-title", text: this.habit.name });
     headerText.createDiv({ cls: "dh-popup-meta", text: `${dateStr} • ${window.moment().format("HH:mm")}` });
 
-    const input = contentEl.createEl("textarea", {
-      cls: "dh-popup-input",
+    const inputWrapper = contentEl.createDiv({ cls: "dh-popup-input-wrapper" });
+    const input = inputWrapper.createEl("textarea", {
+      cls: "dh-popup-input dh-popup-input-standalone",
       attr: {
         placeholder: isAr ? "ماذا حدث؟ لماذا تأخرت؟ ما شعورك؟" : "What happened? Why delayed? Feeling?",
-        rows: 2
+        rows: 3
       }
     });
 
-    const footer = contentEl.createDiv({ cls: "dh-popup-footer" });
+    const footer = contentEl.createDiv({ cls: "dh-popup-footer dh-popup-footer-split" });
 
-    const saveBtn = footer.createEl("button", {
+    const actionsLeft = footer.createDiv({ cls: "dh-popup-actions-left" });
+    const micBtn = actionsLeft.createEl("button", {
+      cls: "dh-popup-btn-cancel dh-popup-mic-btn",
+      text: isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note",
+      title: isAr ? "تسجيل ملاحظة صوتية" : "Record Voice Note"
+    });
+
+    const actionsRight = footer.createDiv({ cls: "dh-popup-actions-right" });
+
+    const saveBtn = actionsRight.createEl("button", {
       text: isAr ? "💾 حفظ" : "💾 Save",
       cls: "dh-popup-btn-save"
     });
 
-    const cancelBtn = footer.createEl("button", { text: isAr ? "إلغاء" : "Cancel", cls: "dh-popup-btn-cancel" });
+    const cancelBtn = actionsRight.createEl("button", { text: isAr ? "إلغاء" : "Cancel", cls: "dh-popup-btn-cancel" });
     cancelBtn.onclick = () => this.close();
 
+    let isRecording = false;
+    let recordTimer = null;
+    let seconds = 0;
+
+    micBtn.onclick = async () => {
+      if (!isRecording) {
+        const started = await VoiceRecorderUtility.startRecording();
+        if (started) {
+          isRecording = true;
+          micBtn.addClass("is-recording");
+          micBtn.textContent = isAr ? "⏹ إيقاف" : "⏹ Stop";
+          input.disabled = true;
+          input.placeholder = isAr ? "جاري التسجيل... 00:00" : "Recording... 00:00";
+          seconds = 0;
+          recordTimer = setInterval(() => {
+            seconds++;
+            const mm = String(Math.floor(seconds/60)).padStart(2, '0');
+            const ss = String(seconds%60).padStart(2,'0');
+            input.placeholder = isAr ? `جاري التسجيل... ${mm}:${ss}` : `Recording... ${mm}:${ss}`;
+          }, 1000);
+        } else {
+          new Notice(isAr ? "فشل الوصول للميكروفون!" : "Microphone access failed!");
+        }
+      } else {
+        clearInterval(recordTimer);
+        input.placeholder = isAr ? "معالجة الصوت..." : "Processing audio...";
+        const fileName = await VoiceRecorderUtility.stopAndSaveRecording(app);
+        isRecording = false;
+        micBtn.removeClass("is-recording");
+        micBtn.textContent = isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note";
+        input.disabled = false;
+        input.placeholder = isAr ? "ماذا حدث؟ لماذا تأخرت؟ ما شعورك؟" : "What happened? Why delayed? Feeling?";
+        
+        if (fileName) {
+          const sep = input.value ? "\\n" : "";
+          input.value += `${sep}![[${fileName}]]`;
+          input.focus();
+        } else {
+           new Notice(isAr ? "فشل حفظ الملف الصوتي!" : "Failed to save audio file!");
+        }
+      }
+    };
+
     const submit = () => {
+      if (isRecording) {
+        new Notice(isAr ? "أوقف التسجيل أولاً!" : "Stop recording first!");
+        return;
+      }
       const sanitized = input.value
         .replace(/[\r\n]+/g, ' ')
         .replace(/^#+\s/gm, '')
@@ -2869,16 +3120,16 @@ class HabitCommentPopup extends Modal {
 }
 
 /**
- * Feature: Reflection Journal
+ * Feature: Daily Note Reflection
  * Small popup modal for writing the daily overall reflection
  */
 class ReflectionPopup extends Modal {
-  constructor(app, plugin, date, dailyPercent, onSave) {
+  constructor(app, plugin, date, onSave) {
     super(app);
     this.plugin = plugin;
     this.date = date;
-    this.dailyPercent = dailyPercent;
     this.onSave = onSave;
+    this.selectedType = REFLECTION_ENTRY_TYPES[0];
   }
 
   onOpen() {
@@ -2900,32 +3151,102 @@ class ReflectionPopup extends Modal {
 
     const metaLine = headerText.createDiv({ cls: "dh-popup-meta" });
     metaLine.createSpan({ text: dateStr });
-    if (!isNaN(this.dailyPercent)) {
-      const rate = Math.round(this.dailyPercent);
-      const pctCls = rate >= 80 ? "rate-excellent" : rate >= 60 ? "rate-good" : rate >= 40 ? "rate-warn" : "rate-danger";
-      metaLine.createSpan({ text: ` • `, cls: "dh-popup-meta-sep" });
-      metaLine.createSpan({ text: `${rate}%`, cls: `dh-popup-rate ${pctCls}` });
-    }
 
-    const input = contentEl.createEl("textarea", {
-      cls: "dh-popup-input",
+    const typeLabels = {
+      Good: isAr ? "جيد" : "Good",
+      Bad: isAr ? "سيئ" : "Bad",
+      Lesson: isAr ? "درس" : "Lesson",
+      Idea: isAr ? "فكرة" : "Idea",
+    };
+    const typePicker = contentEl.createDiv({ cls: "dh-reflection-type-picker" });
+    REFLECTION_ENTRY_TYPES.forEach((type) => {
+      const btn = typePicker.createEl("button", {
+        cls: `dh-reflection-type-btn ${type === this.selectedType ? "is-active" : ""}`,
+        text: typeLabels[type] || type,
+      });
+      btn.onclick = () => {
+        this.selectedType = type;
+        typePicker.querySelectorAll(".dh-reflection-type-btn").forEach((el) => el.removeClass("is-active"));
+        btn.addClass("is-active");
+      };
+    });
+
+    const inputWrapper = contentEl.createDiv({ cls: "dh-popup-input-wrapper" });
+    const input = inputWrapper.createEl("textarea", {
+      cls: "dh-popup-input dh-popup-input-standalone",
       attr: {
         placeholder: isAr ? "كيف كان يومك؟ ملاحظات سريعة..." : "How was your day? Quick notes...",
-        rows: 3
+        rows: 4
       }
     });
 
-    const footer = contentEl.createDiv({ cls: "dh-popup-footer" });
+    const footer = contentEl.createDiv({ cls: "dh-popup-footer dh-popup-footer-split" });
 
-    const saveBtn = footer.createEl("button", {
+    const actionsLeft = footer.createDiv({ cls: "dh-popup-actions-left" });
+    const micBtn = actionsLeft.createEl("button", {
+      cls: "dh-popup-btn-cancel dh-popup-mic-btn",
+      text: isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note",
+      title: isAr ? "تسجيل ملاحظة صوتية" : "Record Voice Note"
+    });
+
+    const actionsRight = footer.createDiv({ cls: "dh-popup-actions-right" });
+
+    const saveBtn = actionsRight.createEl("button", {
       text: isAr ? "📝 حفظ التدوين" : "📝 Save",
       cls: "dh-popup-btn-save"
     });
 
-    const cancelBtn = footer.createEl("button", { text: isAr ? "إلغاء" : "Cancel", cls: "dh-popup-btn-cancel" });
+    const cancelBtn = actionsRight.createEl("button", { text: isAr ? "إلغاء" : "Cancel", cls: "dh-popup-btn-cancel" });
     cancelBtn.onclick = () => this.close();
 
+    let isRecording = false;
+    let recordTimer = null;
+    let seconds = 0;
+
+    micBtn.onclick = async () => {
+      if (!isRecording) {
+        const started = await VoiceRecorderUtility.startRecording();
+        if (started) {
+          isRecording = true;
+          micBtn.addClass("is-recording");
+          micBtn.textContent = isAr ? "⏹ إيقاف" : "⏹ Stop";
+          input.disabled = true;
+          input.placeholder = isAr ? "جاري التسجيل... 00:00" : "Recording... 00:00";
+          seconds = 0;
+          recordTimer = setInterval(() => {
+            seconds++;
+            const mm = String(Math.floor(seconds/60)).padStart(2, '0');
+            const ss = String(seconds%60).padStart(2,'0');
+            input.placeholder = isAr ? `جاري التسجيل... ${mm}:${ss}` : `Recording... ${mm}:${ss}`;
+          }, 1000);
+        } else {
+          new Notice(isAr ? "فشل الوصول للميكروفون!" : "Microphone access failed!");
+        }
+      } else {
+        clearInterval(recordTimer);
+        input.placeholder = isAr ? "معالجة الصوت..." : "Processing audio...";
+        const fileName = await VoiceRecorderUtility.stopAndSaveRecording(app);
+        isRecording = false;
+        micBtn.removeClass("is-recording");
+        micBtn.textContent = isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note";
+        input.disabled = false;
+        input.placeholder = isAr ? "كيف كان يومك؟ ملاحظات سريعة..." : "How was your day? Quick notes...";
+        
+        if (fileName) {
+          const sep = input.value ? "\\n" : "";
+          input.value += `${sep}![[${fileName}]]`;
+          input.focus();
+        } else {
+           new Notice(isAr ? "فشل حفظ الملف الصوتي!" : "Failed to save audio file!");
+        }
+      }
+    };
+
     const submit = () => {
+      if (isRecording) {
+        new Notice(isAr ? "أوقف التسجيل أولاً!" : "Stop recording first!");
+        return;
+      }
       const sanitized = input.value
         .replace(/[\r\n]+/g, ' ')
         .replace(/^#+\s/gm, '')
@@ -2934,10 +3255,10 @@ class ReflectionPopup extends Modal {
       if (sanitized) {
         saveBtn.disabled = true;
         saveBtn.textContent = isAr ? "جاري..." : "Saving...";
-        this.onSave(sanitized).then((savedFile) => {
+        this.onSave(sanitized, this.selectedType).then((savedFile) => {
           new Notice(isAr
-            ? `✅ تم حفظ التدوين في: ${savedFile || "يومياتي"}`
-            : `✅ Saved to: ${savedFile || "Journal"}`);
+            ? `✅ تم حفظ التدوين في ملف اليوم: ${savedFile || ""}`
+            : `✅ Saved to daily note: ${savedFile || ""}`);
           this.close();
         }).catch(e => {
           new Notice(`❌ ${e.message}`);
@@ -2982,6 +3303,8 @@ class WeeklyGridView extends ItemView {
     this.previousSkipState = new Map();
     this.currentDateMode = "gregorian";
     this.currentViewMode = "grid";
+    this.diaryViewMode = this.plugin.settings.diaryViewMode || "grouped";
+    this.dailyReflectionDays = new Set();
     // Load persisted collapse state from plugin data (survives Obsidian restarts)
     // Migration: convert old ":settings_expanded" keys to new ":expanded" format
     let groups = this.plugin.settings.collapsedGroups || [];
@@ -3142,6 +3465,8 @@ class WeeklyGridView extends ItemView {
 
       container.empty();
       container.addClass("weekly-grid-container");
+      container.removeClass("dh-diary-view-container");
+      container.removeClass("decision-dashboard-container");
       this._streakCache = new Map();
 
       const isAr = this.isAr;
@@ -3206,8 +3531,8 @@ class WeeklyGridView extends ItemView {
       };
     });
 
-    // --- WEEK NAVIGATION (Grid Mode Only) ---
-    if (this.currentViewMode === "grid") {
+    // --- WEEK NAVIGATION ---
+    if (this.currentViewMode === "grid" || this.currentViewMode === "diary") {
       const mainStage = headerCard.createDiv({ cls: "dh-date-navigator-stage" });
 
       const prevIcon = isAr ? "chevron-right" : "chevron-left";
@@ -3343,6 +3668,7 @@ class WeeklyGridView extends ItemView {
 
     // Initialize daily stats for percentage calculation
     this.dailyStats = {};
+    this.dailyReflectionDays = new Set();
     for (let i = 0; i < 7; i++) {
       const dayDate = this.currentWeekStart.clone().add(i, "days");
       this.dailyStats[DateUtils.formatDateKey(dayDate)] = { total: 0, completed: 0 };
@@ -3360,10 +3686,15 @@ class WeeklyGridView extends ItemView {
       const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
       if (dailyNote) {
         const content = await this.app.vault.cachedRead(dailyNote);
-        weekContent.set(DateUtils.formatDateKey(dayDate), content);
+        const dateKey = DateUtils.formatDateKey(dayDate);
+        weekContent.set(dateKey, content);
+        if (this.parseDailyReflectionEntries(content, dayDate, dailyNote.path).length > 0) {
+          this.dailyReflectionDays.add(dateKey);
+        }
         this.activeFilePaths.add(dailyNote.path); // Add to watch list
       }
     }
+    this.weekContentCache = weekContent;
 
     // Use DocumentFragment for batched DOM insertion
     const tbody = table.createDiv({ cls: "habits-tbody" });
@@ -3460,8 +3791,54 @@ class WeeklyGridView extends ItemView {
     await this.updateHeaderPercentages(thead);
     await this.updateUnifiedProgressBar(container);
 
+    if (this.plugin.settings.enableReflectionJournal) {
+      const tfoot = table.createDiv({ cls: "habits-tfoot" });
+      const footerRow = tfoot.createDiv({ cls: "dh-reflection-footer-row dh-grid-row" });
+      
+      // Index column placeholder
+      footerRow.createDiv({ cls: "habit-index-header dh-grid-cell" });
+      
+      // Diary Title column
+      const titleCell = footerRow.createDiv({ cls: "dh-footer-title dh-grid-cell" });
+      titleCell.createSpan({ text: this.isAr ? "📝 يومياتي" : "📝 Diary" });
+      
+      const today = window.moment();
+      for (let index = 0; index < 7; index++) {
+        const dayCell = footerRow.createDiv({ cls: "day-cell dh-grid-cell" });
+        const dayDate = this.currentWeekStart.clone().add(index, "days");
+        const dateKey = DateUtils.formatDateKey(dayDate);
+        
+        if (!dayDate.isAfter(today, "day")) {
+          const hasReflection = this.dailyReflectionDays?.has(dateKey);
+          const btn = dayCell.createEl("button", {
+            cls: `dh-footer-add-btn ${hasReflection ? "has-reflection" : ""}`,
+            title: hasReflection
+              ? (this.isAr ? "تم تسجيل يومية لهذا اليوم" : "Diary entry exists")
+              : (this.isAr ? "تدوين ملاحظة اليوم" : "Add daily reflection")
+          });
+          btn.textContent = "📝";
+          
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            this.openReflectionPopup(dayDate);
+          };
+        }
+      }
+    }
+
     if (this.plugin.settings.enableHabitContext) {
       this.populateCommentDots(tbody, sortedHabits, this.currentWeekStart);
+    }
+    
+    if (!this.plugin.settings.hasSeenGridHint) {
+      const hint = container.createDiv({ cls: "dh-grid-hint" });
+      hint.createDiv({ cls: "dh-grid-hint-text", text: this.isAr ? "💡 تلميح: اضغط مطولاً أو بالزر الأيمن على أي مربع لتسجيل ملاحظة صوتية على العادة." : "💡 Tip: Long-press or right-click any checkbox to record a voice note for that habit." });
+      const closeBtn = hint.createEl("button", { cls: "dh-grid-hint-close", text: "×", title: this.isAr ? "إخفاء التلميح" : "Hide hint" });
+      closeBtn.onclick = async () => {
+        hint.remove();
+        this.plugin.settings.hasSeenGridHint = true;
+        await this.plugin.saveSettings();
+      };
     }
   }
 
@@ -3491,22 +3868,6 @@ class WeeklyGridView extends ItemView {
         const badge = cell.createDiv({ cls: `day-stat-badge ${colorClass}` });
         badge.textContent = percent === 100 ? "✓" : `${percent}%`;
         badge.title = `${stats.completed}/${stats.total} Completed`;
-      }
-
-      // Populate reflection button NEXT TO the percentage badge
-      if (this.plugin.settings.enableReflectionJournal && !dayDate.isAfter(today, "day")) {
-        const percent = (stats && stats.total > 0) ? Math.min(100, Math.round((stats.completed / stats.total) * 100)) : NaN;
-        const reflectBtn = cell.createDiv({
-          cls: "dh-header-reflection-btn-inline",
-          title: this.isAr ? "تدوين ملاحظة اليوم" : "Daily Reflection"
-        });
-        setIcon(reflectBtn, "pen-tool");
-        reflectBtn.onclick = (e) => {
-          e.stopPropagation();
-          new ReflectionPopup(this.app, this.plugin, dayDate, percent, async (text) => {
-            return await injectReflectionIntoJournal(this.app, this.plugin, dayDate, text, percent);
-          }).open();
-        };
       }
     }
   }
@@ -3984,31 +4345,21 @@ class WeeklyGridView extends ItemView {
         }
       }
 
-      // Feature: Habit Context (Hover icon + Right-Click to add Comment)
+      // Feature: Habit Context (Long-press / Right-Click to add Comment)
       if (this.plugin.settings.enableHabitContext && isScheduled && !isFuture) {
-        // Add hover comment icon
-        const commentIcon = cell.createDiv({ cls: "dh-comment-hover-icon" });
-        commentIcon.textContent = "💬";
-
         const openCommentPopup = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const dateStr = DateUtils.formatDateKey(dayDate);
-          const stats = this.dailyStats[dateStr];
-          let pct = NaN;
-          if (stats && stats.total > 0) pct = Math.round((stats.completed / stats.total) * 100);
 
           new HabitCommentPopup(
             this.app,
             this.plugin,
             habit,
             dayDate,
-            pct,
-            async (text) => await injectCommentIntoHabitPage(this.app, this.plugin, habit, dayDate, text, pct)
+            async (text) => await injectHabitCommentIntoDailyNote(this.app, this.plugin, habit, dayDate, text)
           ).open();
         };
 
-        commentIcon.onclick = openCommentPopup;
         cell.oncontextmenu = openCommentPopup;
 
         // Touch long-press for mobile devices (500ms)
@@ -4058,41 +4409,52 @@ class WeeklyGridView extends ItemView {
   }
 
   async populateCommentDots(tbody, habits, weekStart) {
-    const dateKeys = [];
+    const dailyContentByIndex = new Map();
     for (let i = 0; i < 7; i++) {
-      dateKeys.push(weekStart.clone().add(i, "days").locale("en").format("YYYY-MM-DD"));
+      const dayDate = weekStart.clone().add(i, "days");
+      const dateKey = DateUtils.formatDateKey(dayDate);
+      if (this.weekContentCache?.has(dateKey)) {
+        dailyContentByIndex.set(i, this.weekContentCache.get(dateKey));
+        continue;
+      }
+
+      const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
+      if (!dailyNote) continue;
+
+      try {
+        dailyContentByIndex.set(i, await this.app.vault.cachedRead(dailyNote));
+      } catch (e) {
+        // ignore cachedRead errors
+      }
     }
 
     for (const habit of habits) {
       if (this._isClosed) return;
 
-      const linkMatch = habit.linkText?.match(/\[\[([^\]]+)\]\]/);
-      if (!linkMatch || !linkMatch[1]) continue;
+      const rows = tbody.querySelectorAll(`.habit-row`);
+      for (const row of rows) {
+        const nameEl = row.querySelector(".habit-pure-name");
+        if (!nameEl || nameEl.textContent !== habit.name) continue;
 
-      const habitFile = this.app.metadataCache.getFirstLinkpathDest(linkMatch[1], "");
-      if (!habitFile) continue;
+        for (let i = 0; i < 7; i++) {
+          const content = dailyContentByIndex.get(i);
+          if (!content) continue;
 
-      try {
-        const content = await this.app.vault.cachedRead(habitFile);
-        if (this._isClosed) return;
+          const cleanName = TextUtils.clean(habit.linkText || habit.name);
+          const noteSection = this.extractSectionLines(content, this.getHabitNotesHeading()).join("\n");
+          const hasComment =
+            (habit.linkText && noteSection.includes(habit.linkText)) ||
+            noteSection.includes(`[habit-note:: ${cleanName}]`) ||
+            noteSection.includes(`habit:: ${cleanName}`);
 
-        const rows = tbody.querySelectorAll(`.habit-row`);
-        for (const row of rows) {
-          const nameEl = row.querySelector(".habit-pure-name");
-          if (!nameEl || nameEl.textContent !== habit.name) continue;
-
-          for (let i = 0; i < 7; i++) {
-            if (content.includes(`[[${dateKeys[i]}]]`)) {
-              const cell = row.querySelector(`[data-day-index="${i}"]`);
-              if (cell && !cell.querySelector(".dh-has-comment-dot")) {
-                cell.createDiv({ cls: "dh-has-comment-dot" });
-              }
+          if (hasComment) {
+            const cell = row.querySelector(`[data-day-index="${i}"]`);
+            if (cell && !cell.querySelector(".dh-has-comment-dot")) {
+              cell.createDiv({ cls: "dh-has-comment-dot" });
             }
           }
-          break;
         }
-      } catch (e) {
-        // ignore cachedRead errors
+        break;
       }
     }
   }
@@ -4166,7 +4528,12 @@ class WeeklyGridView extends ItemView {
           cell.addClass("pending");
         }
 
-        cell.textContent = newContent;
+        const textNode = Array.from(cell.childNodes).find(n => n.nodeType === 3);
+        if (textNode) {
+          textNode.textContent = newContent;
+        } else {
+          cell.prepend(document.createTextNode(newContent));
+        }
 
         // Update data-status for click cycling
         cell.setAttribute("data-status", newStatus);
@@ -4758,126 +5125,299 @@ class WeeklyGridView extends ItemView {
     }, 500);
   }
 
+  getReflectionTypeMeta(type, isAr) {
+    const normalized = normalizeReflectionType(type);
+    const labels = {
+      Good: isAr ? "جيد" : "Good",
+      Bad: isAr ? "سيئ" : "Bad",
+      Lesson: isAr ? "درس" : "Lesson",
+      Idea: isAr ? "فكرة" : "Idea",
+    };
+    return {
+      value: normalized,
+      label: labels[normalized] || normalized,
+      cls: normalized.toLowerCase(),
+    };
+  }
+
+  getReflectionHeading() {
+    return this.plugin.settings.reflectionHeading || DEFAULT_REFLECTION_HEADING;
+  }
+
+  getHabitNotesHeading() {
+    return this.plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
+  }
+
+  extractSectionLines(content, heading) {
+    const cleanHeading = (heading || "").trim();
+    if (!content || !cleanHeading) return [];
+
+    const headingRegex = new RegExp(`^${Utils.escapeRegExp(cleanHeading)}\\s*$`, "m");
+    const match = content.match(headingRegex);
+    if (!match) return [];
+
+    const insertPos = match.index + match[0].length;
+    const headingLevel = cleanHeading.match(/^#+/)?.[0]?.length || 2;
+    const nextHeadingRegex = new RegExp(`\\n#{1,${headingLevel}} `, "m");
+    const afterHeading = content.substring(insertPos);
+    const nextMatch = afterHeading.match(nextHeadingRegex);
+    const sectionEnd = nextMatch ? insertPos + nextMatch.index : content.length;
+
+    return content
+      .substring(insertPos, sectionEnd)
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean);
+  }
+
+  parseDailyReflectionEntries(content, dateMoment, path = "") {
+    const lines = this.extractSectionLines(content, this.getReflectionHeading());
+    const entries = [];
+    const dateKey = DateUtils.formatDateKey(dateMoment);
+
+    lines.forEach((line, index) => {
+      if (!line.startsWith("-")) return;
+
+      const match = line.match(/^-\s+(?:(\d{1,2}:\d{2})\s+)?(?:\[type::\s*([^\]]+)\]\s*)?(.*)$/);
+      if (!match) return;
+
+      const time = match[1] || "";
+      const type = normalizeReflectionType(match[2]);
+      const text = (match[3] || "").trim();
+      if (!text) return;
+
+      entries.push({
+        date: dateKey,
+        dateKey,
+        time,
+        type,
+        text,
+        path,
+        moment: dateMoment.clone(),
+        timestamp: dateMoment.clone().startOf("day").valueOf() + index,
+      });
+    });
+
+    return entries;
+  }
+
+  async readWeeklyDiaryEntries() {
+    const entries = [];
+    this.dailyReflectionDays = new Set();
+    this.activeFilePaths.clear();
+
+    for (let i = 0; i < 7; i++) {
+      const dayDate = this.currentWeekStart.clone().add(i, "days");
+      const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
+      if (!dailyNote) continue;
+
+      try {
+        const content = await this.app.vault.cachedRead(dailyNote);
+        this.activeFilePaths.add(dailyNote.path);
+        const dayEntries = this.parseDailyReflectionEntries(content, dayDate, dailyNote.path);
+        if (dayEntries.length > 0) {
+          this.dailyReflectionDays.add(DateUtils.formatDateKey(dayDate));
+          entries.push(...dayEntries);
+        }
+      } catch (e) {
+        Utils.debugLog(this.plugin, "Failed to read diary daily note", dailyNote.path, e);
+      }
+    }
+
+    return entries.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  openReflectionPopup(dayDate) {
+    const dateKey = DateUtils.formatDateKey(dayDate);
+    new ReflectionPopup(this.app, this.plugin, dayDate, async (text, type) => {
+      const savedFile = await injectReflectionIntoDailyNote(this.app, this.plugin, dayDate, text, type);
+      this.dailyReflectionDays.add(dateKey);
+      setTimeout(() => this.renderWeeklyGrid(), 0);
+      return savedFile;
+    }).open();
+  }
+
+  renderDiaryEntryCard(parent, entry, isAr) {
+    const typeMeta = this.getReflectionTypeMeta(entry.type, isAr);
+    const entryCard = parent.createDiv({ cls: `dh-diary-entry-card type-${typeMeta.cls}` });
+
+    const cardHeader = entryCard.createDiv({ cls: "entry-card-header" });
+    const datePart = cardHeader.createDiv({ cls: "entry-date-part" });
+    datePart.createSpan({ cls: "entry-day", text: entry.moment.clone().locale(isAr ? "ar" : "en").format("dddd") });
+    datePart.createSpan({ cls: "entry-date", text: entry.moment.clone().locale(isAr ? "ar" : "en").format("D MMMM") });
+
+    const badgePart = cardHeader.createDiv({ cls: "entry-badge-part" });
+    badgePart.createSpan({ cls: `entry-type-badge type-${typeMeta.cls}`, text: typeMeta.label });
+    if (entry.time) {
+      badgePart.createSpan({ cls: "entry-time-badge", text: entry.time });
+    }
+
+    const bodyEl = entryCard.createDiv({ cls: "entry-card-body" });
+    const webmMatch = entry.text.match(/!\[\[([^\]]+\.webm)\]\]/i);
+
+    if (webmMatch) {
+      const fileName = webmMatch[1];
+      const audioFile = this.app.metadataCache.getFirstLinkpathDest(fileName, "");
+      
+      if (audioFile) {
+        const src = this.app.vault.getResourcePath(audioFile);
+        const audioEl = bodyEl.createEl("audio", { attr: { controls: true, src: src } });
+        audioEl.style.width = "100%";
+        audioEl.style.height = "36px";
+        audioEl.style.marginTop = "4px";
+        audioEl.style.borderRadius = "8px";
+        
+        // Prevent clicking the audio control from opening the daily note
+        audioEl.onclick = (e) => e.stopPropagation();
+
+        const remainingText = entry.text.replace(webmMatch[0], "").trim();
+        if (remainingText) {
+          bodyEl.createDiv({ text: remainingText, cls: "entry-action-text", attr: { style: "margin-top: 6px;" } });
+        }
+      } else {
+        bodyEl.setText(entry.text);
+      }
+    } else if (entry.text.includes("![[")) {
+      const { MarkdownRenderer } = require("obsidian");
+      MarkdownRenderer.renderMarkdown(entry.text, bodyEl, entry.path || "", this);
+    } else {
+      bodyEl.setText(entry.text);
+    }
+
+    entryCard.onclick = async () => {
+      const dailyNote = await getNoteByDate(this.app, entry.moment, false, this.plugin.settings);
+      if (dailyNote) {
+        await this.app.workspace.getLeaf(false).openFile(dailyNote);
+      }
+    };
+  }
+
+  renderDiaryTypeSections(container, entries, isAr) {
+    REFLECTION_ENTRY_TYPES.forEach(type => {
+      const typeMeta = this.getReflectionTypeMeta(type, isAr);
+      const typeEntries = entries
+        .filter(entry => normalizeReflectionType(entry.type) === type)
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+      if (typeEntries.length === 0) return;
+
+      const typeSection = container.createEl("details", {
+        cls: `dh-diary-week-section dh-diary-type-section type-${typeMeta.cls}`,
+        attr: { open: "true" }
+      });
+      const typeHeader = typeSection.createEl("summary", { cls: `dh-diary-week-header dh-diary-type-header type-${typeMeta.cls}` });
+
+      const titleWrap = typeHeader.createDiv({ cls: "week-title-wrap" });
+      titleWrap.createSpan({ cls: `dh-type-dot type-${typeMeta.cls}` });
+      titleWrap.createSpan({ cls: "week-title", text: typeMeta.label });
+
+      const metaWrap = typeHeader.createDiv({ cls: "week-meta-wrap" });
+      metaWrap.createSpan({ cls: "entry-count", text: isAr ? `${typeEntries.length} تدوينة` : `${typeEntries.length} entries` });
+
+      const entriesList = typeSection.createDiv({ cls: "dh-diary-entries-list" });
+      typeEntries.forEach(entry => this.renderDiaryEntryCard(entriesList, entry, isAr));
+    });
+  }
+
   async renderDiaryView(container) {
     container.addClass("dh-diary-view-container");
     const isAr = this.plugin.settings.language === "ar";
+    const weekEnd = this.currentWeekStart.clone().add(6, "days");
+    const entries = await this.readWeeklyDiaryEntries();
 
-    const journalName = this.plugin.settings.reflectionJournalPath || "يومياتي";
-    const journalPath = normalizePath(journalName.toLowerCase().endsWith(".md") ? journalName : journalName + ".md");
-    const journalFile = this.app.vault.getAbstractFileByPath(journalPath);
+    const toolbar = container.createDiv({ cls: "dh-diary-toolbar" });
+    const titleWrap = toolbar.createDiv({ cls: "dh-diary-title-wrap" });
+    titleWrap.createDiv({
+      cls: "dh-diary-title",
+      text: isAr ? "يوميات الأسبوع" : "Weekly diary",
+    });
+    titleWrap.createDiv({
+      cls: "dh-diary-range",
+      text: isAr
+        ? `${this.currentWeekStart.clone().locale("ar").format("D MMMM")} - ${weekEnd.clone().locale("ar").format("D MMMM")}`
+        : `${this.currentWeekStart.clone().locale("en").format("D MMM")} - ${weekEnd.clone().locale("en").format("D MMM")}`,
+    });
 
-    if (!journalFile) {
-      const emptyState = container.createDiv({ cls: "dh-diary-empty-state" });
-      emptyState.createEl("h3", { text: isAr ? "لا توجد يوميات بعد" : "No diary entries yet" });
-      emptyState.createEl("p", { text: isAr ? "ابدأ بتدوين يومياتك من خلال الضغط على أيقونة القلم في الجدول الأسبوعي." : "Start journaling by clicking the pen icon in the weekly grid." });
-      return;
-    }
+    const actions = toolbar.createDiv({ cls: "dh-diary-actions" });
+    const todayBtn = actions.createEl("button", {
+      cls: "dh-diary-add-btn",
+      text: isAr ? "تدوينة اليوم" : "Today entry",
+    });
+    todayBtn.onclick = () => this.openReflectionPopup(window.moment());
 
-    const content = await this.app.vault.read(journalFile);
-    const entries = this.parseJournalEntries(content);
+    const modeSwitch = actions.createDiv({ cls: "dh-diary-mode-switch" });
+    [
+      { id: "grouped", label: isAr ? "حسب الأيام" : "Grouped" },
+      { id: "timeline", label: isAr ? "خط زمني" : "Timeline" },
+      { id: "types", label: isAr ? "حسب النوع" : "By type" },
+    ].forEach(mode => {
+      const btn = modeSwitch.createEl("button", {
+        cls: `dh-diary-mode-btn ${this.diaryViewMode === mode.id ? "is-active" : ""}`,
+        text: mode.label,
+      });
+      btn.onclick = async () => {
+        if (this.diaryViewMode === mode.id) return;
+        this.diaryViewMode = mode.id;
+        this.plugin.settings.diaryViewMode = mode.id;
+        await this.plugin.saveSettings({ silent: true });
+        await this.renderWeeklyGrid();
+      };
+    });
 
     if (entries.length === 0) {
       const emptyState = container.createDiv({ cls: "dh-diary-empty-state" });
-      emptyState.createEl("h3", { text: isAr ? "لا توجد إدخالات صحيحة" : "No valid entries found" });
+      emptyState.createEl("h3", { text: isAr ? "لا توجد تدوينات في هذا الأسبوع" : "No entries this week" });
+      emptyState.createEl("p", { text: isAr ? "اكتب تدوينة اليوم من الزر بالأعلى. سيتم حفظها داخل ملف اليوم نفسه." : "Use the button above. Entries are saved inside the matching Daily Note." });
       return;
     }
-    const groups = this.groupEntriesByWeek(entries, isAr);
 
-    groups.forEach((group, index) => {
-      const weekSection = container.createDiv({ cls: "dh-diary-week-section" });
-      const weekHeader = weekSection.createDiv({ cls: "dh-diary-week-header" });
+    if (this.diaryViewMode === "timeline") {
+      const list = container.createDiv({ cls: "dh-diary-entries-list dh-diary-timeline-list" });
+      entries.forEach(entry => this.renderDiaryEntryCard(list, entry, isAr));
+      return;
+    }
 
-      const titleWrap = weekHeader.createDiv({ cls: "week-title-wrap" });
+    if (this.diaryViewMode === "types") {
+      this.renderDiaryTypeSections(container, entries, isAr);
+      return;
+    }
+
+    for (let i = 0; i < 7; i++) {
+      const dayDate = this.currentWeekStart.clone().add(i, "days");
+      const dateKey = DateUtils.formatDateKey(dayDate);
+      const dayEntries = entries
+        .filter(entry => entry.dateKey === dateKey)
+        .sort((a, b) => a.timestamp - b.timestamp);
+      if (dayEntries.length === 0) continue;
+
+      const isOpen = dayDate.isSame(window.moment(), "day");
+      const daySection = container.createEl("details", {
+        cls: "dh-diary-week-section",
+        attr: isOpen ? { open: "true" } : {}
+      });
+      const dayHeader = daySection.createEl("summary", { cls: "dh-diary-week-header" });
+      const titleWrap = dayHeader.createDiv({ cls: "week-title-wrap" });
       titleWrap.createSpan({ cls: "week-icon", text: "📅" });
-      titleWrap.createSpan({ cls: "week-title", text: group.weekRange });
+      titleWrap.createSpan({
+        cls: "week-title",
+        text: dayDate.clone().locale(isAr ? "ar" : "en").format(isAr ? "dddd، D MMMM" : "dddd, D MMMM"),
+      });
 
-      const metaWrap = weekHeader.createDiv({ cls: "week-meta-wrap" });
-      metaWrap.createSpan({ cls: "entry-count", text: isAr ? `${group.entries.length} تدوينة` : `${group.entries.length} entries` });
-      const toggleIcon = weekHeader.createSpan({ cls: "week-toggle-icon", text: index === 0 ? "▾" : "▸" });
-
-      const entriesList = weekSection.createDiv({ cls: "dh-diary-entries-list" });
-      if (index !== 0) entriesList.style.display = "none";
-
-      weekHeader.onclick = () => {
-        const isCollapsed = entriesList.style.display === "none";
-        entriesList.style.display = isCollapsed ? "block" : "none";
-        toggleIcon.textContent = isCollapsed ? "▾" : "▸";
+      const metaWrap = dayHeader.createDiv({ cls: "week-meta-wrap" });
+      metaWrap.createSpan({ cls: "entry-count", text: isAr ? `${dayEntries.length} تدوينة` : `${dayEntries.length} entries` });
+      const addDayBtn = metaWrap.createEl("button", {
+        cls: "dh-diary-day-add-btn",
+        text: "+",
+        title: isAr ? "إضافة تدوينة لهذا اليوم" : "Add entry for this day",
+      });
+      addDayBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.openReflectionPopup(dayDate);
       };
 
-      group.entries.forEach(entry => {
-        const entryCard = entriesList.createDiv({ cls: "dh-diary-entry-card" });
-
-        const cardHeader = entryCard.createDiv({ cls: "entry-card-header" });
-        const datePart = cardHeader.createDiv({ cls: "entry-date-part" });
-        datePart.createSpan({ cls: "entry-day", text: entry.moment.locale(isAr ? "ar" : "en").format("dddd") });
-        datePart.createSpan({ cls: "entry-date", text: entry.moment.format("D MMMM") });
-
-        const badgePart = cardHeader.createDiv({ cls: "entry-badge-part" });
-        if (entry.rate) {
-          const rateValue = parseInt(entry.rate);
-          const rateCls = rateValue >= 80 ? "excellent" : rateValue >= 60 ? "good" : rateValue >= 40 ? "warn" : "danger";
-          badgePart.createSpan({ cls: `entry-rate-badge ${rateCls}`, text: `${entry.rate}%` });
-        }
-        badgePart.createSpan({ cls: "entry-time-badge", text: entry.time });
-
-        entryCard.createDiv({ cls: "entry-card-body", text: entry.text });
-
-        entryCard.onclick = async () => {
-          const dailyNote = await getNoteByDate(this.app, entry.moment, false, this.plugin.settings);
-          if (dailyNote) {
-            await this.app.workspace.getLeaf(false).openFile(dailyNote);
-          }
-        };
-      });
-    });
-  }
-
-  parseJournalEntries(content) {
-    const lines = content.split("\n");
-    const entries = [];
-    // Regex matches: - [[YYYY-MM-DD]] 🕰️ HH:mm | [Rate:: 80%] — text
-    // We make [Rate:: 80%] optional
-    const regex = /^-\s+\[\[(\d{4}-\d{2}-\d{2})\]\]\s+🕰️\s+(\d{2}:\d{2})\s+\|\s+(?:\[Rate::\s+(\d+)%\]\s+)?—\s+(.*)$/;
-
-    lines.forEach(line => {
-      const match = line.match(regex);
-      if (match) {
-        entries.push({
-          date: match[1],
-          time: match[2],
-          rate: match[3] || null,
-          text: match[4],
-          moment: window.moment(match[1])
-        });
-      }
-    });
-
-    return entries.sort((a, b) => b.moment.valueOf() - a.moment.valueOf());
-  }
-
-  groupEntriesByWeek(entries, isAr) {
-    const weekStartDay = this.plugin.settings.weekStartDay; // 6 for Saturday
-    const groupMap = new Map();
-
-    entries.forEach(entry => {
-      const m = entry.moment.clone();
-      // Adjust to start of week based on settings
-      const daysFromStart = (m.day() - weekStartDay + 7) % 7;
-      const weekStart = m.clone().subtract(daysFromStart, "days");
-      const weekEnd = weekStart.clone().add(6, "days");
-
-      const weekRange = isAr
-        ? `${weekStart.locale("ar").format("D MMMM")} - ${weekEnd.locale("ar").format("D MMMM")}`
-        : `${weekStart.locale("en").format("D MMM")} - ${weekEnd.locale("en").format("D MMM")}`;
-
-      const key = weekStart.format("YYYY-MM-DD");
-      if (!groupMap.has(key)) {
-        groupMap.set(key, { weekRange, entries: [], timestamp: weekStart.valueOf() });
-      }
-      groupMap.get(key).entries.push(entry);
-    });
-
-    return Array.from(groupMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+      const entriesList = daySection.createDiv({ cls: "dh-diary-entries-list" });
+      dayEntries.forEach(entry => this.renderDiaryEntryCard(entriesList, entry, isAr));
+    }
   }
 
 }
@@ -5443,16 +5983,16 @@ class DailyHabitsSettingTab extends PluginSettingTab {
         .setDesc(t("habit_log_heading_desc"))
         .addText((text) =>
           text
-            .setPlaceholder("## 📖 سجل المتابعة")
+            .setPlaceholder(DEFAULT_HABIT_NOTES_HEADING)
             .setValue(this.plugin.settings.habitLogHeading)
             .onChange(async (value) => {
-              this.plugin.settings.habitLogHeading = value.trim() || "## 📖 سجل المتابعة";
+              this.plugin.settings.habitLogHeading = value.trim() || DEFAULT_HABIT_NOTES_HEADING;
               await this.plugin.saveSettings();
             })
         );
     }
 
-    // --- Reflection Journal Settings ---
+    // --- Daily Note Journal Settings ---
     const journalHeader = panel.createDiv({
       cls: "dh-settings-section-header",
       text: isAr ? "📝 يومياتي" : "📝 Daily Journal",
@@ -5474,39 +6014,14 @@ class DailyHabitsSettingTab extends PluginSettingTab {
 
     if (this.plugin.settings.enableReflectionJournal) {
       new Setting(panel)
-        .setName(t("reflection_journal_path"))
-        .setDesc(t("reflection_journal_path_desc"))
-        .addText((text) =>
-          text
-            .setPlaceholder("يومياتي")
-            .setValue(this.plugin.settings.reflectionJournalPath)
-            .onChange(async (value) => {
-              this.plugin.settings.reflectionJournalPath = value.trim() || "يومياتي";
-              await this.plugin.saveSettings();
-            })
-        )
-        .addButton((btn) => btn.setButtonText(isAr ? "📂 اختيار ملف" : "📂 Choose File").onClick(() => {
-          new FileSuggestModal(this.app, async (file) => {
-            if (file) {
-              // Extract path without extension for cleaner settings display, 
-              // but ensure it includes the full folder path
-              const cleanPath = file.path.replace(/\.md$/i, '');
-              this.plugin.settings.reflectionJournalPath = cleanPath;
-              await this.plugin.saveSettings();
-              this.display();
-            }
-          }).open();
-        }));
-
-      new Setting(panel)
         .setName(t("reflection_heading"))
         .setDesc(t("reflection_heading_desc"))
         .addText((text) =>
           text
-            .setPlaceholder("## 📝 يومياتي")
+            .setPlaceholder(DEFAULT_REFLECTION_HEADING)
             .setValue(this.plugin.settings.reflectionHeading)
             .onChange(async (value) => {
-              this.plugin.settings.reflectionHeading = value.trim() || "## 📝 يومياتي";
+              this.plugin.settings.reflectionHeading = value.trim() || DEFAULT_REFLECTION_HEADING;
               await this.plugin.saveSettings();
             })
         );
@@ -5748,46 +6263,46 @@ class DailyHabitsSettingTab extends PluginSettingTab {
 
               if (shouldRenameAll && oldName !== newName) {
                 const prep = await this.plugin.habitManager.prepareBatchRename(habit.id, oldName);
-                
+
                 if (!prep.needsConfirmation) {
                   new Notice(isAr ? "لم يتم العثور على ملفات قديمة للتحديث" : "No old files found to update");
                 } else {
-                   const confirmed = await new Promise((resolve) => {
-                     const confirmModal = new Modal(this.app);
-                     const { contentEl } = confirmModal;
-                     contentEl.createEl("h2", { text: isAr ? "⚠️ تحديث جميع الملفات" : "⚠️ Update all files" });
-                     contentEl.createEl("p", { text: isAr ? `سيتم تغيير "${oldName}" إلى "${newName}" في ${prep.fileCount} ملف.` : `Will change "${oldName}" to "${newName}" in ${prep.fileCount} file(s).` });
-                     const footer = contentEl.createDiv({ cls: "modal-button-container" });
-                     footer.createEl("button", { text: isAr ? "إلغاء" : "Cancel" }).onclick = () => { confirmModal.close(); resolve(false); };
-                     footer.createEl("button", { text: isAr ? "نعم، تحديث الكل" : "Yes, update all", cls: "mod-warning" }).onclick = () => { confirmModal.close(); resolve(true); };
-                     confirmModal.open();
-                   });
+                  const confirmed = await new Promise((resolve) => {
+                    const confirmModal = new Modal(this.app);
+                    const { contentEl } = confirmModal;
+                    contentEl.createEl("h2", { text: isAr ? "⚠️ تحديث جميع الملفات" : "⚠️ Update all files" });
+                    contentEl.createEl("p", { text: isAr ? `سيتم تغيير "${oldName}" إلى "${newName}" في ${prep.fileCount} ملف.` : `Will change "${oldName}" to "${newName}" in ${prep.fileCount} file(s).` });
+                    const footer = contentEl.createDiv({ cls: "modal-button-container" });
+                    footer.createEl("button", { text: isAr ? "إلغاء" : "Cancel" }).onclick = () => { confirmModal.close(); resolve(false); };
+                    footer.createEl("button", { text: isAr ? "نعم، تحديث الكل" : "Yes, update all", cls: "mod-warning" }).onclick = () => { confirmModal.close(); resolve(true); };
+                    confirmModal.open();
+                  });
 
-                   if (confirmed) {
-                     let cancelRequested = false;
-                     let progressModal = new RenameProgressModal(
-                       this.app, this.plugin, prep.fileCount, () => { cancelRequested = true; }
-                     );
-                     progressModal.open();
+                  if (confirmed) {
+                    let cancelRequested = false;
+                    let progressModal = new RenameProgressModal(
+                      this.app, this.plugin, prep.fileCount, () => { cancelRequested = true; }
+                    );
+                    progressModal.open();
 
-                     try {
-                       const result = await this.plugin.habitManager.executeBatchRename(
-                         newName, prep.uniqueOldNames, prep.filesToUpdate,
-                         (curr, total) => progressModal.updateProgress(curr, total),
-                         () => cancelRequested
-                       );
-                       progressModal.close();
-                       if (cancelRequested) {
-                         new Notice(isAr ? `⚠️ تم الإلغاء. المحدث: ${result.updated}` : `⚠️ Cancelled. Updated: ${result.updated}`);
-                       } else {
-                         new Notice(isAr ? `✅ تم تنظيف ${result.updated} رابط تاريخي بنجاح` : `✅ Successfully cleaned ${result.updated} historical links`);
-                       }
-                     } catch (err) {
-                       progressModal.close();
-                       console.error(err);
-                       new Notice(isAr ? "❌ خطأ أثناء التحديث" : "❌ Error during update");
-                     }
-                   }
+                    try {
+                      const result = await this.plugin.habitManager.executeBatchRename(
+                        newName, prep.uniqueOldNames, prep.filesToUpdate,
+                        (curr, total) => progressModal.updateProgress(curr, total),
+                        () => cancelRequested
+                      );
+                      progressModal.close();
+                      if (cancelRequested) {
+                        new Notice(isAr ? `⚠️ تم الإلغاء. المحدث: ${result.updated}` : `⚠️ Cancelled. Updated: ${result.updated}`);
+                      } else {
+                        new Notice(isAr ? `✅ تم تنظيف ${result.updated} رابط تاريخي بنجاح` : `✅ Successfully cleaned ${result.updated} historical links`);
+                      }
+                    } catch (err) {
+                      progressModal.close();
+                      console.error(err);
+                      new Notice(isAr ? "❌ خطأ أثناء التحديث" : "❌ Error during update");
+                    }
+                  }
                 }
               }
 
@@ -6232,154 +6747,49 @@ function getDailyNotesInfo(app, pluginSettings = null) {
  * @param {string} heading - The markdown heading (e.g. "## 📖 سجل المتابعة")
  * @param {string} newLine - The line to append under the heading
  */
-async function ensureSectionInFile(app, file, heading, newLine) {
-  const cleanHeading = heading.trim();
-  const headingRegex = new RegExp(
-    `^${Utils.escapeRegExp(cleanHeading)}\\s*$`, "m"
-  );
-
+async function ensureNestedSectionInFile(app, file, parentHeading, subHeading, newLine) {
   await app.vault.process(file, (content) => {
-    const match = content.match(headingRegex);
-
-    if (match) {
-      // Heading exists — find the end of the section and insert there
-      const insertPos = match.index + match[0].length;
-      const headingLevel = cleanHeading.match(/^#+/)?.[0]?.length || 2;
-      const nextHeadingRegex = new RegExp(`\\n#{1,${headingLevel}} `, 'm');
-      const afterHeading = content.substring(insertPos);
-      const nextMatch = afterHeading.match(nextHeadingRegex);
-      const sectionEnd = nextMatch
-        ? insertPos + nextMatch.index
-        : content.length;
-      return content.substring(0, sectionEnd) + "\n" + newLine + content.substring(sectionEnd);
-    } else {
-      // Heading doesn't exist — append heading + new line at end of file
-      const separator = content.trim().length > 0 ? "\n\n" : "";
-      return content + separator + cleanHeading + "\n" + newLine + "\n";
-    }
+    return Utils.insertNestedContent(content, parentHeading, subHeading, newLine);
   });
 }
 
 /**
- * Injects a timestamped comment into the habit's linked page under the configured heading.
- * @param {App} app - Obsidian App instance
- * @param {Plugin} plugin - The plugin instance (for settings)
- * @param {Object} habit - The habit object (must have linkText like [[Note Name]])
- * @param {Moment} targetDate - The date for the comment
- * @param {string} comment - The user's comment text
- * @param {number} dailyPercent - Today's completion percentage
+ * Injects a timestamped habit comment into the matching Daily Note.
  */
-async function injectCommentIntoHabitPage(app, plugin, habit, targetDate, comment, dailyPercent) {
-  const linkMatch = habit.linkText?.match(/\[\[([^\]]+)\]\]/);
-  if (!linkMatch || !linkMatch[1]) {
-    throw new Error(plugin.settings.language === "ar"
-      ? "العادة غير مرتبطة بصفحة."
-      : "Habit is not linked to a page.");
-  }
-
-  const noteName = linkMatch[1];
-  if (noteName.length > 255) throw new Error("File name too long");
-  
-  if (noteName.includes("..") || /^[a-zA-Z]:\\/.test(noteName) || noteName.startsWith("/") || noteName.startsWith("\\") || /%2e/i.test(noteName)) {
-    throw new Error(plugin.settings.language === "ar"
-      ? "اسم الملف يحتوي على أحرف غير مسموح بها."
-      : "File name contains invalid characters.");
-  }
-  
-  const resolvedName = normalizePath(noteName + ".md");
-  if (resolvedName.startsWith(".obsidian") || resolvedName.includes("/.obsidian") || !resolvedName.endsWith(".md")) {
-      throw new Error("Invalid path after normalization");
-  }
-
-  let file = app.metadataCache.getFirstLinkpathDest(noteName, "");
-
+async function injectHabitCommentIntoDailyNote(app, plugin, habit, targetDate, comment) {
+  const file = await getNoteByDate(app, targetDate, true, plugin.settings);
   if (!file) {
-    const newPath = normalizePath(`${noteName}.md`);
-    file = await app.vault.create(newPath, `# ${noteName}\n`);
+    throw new Error(plugin.settings.language === "ar"
+      ? "تعذر فتح ملف اليوم."
+      : "Could not open the daily note.");
   }
 
-  const dateStr = targetDate.clone().locale("en").format("YYYY-MM-DD");
   const timeStr = window.moment().format("HH:mm");
-  const pctStr = !isNaN(dailyPercent) ? `[Rate:: ${Math.round(dailyPercent)}%] ` : "";
+  const cleanName = TextUtils.clean(habit.linkText || habit.name);
+  const habitLabel = habit.linkText || habit.name;
+  const commentLine = `- ${timeStr} [habit-note:: ${cleanName}] ${habitLabel} - ${comment}`;
+  const heading = plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
 
-  const commentLine = `- [[${dateStr}]] ⏰ ${timeStr} | ${pctStr}— ${comment}`;
-  const heading = plugin.settings.habitLogHeading || "## 📖 سجل المتابعة";
-
-  await ensureSectionInFile(app, file, heading, commentLine);
-
+  await ensureNestedSectionInFile(app, file, plugin.settings.dailyParentHeading, heading, commentLine);
   return file.basename;
 }
 
 /**
- * Injects a daily reflection into the central journal file.
- * Creates the file (and any intermediate folders) if it doesn't exist.
- * @param {App} app - Obsidian App instance
- * @param {Plugin} plugin - The plugin instance (for settings)
- * @param {Moment} targetDate - The date for the reflection
- * @param {string} text - The reflection text
- * @param {number} dailyPercent - Today's completion percentage
+ * Injects a typed daily reflection into the matching Daily Note.
  */
-async function injectReflectionIntoJournal(app, plugin, targetDate, text, dailyPercent) {
-  let journalPath = plugin.settings.reflectionJournalPath || "Reflection Journal";
-  if (journalPath.length > 255) throw new Error("Journal path too long");
-  
-  if (journalPath.includes("..") || /^[a-zA-Z]:\\/.test(journalPath) || journalPath.startsWith("/") || journalPath.startsWith("\\") || /%2e/i.test(journalPath)) {
-    throw new Error(plugin.settings.language === "ar"
-      ? "مسار ملف اليوميات يحتوي على أحرف غير مسموح بها."
-      : "Journal path contains invalid characters.");
-  }
-  if (!journalPath.toLowerCase().endsWith('.md')) {
-    journalPath += '.md';
-  }
-  journalPath = normalizePath(journalPath);
-  
-  if (journalPath.startsWith(".obsidian") || journalPath.includes("/.obsidian") || !journalPath.endsWith(".md")) {
-      throw new Error("Invalid journal path after normalization");
-  }
-
-  const pathParts = journalPath.split('/');
-  if (pathParts.length > 1) {
-    let currentPath = '';
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      currentPath += (currentPath === '' ? '' : '/') + pathParts[i];
-      let folderExists = app.vault.getAbstractFileByPath(currentPath);
-      if (!folderExists) {
-        await app.vault.createFolder(currentPath);
-      }
-    }
-  }
-
-  let file = app.vault.getAbstractFileByPath(journalPath);
-
+async function injectReflectionIntoDailyNote(app, plugin, targetDate, text, type = "Idea") {
+  const file = await getNoteByDate(app, targetDate, true, plugin.settings);
   if (!file) {
-    const journalName = pathParts[pathParts.length - 1].replace(/\.md$/i, '');
-    const headerCode = `---
-type: journal
----
-# ${journalName}
-
-> [!info] 📝 يومياتك مجمعة هنا
-> هذه الصفحة تُجمع فيها يومياتك وتقييماتك المحقونة تلقائياً من إضافة العادات. الملاحظات تُضاف تباعاً أسفل قسم اليوميات.
-
-> [!tip] 💡 أفكار لك لتطوير الصفحة (باستخدام Dataview)
-> الإضافة تتيح لك بيانات جاهزة للتحليل (مثل التاريخ وتحديثات التقييم \`[Rate:: %]\`). يمكنك إضافة جداول Dataview خاصة بك للآتي:
-> - **الترتيب الزمني الدقيق:** سحب كل نقطة وعرضها مرتبة زمنياً من الأحدث للأقدم.
-> - **تحليل الأداء:** عمل جدول يعرض فقط الأيام التي قل فيها التقييم عن 50% لمراجعة الأسباب.
-> - **أيام النجاح:** جلب الأيام التي وصلت فيها لنسبة 100% فقط للتحفيز.
-> *(هذه الصفحة لك، صممها كما يناسبك!)*
-
-`;
-    file = await app.vault.create(journalPath, headerCode);
+    throw new Error(plugin.settings.language === "ar"
+      ? "تعذر فتح ملف اليوم."
+      : "Could not open the daily note.");
   }
 
-  const dateStr = targetDate.clone().locale("en").format("YYYY-MM-DD");
   const timeStr = window.moment().format("HH:mm");
-  const pctStr = !isNaN(dailyPercent) ? `[Rate:: ${Math.round(dailyPercent)}%] ` : "";
+  const reflectionType = normalizeReflectionType(type);
+  const reflectionLine = `- ${timeStr} [type:: ${reflectionType}] ${text}`;
+  const heading = plugin.settings.reflectionHeading || DEFAULT_REFLECTION_HEADING;
 
-  const reflectionLine = `- [[${dateStr}]] 🕰️ ${timeStr} | ${pctStr}— ${text}`;
-  const heading = plugin.settings.reflectionHeading || "## 📝 يومياتي";
-
-  await ensureSectionInFile(app, file, heading, reflectionLine);
-
+  await ensureNestedSectionInFile(app, file, plugin.settings.dailyParentHeading, heading, reflectionLine);
   return file.basename;
 }

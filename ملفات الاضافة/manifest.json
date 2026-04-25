@@ -1,0 +1,10 @@
+{
+  "id": "core-habits",
+  "name": "Core Habits",
+  "version": "2.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Track habits visually, flow with your identity, and build your core path.",
+  "author": "Ahmed Farhat",
+  "authorUrl": "https://github.com/ahmed9farhat",
+  "isDesktopOnly": false
+}

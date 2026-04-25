@@ -463,6 +463,7 @@
 }
 
 .dh-header-reflection-btn-inline {
+  position: relative;
   width: 14px;
   height: 14px;
   color: var(--text-muted);
@@ -477,6 +478,22 @@
 .dh-header-reflection-btn-inline:hover {
   opacity: 1;
   color: var(--interactive-accent);
+}
+
+.dh-header-reflection-btn-inline.has-reflection {
+  opacity: 1;
+  color: var(--dh-brand-success);
+}
+
+.dh-header-reflection-btn-inline.has-reflection::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dh-brand-success);
+  inset-inline-end: -2px;
+  top: -2px;
 }
 
 .dh-header-reflection-btn-inline svg {
@@ -1932,6 +1949,31 @@ select.form-input option {
   box-shadow: 0 0 0 2px rgba(var(--dh-brand-primary-rgb), 0.15);
 }
 
+.dh-reflection-type-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dh-space-sm);
+  margin-bottom: var(--dh-space-md);
+}
+
+.dh-reflection-type-btn {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  border-radius: var(--dh-radius-md);
+  padding: 5px 10px;
+  font-size: var(--dh-font-xs);
+  font-weight: var(--dh-weight-semibold);
+  cursor: pointer;
+}
+
+.dh-reflection-type-btn:hover,
+.dh-reflection-type-btn.is-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
 /* Popup footer — works in both LTR and RTL by forcing direction */
 .dh-popup-footer {
   display: flex;
@@ -3347,6 +3389,7 @@ select.form-input option {
 
 .dh-habit-focus-box {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--dh-space-lg);
   margin-bottom: var(--dh-space-xl);
 }
@@ -3359,6 +3402,7 @@ select.form-input option {
 
 .focus-item {
   flex: 1;
+  min-width: 200px;
   display: flex;
   align-items: center;
   gap: var(--dh-space-md);
@@ -3617,7 +3661,7 @@ select.form-input option {
   inset-inline-end: 2px;
   width: 14px;
   height: 14px;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   font-size: 8px;
@@ -3628,11 +3672,11 @@ select.form-input option {
   border: 1px solid var(--background-modifier-border);
   transition: color var(--dh-transition-fast), border-color var(--dh-transition-fast), opacity var(--dh-transition-fast), transform var(--dh-transition-fast);
   z-index: calc(var(--dh-z-base) + 1);
-  opacity: 0.6;
+  opacity: 0.18;
 }
 
 .day-cell:hover .dh-comment-hover-icon {
-  display: flex;
+  opacity: 0.85;
 }
 
 .dh-comment-hover-icon:hover {
@@ -3861,9 +3905,93 @@ select.form-input option {
 /* --- Diary View Layout --- */
 .dh-diary-view-container {
   padding: var(--dh-space-lg);
-  max-width: 900px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
   animation: fadeIn 0.3s ease-out;
+}
+
+.dh-diary-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dh-space-lg);
+  margin-bottom: var(--dh-space-lg);
+  padding: var(--dh-space-md) 0;
+}
+
+.dh-diary-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dh-diary-title {
+  font-size: var(--dh-font-lg);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+}
+
+.dh-diary-range {
+  color: var(--text-muted);
+  font-size: var(--dh-font-sm);
+}
+
+.dh-diary-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--dh-space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dh-diary-add-btn,
+.dh-diary-day-add-btn,
+.dh-diary-mode-btn {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: var(--dh-font-sm);
+  font-weight: var(--dh-weight-semibold);
+}
+
+.dh-diary-add-btn {
+  padding: 6px 12px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.dh-diary-mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  overflow: hidden;
+  background: var(--background-secondary);
+}
+
+.dh-diary-mode-btn {
+  border: 0;
+  border-radius: 0;
+  padding: 6px 10px;
+  color: var(--text-muted);
+}
+
+.dh-diary-mode-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.dh-diary-day-add-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dh-diary-empty-state {
@@ -3892,6 +4020,30 @@ select.form-input option {
 .dh-diary-week-header:hover {
   background: var(--background-modifier-hover);
   border-color: var(--interactive-accent);
+}
+
+.dh-diary-type-header {
+  cursor: default;
+}
+
+.dh-diary-type-header:hover {
+  background: var(--background-secondary);
+}
+
+.dh-diary-type-header.type-good {
+  border-color: rgba(var(--dh-brand-success-rgb), 0.35);
+}
+
+.dh-diary-type-header.type-bad {
+  border-color: rgba(var(--dh-brand-critical-rgb), 0.35);
+}
+
+.dh-diary-type-header.type-lesson {
+  border-color: rgba(var(--dh-brand-info-rgb), 0.35);
+}
+
+.dh-diary-type-header.type-idea {
+  border-color: rgba(var(--dh-brand-warning-rgb), 0.35);
 }
 
 .week-title-wrap {
@@ -4008,6 +4160,69 @@ select.form-input option {
 .entry-rate-badge.danger {
   background: rgba(var(--dh-brand-critical-rgb), 0.2);
   color: var(--dh-brand-critical);
+}
+
+.entry-type-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: var(--dh-weight-bold);
+}
+
+.entry-type-badge.type-good,
+.dh-diary-entry-card.type-good {
+  border-inline-start-color: var(--dh-brand-success);
+}
+
+.dh-type-dot.type-good {
+  background-color: var(--dh-brand-success);
+}
+
+.entry-type-badge.type-good {
+  color: var(--dh-brand-success);
+  background: rgba(var(--dh-brand-success-rgb), 0.16);
+}
+
+.entry-type-badge.type-bad,
+.dh-diary-entry-card.type-bad {
+  border-inline-start-color: var(--dh-brand-critical);
+}
+
+.dh-type-dot.type-bad {
+  background-color: var(--dh-brand-critical);
+}
+
+.entry-type-badge.type-bad {
+  color: var(--dh-brand-critical);
+  background: rgba(var(--dh-brand-critical-rgb), 0.16);
+}
+
+.entry-type-badge.type-lesson,
+.dh-diary-entry-card.type-lesson {
+  border-inline-start-color: var(--dh-brand-info);
+}
+
+.dh-type-dot.type-lesson {
+  background-color: var(--dh-brand-info);
+}
+
+.entry-type-badge.type-lesson {
+  color: var(--dh-brand-info);
+  background: rgba(var(--dh-brand-info-rgb), 0.16);
+}
+
+.entry-type-badge.type-idea,
+.dh-diary-entry-card.type-idea {
+  border-inline-start-color: var(--dh-brand-warning);
+}
+
+.dh-type-dot.type-idea {
+  background-color: var(--dh-brand-warning);
+}
+
+.entry-type-badge.type-idea {
+  color: var(--dh-brand-warning);
+  background: rgba(var(--dh-brand-warning-rgb), 0.16);
 }
 
 .entry-time-badge {
@@ -4579,6 +4794,20 @@ body.is-mobile .dh-diary-view-container {
   padding: var(--dh-space-md);
 }
 
+body.is-mobile .dh-diary-toolbar {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+body.is-mobile .dh-diary-actions {
+  justify-content: stretch;
+}
+
+body.is-mobile .dh-diary-add-btn,
+body.is-mobile .dh-diary-mode-switch {
+  flex: 1;
+}
+
 body.is-mobile .dh-diary-week-header {
   padding: 10px 14px;
   flex-wrap: wrap;
@@ -4622,3 +4851,183 @@ body.is-mobile .entry-card-header {
   font-weight: var(--dh-weight-bold);
   color: var(--text-muted);
 }
+
+/* Voice Notes UI */
+.dh-popup-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.dh-popup-input-wrapper .dh-popup-input-standalone {
+  padding-left: 14px; /* Default uniform padding */
+}
+
+.is-rtl .dh-popup-input-wrapper .dh-popup-input-standalone {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.dh-popup-mic-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.dh-popup-mic-btn.is-recording {
+  color: var(--text-error);
+  border-color: var(--text-error);
+  animation: pulse-record-btn 1.5s infinite;
+}
+
+@keyframes pulse-record-btn {
+  0% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 60, 60, 0.4); }
+  50% { opacity: 0.8; box-shadow: 0 0 0 4px rgba(255, 60, 60, 0); }
+  100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 60, 60, 0); }
+}
+
+.dh-popup-footer-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.dh-popup-actions-right {
+  display: flex;
+  gap: 8px;
+}
+
+/* Phase 1: Minimalist Grid Hint */
+.dh-grid-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--background-secondary-alt);
+  padding: 8px 12px;
+  border-radius: var(--dh-radius-md);
+  margin-top: 12px;
+  border: 1px dashed var(--background-modifier-border);
+}
+
+.dh-grid-hint-text {
+  font-size: var(--dh-font-sm);
+  color: var(--text-muted);
+}
+
+.dh-grid-hint-close {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.dh-grid-hint-close:hover {
+  color: var(--text-normal);
+}
+
+/* Phase 5: Daily Reflection Footer Row */
+.dh-reflection-footer-row .dh-footer-title.dh-grid-cell {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 12px;
+  color: var(--text-muted);
+  font-size: var(--dh-font-sm);
+  font-weight: 500;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+[dir="rtl"] .dh-reflection-footer-row .dh-footer-title.dh-grid-cell {
+  justify-content: flex-end;
+  padding-right: 12px;
+  padding-left: 0;
+}
+
+[dir="ltr"] .dh-reflection-footer-row .dh-footer-title.dh-grid-cell {
+  justify-content: flex-start;
+  padding-left: 12px;
+  padding-right: 0;
+}
+
+.dh-reflection-footer-row .day-cell.dh-grid-cell {
+  background: var(--background-secondary) !important;
+  border-top: 1px solid var(--background-modifier-border) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.dh-reflection-footer-row .habit-index-header.dh-grid-cell {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.dh-footer-add-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dh-footer-add-btn:hover {
+  transform: scale(1.15);
+}
+
+.dh-footer-add-btn.has-reflection {
+  opacity: 1;
+}
+
+/* Force hide old hover icon logic */
+.dh-comment-hover-icon {
+  display: none !important;
+}
+
+/* History Logs Foldable UI (Hub) */
+.dh-log-month-group {
+  margin-bottom: var(--dh-space-sm);
+  background: var(--background-secondary);
+  border-radius: var(--dh-radius-md);
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.dh-log-month-summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-weight: 500;
+  color: var(--text-normal);
+  user-select: none;
+  font-size: var(--dh-font-sm);
+  border-radius: var(--dh-radius-sm);
+  transition: background 0.2s;
+}
+
+.dh-log-month-summary:hover {
+  background: var(--background-modifier-hover);
+}
+
+.dh-log-month-content {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dh-log-add-note-btn {
+  font-size: var(--dh-font-xs);
+  padding: 4px 10px;
+  border-radius: var(--dh-radius-lg);
+}
+
