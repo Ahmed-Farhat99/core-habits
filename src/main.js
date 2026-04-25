@@ -33,6 +33,7 @@ const {
   debounce,
   PluginSettingTab,
   Platform,
+  MarkdownRenderer,
 } = require("obsidian");
 
 // Use window.moment instead of destructuring from obsidian
@@ -287,7 +288,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
    */
   async getIncompleteHabitsCountForToday() {
     if (!this.habitManager) return 0;
-    const today = moment();
+    const today = window.moment();
     const dayOfWeek = today.day();
     const todayNote = await getNoteByDate(this.app, today, false, this.settings);
     if (!todayNote) return 0;
@@ -2332,15 +2333,7 @@ class AddHabitModal extends Modal {
                 if (audioFile) {
                   const src = this.app.vault.getResourcePath(audioFile);
                   const audioEl = entryDiv.createEl("audio", { attr: { controls: true, src: src } });
-                  audioEl.addEventListener('loadedmetadata', () => {
-                    if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
-                      audioEl.currentTime = 1e101;
-                      audioEl.addEventListener('timeupdate', function f() {
-                        audioEl.currentTime = 0;
-                        audioEl.removeEventListener('timeupdate', f);
-                      });
-                    }
-                  });
+                  fixAudioDuration(audioEl);
 
                   audioEl.style.width = "100%";
                   audioEl.style.height = "36px";
@@ -2521,7 +2514,7 @@ class HabitCommentPopup extends Modal {
     contentEl.addClass("dh-popup-compact");
     if (isAr) contentEl.addClass("is-rtl");
     contentEl.setAttr("dir", isAr ? "rtl" : "ltr");
-    modalEl.style.width = "420px";
+    modalEl.style.width = "min(420px, 90vw)";
 
     const dateStr = this.date.clone().locale(isAr ? "ar" : "en").format("D MMM");
 
@@ -2586,7 +2579,7 @@ class HabitCommentPopup extends Modal {
       } else {
         clearInterval(recordTimer);
         input.placeholder = isAr ? "معالجة الصوت..." : "Processing audio...";
-        const fileName = await VoiceRecorderUtility.stopAndSaveRecording(app);
+        const fileName = await VoiceRecorderUtility.stopAndSaveRecording(this.app);
         isRecording = false;
         micBtn.removeClass("is-recording");
         micBtn.textContent = isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note";
@@ -2594,7 +2587,7 @@ class HabitCommentPopup extends Modal {
         input.placeholder = isAr ? "ماذا حدث؟ لماذا تأخرت؟ ما شعورك؟" : "What happened? Why delayed? Feeling?";
         
         if (fileName) {
-          const sep = input.value ? "\\n" : "";
+          const sep = input.value ? "\n" : "";
           input.value += `${sep}![[${fileName}]]`;
           input.focus();
         } else {
@@ -2669,7 +2662,7 @@ class ReflectionPopup extends Modal {
     contentEl.addClass("dh-popup-compact");
     if (isAr) contentEl.addClass("is-rtl");
     contentEl.setAttr("dir", isAr ? "rtl" : "ltr");
-    modalEl.style.width = "440px";
+    modalEl.style.width = "min(440px, 90vw)";
 
     const dateStr = this.date.clone().locale(isAr ? "ar" : "en").format(isAr ? "dddd، D MMM" : "ddd, D MMM");
 
@@ -2755,7 +2748,7 @@ class ReflectionPopup extends Modal {
       } else {
         clearInterval(recordTimer);
         input.placeholder = isAr ? "معالجة الصوت..." : "Processing audio...";
-        const fileName = await VoiceRecorderUtility.stopAndSaveRecording(app);
+        const fileName = await VoiceRecorderUtility.stopAndSaveRecording(this.app);
         isRecording = false;
         micBtn.removeClass("is-recording");
         micBtn.textContent = isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note";
@@ -2763,7 +2756,7 @@ class ReflectionPopup extends Modal {
         input.placeholder = isAr ? "كيف كان يومك؟ ملاحظات سريعة..." : "How was your day? Quick notes...";
         
         if (fileName) {
-          const sep = input.value ? "\\n" : "";
+          const sep = input.value ? "\n" : "";
           input.value += `${sep}![[${fileName}]]`;
           input.focus();
         } else {
@@ -2840,6 +2833,12 @@ class WeeklyGridView extends ItemView {
     let groups = this.plugin.settings.collapsedGroups || [];
     if (Array.isArray(groups)) {
       groups = groups.map(key => key.replace(":settings_expanded", ":expanded"));
+      // Clean stale entries: only keep IDs that match active habits
+      const activeIds = new Set(this.plugin.habitManager.getActiveHabits().map(h => h.id));
+      groups = groups.filter(key => {
+        const habitId = key.replace(":expanded", "");
+        return activeIds.has(habitId);
+      });
       this.plugin.settings.collapsedGroups = groups;
     }
     this.lastWeekRatesCache = new Map();
@@ -2998,6 +2997,8 @@ class WeeklyGridView extends ItemView {
       container.removeClass("dh-diary-view-container");
       container.removeClass("decision-dashboard-container");
       this._streakCache = new Map();
+      this.previousCellState.clear();
+      this.previousSkipState.clear();
 
       const isAr = this.isAr;
       if (isAr) {
@@ -3172,9 +3173,16 @@ class WeeklyGridView extends ItemView {
         hijriEnd = hijriEnd.replace(/\s+\d{4}\s*هـ?$/i, '').trim();
       }
 
-      // Add RLM (\u200F) to enforce Right-to-Left ordering
-      const hijriHtml = `<span class="hijri-date-text">${hijriStart} - ${hijriEnd}</span> <span class="hijri-indicator">هـ</span>`;
-      element.innerHTML = hijriHtml;
+      element.textContent = "";
+      const hijriSpan = document.createElement("span");
+      hijriSpan.className = "hijri-date-text";
+      hijriSpan.textContent = `${hijriStart} - ${hijriEnd}`;
+      element.appendChild(hijriSpan);
+      element.appendChild(document.createTextNode(" "));
+      const indicatorSpan = document.createElement("span");
+      indicatorSpan.className = "hijri-indicator";
+      indicatorSpan.textContent = "هـ";
+      element.appendChild(indicatorSpan);
     }
   }
 
@@ -3817,7 +3825,7 @@ class WeeklyGridView extends ItemView {
         );
 
         if (status === "uncompleted" && habit.restoredDate &&
-          dayDate.isBefore(moment(habit.restoredDate), "day")) {
+          dayDate.isBefore(window.moment(habit.restoredDate), "day")) {
           cell.textContent = "--";
           cell.addClass("not-scheduled");
         } else {
@@ -4002,7 +4010,7 @@ class WeeklyGridView extends ItemView {
         await this.plugin.habitManager.ensureHabitsInNote(date);
       }
 
-      const dailyNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
+      let dailyNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
       if (!dailyNote) {
         if (!this.plugin.settings.autoWriteHabits) {
           const createNote = await new Promise((resolve) => {
@@ -4018,8 +4026,8 @@ class WeeklyGridView extends ItemView {
           });
           if (!createNote) return;
           await this.plugin.habitManager.ensureHabitsInNote(date);
-          const createdNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
-          if (!createdNote) {
+          dailyNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
+          if (!dailyNote) {
             new Notice(isAr ? "⚠️ تعذر إنشاء الملاحظة" : "⚠️ Could not create note");
             return;
           }
@@ -4796,15 +4804,7 @@ class WeeklyGridView extends ItemView {
         if (audioFile) {
           const src = this.app.vault.getResourcePath(audioFile);
           const audioEl = bodyEl.createEl("audio", { attr: { controls: true, src: src } });
-          audioEl.addEventListener('loadedmetadata', () => {
-            if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
-              audioEl.currentTime = 1e101;
-              audioEl.addEventListener('timeupdate', function f() {
-                audioEl.currentTime = 0;
-                audioEl.removeEventListener('timeupdate', f);
-              });
-            }
-          });
+          fixAudioDuration(audioEl);
           audioEl.style.width = "100%";
           audioEl.style.height = "36px";
           audioEl.style.marginTop = "4px";
@@ -4817,7 +4817,6 @@ class WeeklyGridView extends ItemView {
         bodyEl.createDiv({ text: remainingText, cls: "entry-action-text", attr: { style: "margin-top: 6px;" } });
       }
     } else if (entry.text.includes("![[")) {
-      const { MarkdownRenderer } = require("obsidian");
       MarkdownRenderer.renderMarkdown(entry.text, bodyEl, entry.path || "", this);
     } else {
       bodyEl.setText(entry.text);
@@ -6103,6 +6102,22 @@ class DailyHabitsSettingTab extends PluginSettingTab {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Simpler Mutex
+
+/**
+ * Fix WebM audio duration display: some browsers report Infinity duration
+ * for WebM recordings. This forces a seek to reveal the real duration.
+ */
+function fixAudioDuration(audioEl) {
+  audioEl.addEventListener('loadedmetadata', () => {
+    if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
+      audioEl.currentTime = 1e101;
+      audioEl.addEventListener('timeupdate', function f() {
+        audioEl.currentTime = 0;
+        audioEl.removeEventListener('timeupdate', f);
+      });
+    }
+  });
+}
 
 class TextUtils {
   static clean(text) {
