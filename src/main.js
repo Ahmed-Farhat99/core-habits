@@ -2332,6 +2332,16 @@ class AddHabitModal extends Modal {
                 if (audioFile) {
                   const src = this.app.vault.getResourcePath(audioFile);
                   const audioEl = entryDiv.createEl("audio", { attr: { controls: true, src: src } });
+                  audioEl.addEventListener('loadedmetadata', () => {
+                    if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
+                      audioEl.currentTime = 1e101;
+                      audioEl.addEventListener('timeupdate', function f() {
+                        audioEl.currentTime = 0;
+                        audioEl.removeEventListener('timeupdate', f);
+                      });
+                    }
+                  });
+
                   audioEl.style.width = "100%";
                   audioEl.style.height = "36px";
                   audioEl.style.marginTop = "8px";
@@ -4782,6 +4792,16 @@ class WeeklyGridView extends ItemView {
       if (audioFile) {
         const src = this.app.vault.getResourcePath(audioFile);
         const audioEl = bodyEl.createEl("audio", { attr: { controls: true, src: src } });
+                  audioEl.addEventListener('loadedmetadata', () => {
+                    if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
+                      audioEl.currentTime = 1e101;
+                      audioEl.addEventListener('timeupdate', function f() {
+                        audioEl.currentTime = 0;
+                        audioEl.removeEventListener('timeupdate', f);
+                      });
+                    }
+                  });
+
         audioEl.style.width = "100%";
         audioEl.style.height = "36px";
         audioEl.style.marginTop = "4px";

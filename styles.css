@@ -5224,3 +5224,52 @@ body.is-mobile .weekly-grid-container,
 body.is-mobile .daily-habits-view {
   padding-bottom: 120px !important;
 }
+
+
+/* --- FINAL MOBILE FIXES --- */
+
+/* Enable native horizontal scrolling on WebViews */
+body.is-mobile .habits-grid-wrapper {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-x: contain !important;
+  touch-action: pan-x pan-y !important;
+}
+
+/* Fix Levels Modal Table on Mobile */
+body.is-mobile .levels-cols-header-clean {
+  display: none !important;
+}
+
+body.is-mobile .level-row-clean {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  padding: 16px !important;
+  gap: 12px !important;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: var(--dh-radius-md) !important;
+  margin-bottom: 12px;
+}
+
+body.is-mobile .level-inputs-col-clean {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+body.is-mobile .level-num-badge {
+  align-self: flex-start !important;
+  margin-top: 0 !important;
+  margin-bottom: 4px !important;
+}
+
+body.is-mobile .level-inputs-col-clean > input {
+  width: 100% !important;
+}
+
+body.is-mobile .level-inputs-col-clean > select {
+  width: 100% !important;
+}
