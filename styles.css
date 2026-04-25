@@ -4426,7 +4426,7 @@ select.form-input option {
 /* ═══════════════════════════════════════════════════════════ */
 
 /* Phone: compact grid with minimum touch targets */
-body.is-mobile .dh-grid-row {
+body.is-mobile .habits-grid-wrapper .dh-grid-row {
   grid-template-columns: 22px minmax(80px, 3fr) repeat(7, minmax(34px, 1fr));
 }
 
@@ -5171,20 +5171,20 @@ body.is-mobile .habits-grid-wrapper {
   padding-bottom: 8px;
 }
 
-body.is-mobile .dh-grid-row {
+body.is-mobile .habits-grid-wrapper .dh-grid-row {
   width: max-content;
   min-width: 100%;
   grid-template-columns: 24px 130px repeat(7, minmax(46px, 1fr));
 }
 
-body.is-mobile .dh-grid-cell:nth-child(1) {
+body.is-mobile .habits-grid-wrapper .dh-grid-cell:nth-child(1) {
   position: sticky;
   inset-inline-start: 0;
   z-index: 20;
   background-color: var(--background-primary);
 }
 
-body.is-mobile .dh-grid-cell:nth-child(2) {
+body.is-mobile .habits-grid-wrapper .dh-grid-cell:nth-child(2) {
   position: sticky;
   inset-inline-start: 24px;
   z-index: 20;
@@ -5192,10 +5192,10 @@ body.is-mobile .dh-grid-cell:nth-child(2) {
 }
 
 /* Add shadow to the sticky edge to indicate scrollability */
-[dir="ltr"] body.is-mobile .dh-grid-cell:nth-child(2) {
+[dir="ltr"] body.is-mobile .habits-grid-wrapper .dh-grid-cell:nth-child(2) {
   box-shadow: 2px 0 4px -1px rgba(0,0,0,0.15);
 }
-[dir="rtl"] body.is-mobile .dh-grid-cell:nth-child(2) {
+[dir="rtl"] body.is-mobile .habits-grid-wrapper .dh-grid-cell:nth-child(2) {
   box-shadow: -2px 0 4px -1px rgba(0,0,0,0.15);
 }
 
@@ -5212,8 +5212,8 @@ body.is-mobile .day-name {
 }
 
 /* Fix background of sticky cells when row is hovered */
-body.is-mobile .dh-grid-row:hover .dh-grid-cell:nth-child(1),
-body.is-mobile .dh-grid-row:hover .dh-grid-cell:nth-child(2) {
+body.is-mobile .habits-grid-wrapper .dh-grid-row:hover .dh-grid-cell:nth-child(1),
+body.is-mobile .habits-grid-wrapper .dh-grid-row:hover .dh-grid-cell:nth-child(2) {
   background-color: var(--background-modifier-hover);
 }
 
