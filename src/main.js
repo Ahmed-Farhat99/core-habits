@@ -3181,19 +3181,6 @@ class WeeklyGridView extends ItemView {
     // Create wrapper for sticky header functionality
     const tableWrapper = container.createDiv({ cls: "habits-grid-wrapper" });
 
-    // Enable native touch scrolling on mobile
-    if (Platform.isMobile) {
-      let startX = 0, scrollLeft = 0;
-      tableWrapper.addEventListener('touchstart', (e) => {
-        startX = e.touches[0].pageX - tableWrapper.offsetLeft;
-        scrollLeft = tableWrapper.scrollLeft;
-      }, { passive: true });
-      tableWrapper.addEventListener('touchmove', (e) => {
-        const x = e.touches[0].pageX - tableWrapper.offsetLeft;
-        const walk = (x - startX) * 1.5;
-        tableWrapper.scrollLeft = scrollLeft - walk;
-      }, { passive: true });
-    }
     const table = tableWrapper.createDiv({ cls: "habits-grid" });
 
     const weekStartMs = this.currentWeekStart.clone().startOf("day").valueOf();

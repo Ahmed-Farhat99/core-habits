@@ -5293,3 +5293,157 @@ body.is-mobile audio {
   min-height: 40px !important;
   border-radius: 12px !important;
 }
+
+
+/* ═══════════════════════════════════════════════════════════ */
+/* MOBILE GRID CARD LAYOUT — Complete Redesign                 */
+/* No horizontal scrolling. All 7 days visible at once.        */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* Reset: undo ALL previous mobile grid hacks */
+body.is-mobile .habits-grid-wrapper {
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: auto !important;
+  touch-action: auto !important;
+  overscroll-behavior-x: auto !important;
+}
+
+body.is-mobile .habits-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: unset !important;
+  width: 100% !important;
+}
+
+/* ---- Header rows: compact, no # or name columns ---- */
+body.is-mobile .habits-thead .dh-grid-row {
+  display: flex !important;
+  width: 100% !important;
+  min-width: unset !important;
+}
+
+/* Hide the # cell in header */
+body.is-mobile .habits-thead .habit-index-header {
+  display: none !important;
+}
+
+/* Hide the name/corner cell in header */
+body.is-mobile .habits-thead .corner-cell {
+  display: none !important;
+}
+
+/* Day header cells: spread equally */
+body.is-mobile .habits-thead .day-header,
+body.is-mobile .habits-thead .day-stat-cell {
+  flex: 1 !important;
+  min-width: 0 !important;
+  padding: 4px 2px !important;
+  font-size: 0.75em !important;
+}
+
+body.is-mobile .habits-thead .day-name {
+  font-size: 0.8em !important;
+  white-space: nowrap !important;
+}
+
+body.is-mobile .habits-thead .day-date {
+  font-size: 0.65em !important;
+}
+
+body.is-mobile .habits-thead .day-date-hijri {
+  font-size: 0.6em !important;
+}
+
+/* ---- Habit data rows: card layout ---- */
+body.is-mobile .habits-tbody .dh-grid-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  min-width: unset !important;
+  padding: 8px 6px !important;
+  border-bottom: 1px solid var(--background-modifier-border) !important;
+  align-items: center !important;
+}
+
+/* Hide the # index cell on mobile */
+body.is-mobile .habits-tbody .dh-grid-row > .dh-grid-cell:first-child {
+  display: none !important;
+}
+
+/* Habit name: takes full width on first row */
+body.is-mobile .habits-tbody .dh-grid-row > .dh-grid-cell:nth-child(2) {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  margin-bottom: 6px !important;
+  font-weight: 600 !important;
+  font-size: 0.9em !important;
+  text-align: right !important;
+  padding: 2px 4px !important;
+}
+
+[dir="ltr"] body.is-mobile .habits-tbody .dh-grid-row > .dh-grid-cell:nth-child(2) {
+  text-align: left !important;
+}
+
+/* Day cells: spread equally on second row */
+body.is-mobile .habits-tbody .dh-grid-row > .dh-grid-cell:nth-child(n+3) {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 4px 2px !important;
+}
+
+/* Checkboxes: comfortable tap size */
+body.is-mobile .habits-tbody .dh-grid-cell .habit-checkbox {
+  min-width: 32px !important;
+  min-height: 32px !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+/* Remove sticky positioning that was causing issues */
+body.is-mobile .habits-grid-wrapper .dh-grid-cell:nth-child(1),
+body.is-mobile .habits-grid-wrapper .dh-grid-cell:nth-child(2) {
+  position: static !important;
+  z-index: auto !important;
+  box-shadow: none !important;
+}
+
+/* ---- Stats/Percentage row: also hide # and name ---- */
+body.is-mobile .header-row-stats {
+  display: flex !important;
+  width: 100% !important;
+  min-width: unset !important;
+}
+
+body.is-mobile .header-row-stats .habit-index-header,
+body.is-mobile .header-row-stats .stats-corner {
+  display: none !important;
+}
+
+body.is-mobile .header-row-stats .day-stat-cell {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+/* ---- Diary entry card: full bottom padding ---- */
+body.is-mobile .dh-diary-view-container {
+  padding-bottom: 100px !important;
+}
+
+body.is-mobile .dh-diary-entries-list,
+body.is-mobile .dh-diary-timeline-list {
+  padding-bottom: 80px !important;
+}
+
+/* ---- Daily journal footer visibility ---- */
+body.is-mobile .dh-diary-entry-card:last-child {
+  margin-bottom: 80px !important;
+}
+
+/* ---- Ensure main plugin container has bottom safe area ---- */
+body.is-mobile .daily-habits-plugin {
+  padding-bottom: 80px !important;
+}
