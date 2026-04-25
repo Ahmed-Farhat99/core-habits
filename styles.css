@@ -5684,3 +5684,66 @@ body.is-mobile audio {
   height: 40px !important;
   margin: 8px 0 !important;
 }
+
+
+/* ---- v2.2 FIXES: Journal visibility & Footer Overlap ---- */
+
+/* 1. Make Journal buttons visible slots on mobile */
+body.is-mobile .dh-footer-add-btn {
+  background: var(--background-primary) !important;
+  border: 1px dashed var(--background-modifier-border) !important;
+  border-radius: 8px !important;
+  color: var(--text-muted) !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 14px !important;
+}
+
+body.is-mobile .dh-footer-add-btn.has-reflection {
+  background: rgba(var(--interactive-accent-rgb), 0.1) !important;
+  border: 1px solid var(--interactive-accent) !important;
+  color: var(--interactive-accent) !important;
+}
+
+/* 2. Fix Modal Footer Overlap & Size */
+body.is-mobile .dh-modal-footer,
+body.is-mobile .dh-popup-footer {
+  /* Add safe area padding for mobile bottom bars */
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 16px)) !important;
+  min-height: 80px !important;
+}
+
+body.is-mobile .dh-save-habit-btn,
+body.is-mobile .dh-popup-btn-save {
+  height: 44px !important; /* Standard touch height */
+  font-size: 1em !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+}
+
+body.is-mobile .dh-popup-btn-cancel {
+  height: 44px !important;
+  font-size: 0.9em !important;
+}
+
+/* 3. Hijri Date wrapping fix */
+body.is-mobile .hijri-date-text {
+  font-size: 0.9em !important;
+  display: block !important;
+}
+
+body.is-mobile .hijri-indicator {
+  display: inline-block !important;
+  margin-top: 2px !important;
+}
+
+/* Ensure the title in diary row doesn't push buttons too much */
+body.is-mobile .diary-row .dh-footer-title {
+  font-size: 0.85em !important;
+  margin-bottom: 8px !important;
+  opacity: 0.8 !important;
+}
+
+/* Adjust grid row spacing */
+body.is-mobile .habits-tbody .dh-grid-row {
+  margin-bottom: 8px !important;
+}
