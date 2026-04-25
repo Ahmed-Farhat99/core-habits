@@ -4919,3 +4919,106 @@ body.is-mobile .weekly-grid-container {
 body.is-mobile .dh-comment-hover-icon {
   display: none !important;  /* !important: overrides inline display */
 }
+
+
+/* ---- 13.16 TOUCH TARGET FIXES ---- */
+
+body.is-mobile .habits-tbody .day-cell {
+  min-height: 44px;
+  min-width: 38px;
+}
+
+body.is-mobile .dh-color-swatch {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+body.is-mobile .dh-color-swatches {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+body.is-mobile .day-chip-clean {
+  min-height: 40px;
+  min-width: 40px;
+  font-size: 0.85em;
+}
+
+
+/* ---- 13.17 SAFE AREA INSETS ---- */
+
+body.is-mobile .weekly-grid-container {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+body.is-mobile .weekly-header-controls {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+
+/* ---- 13.18 DASHBOARD TABLE OVERFLOW ---- */
+
+body.is-mobile .dh-dashboard-section {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.is-mobile .day-patterns-table {
+  min-width: 320px;
+}
+
+
+/* ---- 13.19 PROGRESS CAPTION TEXT OVERFLOW ---- */
+
+body.is-mobile .weekly-barrier-caption {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  padding-inline: 8px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+
+/* ---- 13.20 INLINE STYLE OVERRIDES ---- */
+
+body.is-mobile .dh-name-input-wrapper {
+  width: 100% !important;
+}
+
+body.is-mobile .dh-rename-checkbox-container {
+  flex-wrap: wrap;
+}
+
+body.is-mobile .dh-log-section-header-row {
+  flex-direction: column !important;
+  gap: 8px;
+}
+
+body.is-mobile .dh-log-add-note-btn {
+  width: 100%;
+}
+
+
+/* ---- 13.21 LEVEL INPUTS MOBILE SIZING ---- */
+
+body.is-mobile .dh-level-condition-select {
+  min-height: 40px;
+  font-size: 0.9em;
+}
+
+body.is-mobile .dh-level-goal-input {
+  min-height: 40px;
+  font-size: 0.9em;
+}
+
+
+/* ---- 13.22 PARENT SELECT MOBILE ---- */
+
+body.is-mobile .dh-parent-select {
+  min-height: 40px;
+  font-size: 0.9em;
+  width: 100%;
+}
