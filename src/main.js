@@ -3173,7 +3173,8 @@ class WeeklyGridView extends ItemView {
       }
 
       // Add RLM (\u200F) to enforce Right-to-Left ordering
-      element.textContent = `\u200F${hijriStart}\u200F - \u200F${hijriEnd}\u200F`;
+      const hijriHtml = `<span class="hijri-date-text">${hijriStart} - ${hijriEnd}</span> <span class="hijri-indicator">هـ</span>`;
+      element.innerHTML = hijriHtml;
     }
   }
 
@@ -3324,7 +3325,7 @@ class WeeklyGridView extends ItemView {
 
     if (this.plugin.settings.enableReflectionJournal) {
       const tfoot = table.createDiv({ cls: "habits-tfoot" });
-      const footerRow = tfoot.createDiv({ cls: "dh-reflection-footer-row dh-grid-row" });
+      const footerRow = tfoot.createDiv({ cls: "dh-reflection-footer-row dh-grid-row diary-row" });
       
       // Index column placeholder
       footerRow.createDiv({ cls: "habit-index-header dh-grid-cell" });
