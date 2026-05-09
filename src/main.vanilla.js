@@ -430,6 +430,21 @@ module.exports = class DailyHabitsPlugin extends Plugin {
       })
     );
 
+    this.registerEvent(
+      this.app.workspace.on('file-open', async (file) => {
+        if (!this.settings.autoWriteHabits || !file || file.extension !== 'md') return;
+        
+        const info = getDailyNotesInfo(this.app, this.settings);
+        const format = info.format || "YYYY-MM-DD";
+        
+        // Strict parsing to detect if the opened file is a daily note
+        const parsedDate = window.moment(file.basename, format, true);
+        if (parsedDate.isValid()) {
+            await this.habitManager.ensureHabitsInNote(parsedDate);
+        }
+      })
+    );
+
     if (this.settings.enableOpenReminder) {
       this.app.workspace.onLayoutReady(async () => {
         try {
@@ -1460,9 +1475,9 @@ class HabitManager {
    * @returns {Array} Array of habits scheduled for this day
    */
   getHabitsForDay(dayOfWeek) {
-    return this.getActiveHabits()
-      .filter((h) => this.isHabitScheduledForDay(h, dayOfWeek))
-      .sort((a, b) => a.order - b.order);
+    const scheduled = this.getActiveHabits().filter((h) => this.isHabitScheduledForDay(h, dayOfWeek));
+    const { sorted } = buildHierarchyLabels(scheduled);
+    return sorted;
   }
 
   /**
