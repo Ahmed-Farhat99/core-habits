@@ -13,7 +13,7 @@ export class HabitScanner {
   }
 
   scan(content, marker) {
-    if (!content || content.length > 1_000_000) return [];
+    if (!content || content.length > 1_000_000) return null;
     
     // Fast path: check if content contains any habit markers before splitting lines
     const lowerContent = content.toLowerCase();

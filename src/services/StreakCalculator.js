@@ -95,9 +95,16 @@ export class StreakCalculator {
 
       const dateKey = date.clone().locale("en").format("YYYY-MM-DD");
       let content = null;
+      let parsedHabits = null;
 
       if (this.contentCache && this.contentCache.has(dateKey)) {
-        content = this.contentCache.get(dateKey);
+        const cached = this.contentCache.get(dateKey);
+        if (typeof cached === 'string') {
+          content = cached;
+        } else {
+          content = cached.content;
+          parsedHabits = cached.parsedHabits;
+        }
       } else {
         // Fallback to global plugin's getNoteByDate temporarily via app access or import
         // For now, we assume getNoteByDate is injected or available via this.plugin
@@ -111,12 +118,21 @@ export class StreakCalculator {
           continue;
         }
         fileReads++;
-        content = await this.plugin.app.vault.cachedRead(dailyNote);
-        if (this.contentCache) this.contentCache.set(dateKey, content);
+        if (i === 0) {
+          content = await this.plugin.app.vault.read(dailyNote);
+        } else {
+          content = await this.plugin.app.vault.cachedRead(dailyNote);
+        }
       }
 
-      const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-      const entry = this.plugin.findHabitEntryFunc(habits, habit.linkText, habit.nameHistory);
+      if (!parsedHabits) {
+        parsedHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
+        if (this.contentCache) {
+          this.contentCache.set(dateKey, { content, parsedHabits });
+        }
+      }
+
+      const entry = this.plugin.findHabitEntryFunc(parsedHabits, habit.linkText, habit.nameHistory);
 
       if (entry && entry.skipped) {
         continue;

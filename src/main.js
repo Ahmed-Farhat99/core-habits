@@ -1,5 +1,4 @@
 import { Utils } from './utils/Utils.js';
-import { Mutex } from './utils/Mutex.js';
 import { AudioEngine } from './services/AudioEngine.js';
 import { VoiceRecorderUtility } from './services/VoiceRecorderUtility.js';
 import { HabitScanner } from './services/HabitScanner.js';
@@ -101,7 +100,7 @@ function resolveHabitColorHex(colorId) {
 // ═══════════════════════════════════════════════════════════════════════════════
 module.exports = class DailyHabitsPlugin extends Plugin {
   async onload() {
-    this.fileLocks = new Map();
+    this._openTimeouts = new Map();
     this.audioEngine = new AudioEngine(this);
     this.getNoteByDateFunc = getNoteByDate;
     this.findHabitEntryFunc = findHabitEntry;
@@ -119,10 +118,6 @@ module.exports = class DailyHabitsPlugin extends Plugin {
 
     // Initialize HabitScanner
     this.habitScanner = new HabitScanner();
-
-    this.registerInterval(
-      window.setInterval(() => this.cleanStaleLocks(), FILE_LOCK_CLEANUP_INTERVAL)
-    );
 
     // Register Weekly View
     this.registerView(
@@ -153,17 +148,26 @@ module.exports = class DailyHabitsPlugin extends Plugin {
     );
 
     this.registerEvent(
-      this.app.workspace.on('file-open', async (file) => {
+      this.app.workspace.on('file-open', (file) => {
         if (!this.settings.autoWriteHabits || !file || file.extension !== 'md') return;
         
-        const info = getDailyNotesInfo(this.app, this.settings);
-        const format = info.format || "YYYY-MM-DD";
-        
-        // Strict parsing to detect if the opened file is a daily note
-        const parsedDate = window.moment(file.basename, format, true);
-        if (parsedDate.isValid()) {
-            await this.habitManager.ensureHabitsInNote(parsedDate);
+        if (this._openTimeouts.has(file.path)) {
+          clearTimeout(this._openTimeouts.get(file.path));
         }
+        
+        const timeoutId = setTimeout(async () => {
+          this._openTimeouts.delete(file.path);
+          const info = getDailyNotesInfo(this.app, this.settings);
+          const format = info.format || "YYYY-MM-DD";
+          
+          // Strict parsing to detect if the opened file is a daily note
+          const parsedDate = window.moment(file.basename, format, true);
+          if (parsedDate.isValid()) {
+              await this.habitManager.ensureHabitsInNote(parsedDate);
+          }
+        }, 1500);
+        
+        this._openTimeouts.set(file.path, timeoutId);
       })
     );
 
@@ -194,32 +198,17 @@ module.exports = class DailyHabitsPlugin extends Plugin {
   }
 
   async onunload() {
-    this.fileLocks.clear();
+    if (this._openTimeouts) {
+      for (const timeoutId of this._openTimeouts.values()) {
+        clearTimeout(timeoutId);
+      }
+      this._openTimeouts.clear();
+      this._openTimeouts = null;
+    }
     this._sharedStreakCache = null;
     if (this.habitScanner) this.habitScanner.reset();
     await this.audioEngine.close();
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_WEEKLY);
-  }
-
-  cleanStaleLocks() {
-    const now = Date.now();
-    for (const [path, entry] of this.fileLocks.entries()) {
-      if (now - entry.lastUsed > LOCK_STALE_MS) {
-        this.fileLocks.delete(path);
-      }
-    }
-  }
-
-  getFileLock(path) {
-    const existing = this.fileLocks.get(path);
-    if (existing) {
-      existing.lastUsed = Date.now(); // refresh timestamp on every access
-      return existing.mutex;
-    }
-    // Mutex is defined lower in the file but hoisted conceptually by runtime evaluation
-    const entry = { mutex: new Mutex(), lastUsed: Date.now() };
-    this.fileLocks.set(path, entry);
-    return entry.mutex;
   }
 
   async activateWeeklyView() {
@@ -288,11 +277,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
     }
 
     if (changed) {
-      if (!this._isSaving) {
-        this.saveSettings().catch(e => console.error('[Core Habits] Failed to save after rename:', e));
-      } else {
-        Utils.debugLog(this, `Vault rename synced: avoided write conflict because _isSaving is true`);
-      }
+      this.saveSettings().catch(e => console.error('[Core Habits] Failed to save after rename:', e));
     }
   }
 
@@ -410,14 +395,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
   }
 
   async saveSettings(options = {}) {
-    // Prevent cascade: mark saving state to suppress vault.on('modify') events during save
-    this._isSaving = true;
-    try {
-      await this.saveData(this.settings);
-    } finally {
-      // Always release the flag, even if saveData throws
-      this._isSaving = false;
-    }
+    await this.saveData(this.settings);
 
     if (!options.silent) {
       // Refresh Weekly View if open
@@ -1279,22 +1257,21 @@ class HabitManager {
       const dailyNote = await getNoteByDate(this.plugin.app, date, true, this.plugin.settings);
       if (!dailyNote) return;
 
-      const fileLock = this.plugin.getFileLock(dailyNote.path);
+      // Use vault.process for atomic guaranteed fresh reads and writes
+      await this.plugin.app.vault.process(dailyNote, (content) => {
+        const originalContent = content;
 
-      await fileLock.dispatch(async () => {
-        // Use vault.process for atomic guaranteed fresh reads and writes
-        await this.plugin.app.vault.process(dailyNote, (content) => {
-          const originalContent = content;
+        // 1. Get habits scheduled for this day
+        const dayOfWeek = date.day();
+        const scheduledHabits = this.getHabitsForDay(dayOfWeek);
 
-          // 1. Get habits scheduled for this day
-          const dayOfWeek = date.day();
-          const scheduledHabits = this.getHabitsForDay(dayOfWeek);
+        if (scheduledHabits.length === 0) return originalContent;
 
-          if (scheduledHabits.length === 0) return originalContent;
+        // Generate habits text that MAY need addition
+        const existingHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
+        if (!existingHabits) return originalContent; // Abort if file is too large
 
-          // Generate habits text that MAY need addition
-          const existingHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-          let addedCount = 0;
+        let addedCount = 0;
 
           const habitsToAdd = [];
           for (const habit of scheduledHabits) {
@@ -1322,7 +1299,6 @@ class HabitManager {
             }
           }
           return originalContent;
-        });
       });
     } catch (error) {
       console.error("[Core Habits] Sync failed:", error);
@@ -1336,6 +1312,7 @@ class HabitManager {
    */
   async importHabitsFromContent(content) {
     const foundHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
+    if (!foundHabits) return 0;
     let importedCount = 0;
 
     for (const habit of foundHabits) {
@@ -1459,9 +1436,7 @@ async function extractHabitHistoryFromDailyNotes(app, plugin, habitName, daysToL
 
 
 async function toggleHabit(plugin, app, file, habit, marker, targetState = null) {
-  const lock = plugin.getFileLock(file.path);
-
-  await lock.dispatch(async () => {
+  try {
     await app.vault.process(file, (data) => {
       const separator = data.includes("\r\n") ? "\r\n" : "\n";
       const lines = data.split(/\r?\n/);
@@ -1509,7 +1484,15 @@ async function toggleHabit(plugin, app, file, habit, marker, targetState = null)
 
       return lines.join(separator);
     });
-  });
+    StreakCalculator.invalidate(habit.id);
+    if (plugin._sharedStreakCache) {
+      plugin._sharedStreakCache.clear();
+    }
+  } catch (error) {
+    console.error("[Core Habits] Failed to toggle habit:", error);
+    const isAr = plugin.settings.language === "ar";
+    new Notice(isAr ? "⚠️ حدث خطأ أثناء تعديل الملاحظة." : "⚠️ Error modifying note.");
+  }
 }
 
 
@@ -1740,10 +1723,11 @@ class AddHabitModal extends Modal {
         const rRate = Math.round(recoveryScore * 10) / 10;
         const rateRounded = Math.round(recoveryScore);
         const line4 = detailsContainer.createDiv({ cls: "streak-detail-item dh-recovery-row" });
-        line4.createSpan({ cls: "streak-detail-icon", text: "🛟" });
-        line4.createSpan({ cls: "streak-detail-label", text: isAr ? "قوة الإنقاذ" : "Recovery Speed" });
+        line4.title = isAr ? "كلما قل هذا الرقم، كلما كنت أسرع في العودة بعد الانقطاع" : "Lower number means faster recovery after missing a habit";
+        line4.createSpan({ cls: "streak-detail-icon", text: "⏱️" });
+        line4.createSpan({ cls: "streak-detail-label", text: isAr ? "سرعة التعافي" : "Recovery Speed" });
 
-        let rateText = isAr ? `${rRate} يوم` : `${rRate} days`;
+        let rateText = isAr ? `تعود للعادة خلال ${rRate} يوم في المتوسط` : `Returns in ${rRate} days on avg`;
         let decisionMsg = "";
         let rateCls = "";
 
@@ -6135,6 +6119,7 @@ class TextUtils {
 }
 
 function findHabitEntry(scannedHabits, linkText, nameHistory = []) {
+  if (!scannedHabits) return null;
   const allNames = [
     TextUtils.clean(linkText),
     ...nameHistory.map(n => TextUtils.clean(n)),
