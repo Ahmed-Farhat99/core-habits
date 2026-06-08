@@ -1,6 +1,6 @@
 {
   "name": "core-habits",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "description": "Obsidian plugin to toggle habits in daily notes with archiving, ordering, and batch renaming, building your core identity.",
   "main": "main.js",
@@ -18,10 +18,10 @@
   "author": "Ahmed Farhat <ahmed9farhat@gmail.com>",
   "license": "MIT",
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.0",
+    "globals": "^17.6.0",
     "obsidian": "^1.5.7",
-    "svelte": "^5.55.5",
-    "svelte-preprocess": "^6.0.3",
     "vite": "^8.0.10"
   }
 }

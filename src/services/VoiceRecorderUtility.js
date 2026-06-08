@@ -32,6 +32,7 @@ export class VoiceRecorderUtility {
         }
         this.isRecording = false;
         const blob = new Blob(this.chunks, { type: 'audio/webm' });
+        this.chunks = []; // Clear memory
         
         try {
           const buffer = await blob.arrayBuffer();

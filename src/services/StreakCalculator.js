@@ -1,4 +1,5 @@
 const moment = window.moment;
+import { getNoteByDate, findHabitEntry } from '../utils/helpers.js';
 
 export class StreakCalculator {
   static #cache = new Map();
@@ -94,7 +95,7 @@ export class StreakCalculator {
       }
 
       const dateKey = date.clone().locale("en").format("YYYY-MM-DD");
-      let content = null;
+      let content;
       let parsedHabits = null;
 
       if (this.contentCache && this.contentCache.has(dateKey)) {
@@ -108,9 +109,9 @@ export class StreakCalculator {
       } else {
         // Fallback to global plugin's getNoteByDate temporarily via app access or import
         // For now, we assume getNoteByDate is injected or available via this.plugin
-        const dailyNote = await this.plugin.getNoteByDateFunc(this.plugin.app, date, false, this.plugin.settings);
+        const dailyNote = await getNoteByDate(this.plugin.app, date, false, this.plugin.settings);
         if (!dailyNote) {
-          if (this.plugin.settings.streakBreakOnMissingNote && i > 0) {
+          if (i > 0) {
             if (!currentStreakBroken) currentStreakBroken = true;
             tempStreak = 0;
             if (hasSeenFirstRightCompletion) currentGapLength++; else ongoingGapLength++;
@@ -132,7 +133,7 @@ export class StreakCalculator {
         }
       }
 
-      const entry = this.plugin.findHabitEntryFunc(parsedHabits, habit.linkText, habit.nameHistory);
+      const entry = findHabitEntry(parsedHabits, habit.linkText, habit.nameHistory);
 
       if (entry && entry.skipped) {
         continue;
