@@ -16,7 +16,7 @@ class HabitCommentPopup extends Modal {
     contentEl.addClass("dh-popup-compact");
     if (isAr) contentEl.addClass("is-rtl");
     contentEl.setAttr("dir", isAr ? "rtl" : "ltr");
-    modalEl.style.width = "min(420px, 90vw)";
+    modalEl.addClass("dh-popup-modal-parent");
 
     const dateStr = this.date.clone().locale(isAr ? "ar" : "en").format("D MMM");
 

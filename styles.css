@@ -3668,8 +3668,7 @@ select.form-input option {
 
 /* --- 8. HABIT CONTEXT --- */
 
-.modal:has(.dh-comment-popup),
-.modal:has(.dh-reflection-popup) {
+.dh-popup-modal-parent {
   max-width: 420px;
   width: 90vw;
 }
