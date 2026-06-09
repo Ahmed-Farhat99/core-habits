@@ -5221,3 +5221,34 @@ body.is-mobile .dh-parent-select {
 .dh-log-filter-select { padding: 4px; border-radius: 4px; border: 1px solid var(--background-modifier-border); background: var(--background-primary); color: var(--text-normal); font-size: 0.9em; }
 
 .dh-log-export-btn { background: var(--interactive-normal); color: var(--text-normal); margin-right: 8px; } .dh-log-export-btn:hover { background: var(--interactive-hover); }
+
+/* Responsive Table Wrapper */
+.dh-table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin-bottom: var(--dh-space-md);
+  scrollbar-width: thin;
+}
+
+.dh-table-responsive-wrapper table {
+  margin-bottom: 0;
+  min-width: 600px;
+}
+
+/* Modal / Popup Footer and Actions */
+.dh-popup-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--dh-space-lg);
+  padding-top: var(--dh-space-md);
+  border-top: 1px solid var(--dh-border);
+  width: 100%;
+}
+
+.dh-popup-actions-left,
+.dh-popup-actions-right {
+  display: flex;
+  gap: var(--dh-space-sm);
+  align-items: center;
+}

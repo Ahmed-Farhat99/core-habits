@@ -622,6 +622,7 @@ export class HabitNoteManager {
       await this.updateHabitNoteProps(destPath, { archived: toArchived });
     } catch (e) {
       console.error(`[Core Habits] Failed to move habit note for "${habit.name}":`, e);
+      throw e;
     }
   }
 }

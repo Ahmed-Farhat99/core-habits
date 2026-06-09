@@ -32,18 +32,45 @@ export class HabitManager {
     Utils.debugLog(this.plugin, `HabitManager initialized with ${this.habitsMap.size} habits.`);
   }
 
-  /**
-   * Syncs a single file into the memory map. Called on file modify.
-   * @param {import('obsidian').TFile} file 
-   */
   async syncFile(file) {
     const activeFolder = this.plugin.habitNoteManager.getActiveFolder();
     const archiveFolder = this.plugin.habitNoteManager.getArchiveFolder();
-    if (file.path.startsWith(activeFolder) || file.path.startsWith(archiveFolder)) {
+    
+    const isInsideActive = file.path.startsWith(activeFolder);
+    const isInsideArchive = file.path.startsWith(archiveFolder);
+
+    if (isInsideActive || isInsideArchive) {
       const props = await this.plugin.habitNoteManager.readHabitNoteProps(file.path);
       if (props) {
         const habit = this.plugin.habitNoteManager.propsToHabit(file, props);
         if (habit && habit.id) {
+          
+          if (habit.archived && isInsideActive) {
+            setTimeout(async () => {
+              try {
+                const currentFile = this.plugin.app.vault.getAbstractFileByPath(file.path);
+                if (currentFile) {
+                  const destPath = this.plugin.habitNoteManager.getHabitFilePath(habit.name, true);
+                  await this.plugin.app.fileManager.renameFile(currentFile, destPath);
+                }
+              } catch (e) {
+                console.warn("[Core Habits] Auto-archive rename failed:", e);
+              }
+            }, 500);
+          } else if (!habit.archived && isInsideArchive) {
+            setTimeout(async () => {
+              try {
+                const currentFile = this.plugin.app.vault.getAbstractFileByPath(file.path);
+                if (currentFile) {
+                  const destPath = this.plugin.habitNoteManager.getHabitFilePath(habit.name, false);
+                  await this.plugin.app.fileManager.renameFile(currentFile, destPath);
+                }
+              } catch (e) {
+                console.warn("[Core Habits] Auto-restore rename failed:", e);
+              }
+            }, 500);
+          }
+
           this.habitsMap.set(habit.id, habit);
         }
       }
@@ -186,21 +213,26 @@ export class HabitManager {
     const habit = this.getHabitById(id);
     if (!habit) throw new Error(`Habit not found: ${id}`);
 
+    if (this.plugin.habitNoteManager) {
+      await this.plugin.habitNoteManager._moveHabitNote(habit, false, true);
+    }
+
     habit.archived = true;
     habit.archivedDate = Date.now();
     habit.restoredDate = null;
     
     this.habitsMap.set(habit.id, habit);
 
-    if (this.plugin.habitNoteManager) {
-      await this.plugin.habitNoteManager._moveHabitNote(habit, false, true);
-    }
     return habit;
   }
 
   async restoreHabit(id) {
     const habit = this.getHabitById(id);
     if (!habit) throw new Error(`Habit not found: ${id}`);
+
+    if (this.plugin.habitNoteManager) {
+      await this.plugin.habitNoteManager._moveHabitNote(habit, true, false);
+    }
 
     habit.archived = false;
     habit.archivedDate = null;
@@ -214,7 +246,6 @@ export class HabitManager {
     this.habitsMap.set(habit.id, habit);
 
     if (this.plugin.habitNoteManager) {
-      await this.plugin.habitNoteManager._moveHabitNote(habit, true, false);
       const activePath = this.plugin.habitNoteManager.getHabitFilePath(habit.name, habit.archived);
       const props = this.plugin.habitNoteManager._habitToProps(habit);
       await this.plugin.habitNoteManager.updateHabitNoteProps(activePath, props);
@@ -334,7 +365,6 @@ export class HabitManager {
         this.habitsMap.set(id, habit);
         
         // Update frontmatter
-        const props = this.plugin.habitNoteManager._habitToProps(habit);
         const path = this.plugin.habitNoteManager.getHabitFilePath(habit.name, habit.archived);
         await this.plugin.habitNoteManager.updateHabitNoteProps(path, { order: i });
       }
@@ -343,7 +373,6 @@ export class HabitManager {
 
   async _syncOrders(siblings) {
     for (const h of siblings) {
-      const props = this.plugin.habitNoteManager._habitToProps(h);
       const path = this.plugin.habitNoteManager.getHabitFilePath(h.name, h.archived);
       await this.plugin.habitNoteManager.updateHabitNoteProps(path, { order: h.order });
     }

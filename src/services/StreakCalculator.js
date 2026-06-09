@@ -16,12 +16,6 @@ export class StreakCalculator {
       return cached.value;
     }
 
-    // SNAPSHOT SYSTEM LOGIC
-    // Check if we have a valid snapshot in the habit settings
-    let snapshot = habit.streakSnapshot || null;
-    let daysToLookBack = 365;
-    const MAX_FILE_READS = 200;
-    
     let currentStreak = 0;
     let longestStreak = habit.savedLongestStreak || 0;
     let firstCompletionDate = null;
@@ -36,53 +30,11 @@ export class StreakCalculator {
     let tempStreak = 0;
 
     const today = moment();
-
-    // If snapshot exists, we only need to look back to the lastCalculatedDate
-    if (snapshot && snapshot.lastCalculatedDate) {
-      const lastCalcMoment = moment(snapshot.lastCalculatedDate);
-      if (lastCalcMoment.isValid() && lastCalcMoment.isBefore(today, 'day')) {
-        daysToLookBack = today.diff(lastCalcMoment, 'days');
-        
-        // Load state from snapshot
-        currentStreak = snapshot.currentStreak || 0;
-        longestStreak = Math.max(longestStreak, snapshot.longestStreak || 0);
-        firstCompletionDate = snapshot.firstCompletionDate ? moment(snapshot.firstCompletionDate) : null;
-        consistencyCompleted = snapshot.consistencyCompleted || 0;
-        consistencyScheduled = snapshot.consistencyScheduled || 0;
-        totalGapDays = snapshot.totalGapDays || 0;
-        gapCount = snapshot.gapCount || 0;
-        currentGapLength = snapshot.currentGapLength || 0;
-        ongoingGapLength = snapshot.ongoingGapLength || 0;
-        hasSeenFirstRightCompletion = snapshot.hasSeenFirstRightCompletion || false;
-        
-        // If we have a current streak, then the streak was not broken yet
-        if (currentStreak > 0) {
-          tempStreak = currentStreak;
-        } else {
-          currentStreakBroken = true;
-        }
-      } else if (lastCalcMoment.isSame(today, 'day')) {
-        daysToLookBack = 0; // Already up to date! Just checking today.
-        
-        currentStreak = snapshot.currentStreak || 0;
-        longestStreak = Math.max(longestStreak, snapshot.longestStreak || 0);
-        firstCompletionDate = snapshot.firstCompletionDate ? moment(snapshot.firstCompletionDate) : null;
-        consistencyCompleted = snapshot.consistencyCompleted || 0;
-        consistencyScheduled = snapshot.consistencyScheduled || 0;
-        totalGapDays = snapshot.totalGapDays || 0;
-        gapCount = snapshot.gapCount || 0;
-        currentGapLength = snapshot.currentGapLength || 0;
-        ongoingGapLength = snapshot.ongoingGapLength || 0;
-        hasSeenFirstRightCompletion = snapshot.hasSeenFirstRightCompletion || false;
-        if (currentStreak > 0) tempStreak = currentStreak;
-        else currentStreakBroken = true;
-      }
-    }
-
-    let fileReads = 0;
+    const daysToLookBack = 365;
     const CONSISTENCY_WINDOW = 30;
+    let fileReads = 0;
 
-    for (let i = 0; i <= daysToLookBack && fileReads < MAX_FILE_READS; i++) {
+    for (let i = 0; i <= daysToLookBack && fileReads < daysToLookBack; i++) {
       const date = today.clone().subtract(i, "days");
       const dayOfWeek = date.day();
 
@@ -107,17 +59,16 @@ export class StreakCalculator {
           parsedHabits = cached.parsedHabits;
         }
       } else {
-        // Fallback to global plugin's getNoteByDate temporarily via app access or import
-        // For now, we assume getNoteByDate is injected or available via this.plugin
         const dailyNote = await getNoteByDate(this.plugin.app, date, false, this.plugin.settings);
         if (!dailyNote) {
           if (i > 0) {
             if (!currentStreakBroken) currentStreakBroken = true;
-            tempStreak = 0;
-            if (hasSeenFirstRightCompletion) currentGapLength++; else ongoingGapLength++;
           }
+          tempStreak = 0;
+          if (hasSeenFirstRightCompletion) currentGapLength++; else ongoingGapLength++;
           continue;
         }
+        
         fileReads++;
         if (i === 0) {
           content = await this.plugin.app.vault.read(dailyNote);
@@ -141,7 +92,10 @@ export class StreakCalculator {
 
       if (entry && entry.completed) {
         tempStreak++;
-        if (!firstCompletionDate) firstCompletionDate = date.clone();
+        
+        if (!firstCompletionDate || date.isBefore(firstCompletionDate, 'day')) {
+          firstCompletionDate = date.clone();
+        }
 
         hasSeenFirstRightCompletion = true;
         if (currentGapLength > 0) {
@@ -160,7 +114,10 @@ export class StreakCalculator {
           consistencyCompleted++;
         }
       } else {
-        if (i === 0) continue;
+        if (i === 0) {
+          if (i < CONSISTENCY_WINDOW) consistencyScheduled++;
+          continue;
+        }
 
         if (!currentStreakBroken) {
           currentStreakBroken = true;
@@ -194,17 +151,8 @@ export class StreakCalculator {
       consistencyCompleted, 
       consistencyScheduled, 
       recoveryScore, 
-      ongoingGapLength,
-      // For snapshot storage
-      lastCalculatedDate: todayStr,
-      totalGapDays,
-      gapCount,
-      currentGapLength,
-      hasSeenFirstRightCompletion
+      ongoingGapLength
     };
-
-    // Save snapshot back to habit implicitly (the plugin must save settings)
-    habit.streakSnapshot = result;
 
     StreakCalculator.#cache.set(habit.id, {
       value: result,

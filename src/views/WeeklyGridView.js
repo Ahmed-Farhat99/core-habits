@@ -42,6 +42,8 @@ class WeeklyGridView extends ItemView {
     this._isCalculatingStreaks = false;
     this.streakContentCache = new Map();
     this.streakCalculator = new StreakCalculator(this.plugin, this.streakContentCache);
+    this.ignoreModifyFiles = new Set();
+    this.renderToken = 0;
     this.initializeWeek();
     this.debouncedRefresh = debounce(
       this.renderWeeklyGrid.bind(this),
@@ -57,7 +59,11 @@ class WeeklyGridView extends ItemView {
 
   async processStreakQueue() {
     this._isCalculatingStreaks = true;
+    const currentToken = this.renderToken;
     while (this._streakQueue.length > 0) {
+      if (this.renderToken !== currentToken) {
+        break; // Abort stale queue
+      }
       const { habit, row, isAr } = this._streakQueue.shift();
       try {
         const { currentStreak } = await this.streakCalculator.calculate(habit);
@@ -112,6 +118,11 @@ class WeeklyGridView extends ItemView {
         if (this.isTogglingInProgress) return;
         // Ignore updates during settings save to prevent cascade
         if (this.plugin._isSaving) return;
+
+        if (this.ignoreModifyFiles.has(file.path)) {
+          this.ignoreModifyFiles.delete(file.path);
+          return;
+        }
 
         if (this.activeFilePaths.has(file.path)) {
           Utils.debugLog(
@@ -198,6 +209,8 @@ class WeeklyGridView extends ItemView {
       this._streakCache = new Map();
       this.previousCellState.clear();
       this.previousSkipState.clear();
+      this._streakQueue = [];
+      this.renderToken = Date.now();
 
       const isAr = this.isAr;
       if (isAr) {
@@ -242,7 +255,7 @@ class WeeklyGridView extends ItemView {
       new Notice(isAr ? "⚠️ خطأ في عرض الأسبوع" : "⚠️ Weekly view error");
       try {
         this.app.vault.adapter.write("weekly_error.txt", err.stack || err.toString());
-      } catch(e) { /* ignore */ }
+      } catch { /* ignore */ }
     } finally {
       this._isRendering = false;
     }
@@ -380,8 +393,8 @@ class WeeklyGridView extends ItemView {
       const endDisplay = weekEnd.clone().locale(locale);
       element.textContent = `${startDisplay.format(dateFormat)} - ${endDisplay.format(dateFormat)}`;
     } else {
-      let hijriStart = DateUtils.getHijriDate(this.currentWeekStart);
-      let hijriEnd = DateUtils.getHijriDate(weekEnd);
+      let hijriStart = DateUtils.getHijriDate(this.currentWeekStart, this.isAr);
+      let hijriEnd = DateUtils.getHijriDate(weekEnd, this.isAr);
 
       if (hideYear) {
         hijriStart = hijriStart.replace(/\s+\d{4}\s*هـ?$/i, '').trim();
@@ -469,7 +482,7 @@ class WeeklyGridView extends ItemView {
         const dummyFrag = document.createElement("div");
         await this.renderHabitRow(dummyFrag, habit, weekContent, displayLabels[habitIdx], habits, colorHex);
         return { habit, row: dummyFrag.firstElementChild, error: false };
-      } catch (err) {
+      } catch {
         return { habit, row: null, error: true, errorName: habit.name };
       }
     });
@@ -812,7 +825,7 @@ class WeeklyGridView extends ItemView {
 
       if (this.plugin.settings.showHijriDate) {
         try {
-          const hijriDate = DateUtils.getHijriDate(dayDate);
+          const hijriDate = DateUtils.getHijriDate(dayDate, this.isAr);
           const hijriParts = hijriDate.replace(/\s+هـ$/, "").split(" ");
           const hijriShort = hijriParts.length >= 2 ? `${hijriParts[0]} ${hijriParts[1]}` : hijriDate;
           dayHeaderCell.createDiv({ text: hijriShort, cls: "day-date-hijri" });
@@ -941,7 +954,7 @@ class WeeklyGridView extends ItemView {
     }
 
     // Streak badge slot — placed inside metaWrapper
-    const streakBadgeSlot = metaWrapper.createSpan({ cls: "dh-streak-badge-slot" });
+    metaWrapper.createSpan({ cls: "dh-streak-badge-slot" });
     this.queueStreakCalculation(habit, row, isAr);
 
     // Icon to open linked habit page — always last in meta block
@@ -1187,7 +1200,7 @@ class WeeklyGridView extends ItemView {
 
       try {
         dailyContentByIndex.set(i, await this.app.vault.cachedRead(dailyNote));
-      } catch (e) {
+      } catch {
         // ignore cachedRead errors
       }
     }
@@ -1266,6 +1279,7 @@ class WeeklyGridView extends ItemView {
       const habitEntry = findHabitEntry(habits, habit.linkText, habit.nameHistory);
 
       if (habitEntry) {
+        this.ignoreModifyFiles.add(dailyNote.path);
         await toggleHabit(this.plugin, this.app, dailyNote, habitEntry, this.plugin.settings.marker, targetState);
         StreakCalculator.invalidate(habit.id); // Invalidate cache
 
@@ -1350,7 +1364,7 @@ class WeeklyGridView extends ItemView {
       } else {
         new Notice(isAr ? "⚠️ العادة غير موجودة في الملاحظة" : "⚠️ Habit not found in note");
       }
-    } catch (error) {
+    } catch {
       new Notice(isAr ? "⚠️ حدث خطأ أثناء تحديث العادة" : "⚠️ Error updating habit");
     } finally {
       this.isProcessing = false;
@@ -1756,7 +1770,8 @@ class WeeklyGridView extends ItemView {
       text: isAr ? "متوسط أداء كل يوم خلال الـ 28 يوماً الماضية. اكتشف يوم 'التسريب' وعالجه، ويوم ذروتك واستغله." : "Average performance over the last 28 days. Find your 'leaky' day to fix and your golden day to leverage."
     });
 
-    const tableDays = daySection.createEl("table", { cls: "dh-dashboard-table day-patterns-table" });
+    const tableWrapperDays = daySection.createDiv({ cls: "dh-table-responsive-wrapper" });
+    const tableDays = tableWrapperDays.createEl("table", { cls: "dh-dashboard-table day-patterns-table" });
     const theadDays = tableDays.createEl("thead");
     const trThDays = theadDays.createEl("tr");
 

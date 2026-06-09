@@ -3,8 +3,7 @@ import { Utils } from './Utils.js';
 import { 
   DEFAULT_REFLECTION_HEADING, 
   DEFAULT_HABIT_NOTES_HEADING, 
-  normalizeReflectionType,
-  DAY_KEYS
+  normalizeReflectionType
 } from '../constants.js';
 import { StreakCalculator } from '../services/StreakCalculator.js';
 
@@ -258,7 +257,7 @@ class DateUtils {
       : "";
   }
 
-  static getHijriDate(date) {
+  static getHijriDate(date, isAr = true) {
     if (!date) return "-";
     try {
       let nativeDate;
@@ -272,15 +271,18 @@ class DateUtils {
         nativeDate = new Date(date);
       }
 
-      if (isNaN(nativeDate.getTime())) return "التاريخ الهجري غير متاح";
+      if (isNaN(nativeDate.getTime())) return isAr ? "التاريخ الهجري غير متاح" : "Hijri date unavailable";
 
-      const formatter = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", {
+      const localeString = isAr ? "ar-SA-u-ca-islamic-umalqura" : "en-u-ca-islamic-umalqura";
+      const formatter = new Intl.DateTimeFormat(localeString, {
         day: "numeric",
         month: "long",
         year: "numeric",
       });
 
       let formatted = formatter.format(nativeDate);
+      
+      // Convert Eastern Arabic numerals to Western Arabic numerals if present
       const arabicToEnglish = {
         "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4",
         "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
@@ -289,7 +291,7 @@ class DateUtils {
       return formatted.replace(/[٠-٩]/g, (digit) => arabicToEnglish[digit]);
     } catch (error) {
       console.warn("[Core Habits] Hijri date format error:", error);
-      return "التاريخ الهجري غير متاح";
+      return isAr ? "التاريخ الهجري غير متاح" : "Hijri date unavailable";
     }
   }
 }
