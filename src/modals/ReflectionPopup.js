@@ -59,23 +59,23 @@ class ReflectionPopup extends Modal {
       }
     });
 
-    const footer = contentEl.createDiv({ cls: "dh-popup-footer dh-popup-footer-split" });
+    const footer = contentEl.createDiv({ cls: "dh-modal-actions dh-popup-footer-split" });
 
     const actionsLeft = footer.createDiv({ cls: "dh-popup-actions-left" });
     const micBtn = actionsLeft.createEl("button", {
-      cls: "dh-popup-btn-cancel dh-popup-mic-btn",
-      text: isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note",
-      title: isAr ? "تسجيل ملاحظة صوتية" : "Record Voice Note"
+      cls: "dh-popup-mic-btn",
+      text: isAr ? "🎙️ تسجيل (اضغط مطولاً)" : "🎙️ Record (Hold)",
+      title: isAr ? "اضغط مطولاً لتسجيل ملاحظة صوتية" : "Press and hold to record a voice note"
     });
 
     const actionsRight = footer.createDiv({ cls: "dh-popup-actions-right" });
 
     const saveBtn = actionsRight.createEl("button", {
-      text: isAr ? "📝 حفظ التدوين" : "📝 Save",
-      cls: "dh-popup-btn-save"
+      text: isAr ? "💾 حفظ التدوين" : "💾 Save",
+      cls: "mod-cta"
     });
 
-    const cancelBtn = actionsRight.createEl("button", { text: isAr ? "إلغاء" : "Cancel", cls: "dh-popup-btn-cancel" });
+    const cancelBtn = actionsRight.createEl("button", { text: isAr ? "إلغاء" : "Cancel" });
     cancelBtn.onclick = () => this.close();
 
     let isRecording = false;

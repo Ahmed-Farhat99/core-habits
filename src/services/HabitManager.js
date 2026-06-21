@@ -1,4 +1,5 @@
 import { Utils } from '../utils/Utils.js';
+import { getNoteByDate } from '../utils/helpers.js';
 
 export class HabitManager {
   constructor(plugin) {
@@ -113,6 +114,9 @@ export class HabitManager {
   }
 
   async addHabit(habitData) {
+    delete habitData._renameInFiles;
+    delete habitData.isArchived;
+
     const errors = this.validateHabit(habitData);
     if (errors.length > 0) throw new Error(`Validation failed: ${errors.join(", ")}`);
 
@@ -156,6 +160,9 @@ export class HabitManager {
   }
 
   async updateHabit(id, habitData) {
+    delete habitData._renameInFiles;
+    delete habitData.isArchived;
+
     const currentHabit = this.getHabitById(id);
     if (!currentHabit) throw new Error(`Habit not found: ${id}`);
 
@@ -395,12 +402,11 @@ export class HabitManager {
     return scheduled;
   }
 
-  async ensureHabitsInNote(date) {
+  async ensureHabitsInNote(date, forceHabit = null) {
     if (!this.plugin.settings.autoWriteHabits) return;
 
     // Use lock to prevent race with toggles
     try {
-      const { getNoteByDate } = require('../utils/helpers.js');
       const dailyNote = await getNoteByDate(this.plugin.app, date, true, this.plugin.settings);
       if (!dailyNote) return;
 
@@ -408,6 +414,10 @@ export class HabitManager {
         const originalContent = content;
         const dayOfWeek = date.day();
         const scheduledHabits = this.getHabitsForDay(dayOfWeek);
+
+        if (forceHabit && !scheduledHabits.some(h => h.id === forceHabit.id)) {
+          scheduledHabits.push(forceHabit);
+        }
 
         if (scheduledHabits.length === 0) return originalContent;
 

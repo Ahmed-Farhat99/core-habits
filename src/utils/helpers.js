@@ -317,7 +317,7 @@ function getDailyNotesInfo(app, pluginSettings = null) {
       }
       return info;
     }
-  } catch(e) { /* ignore */ }
+  } catch { /* ignore */ }
 
   try {
     const pn = app.plugins?.getPlugin("periodic-notes");
@@ -328,7 +328,7 @@ function getDailyNotesInfo(app, pluginSettings = null) {
       info.template = pn.settings.daily.template || "";
       return info;
     }
-  } catch(e) { /* ignore */ }
+  } catch { /* ignore */ }
 
   if (fallbackFolder || (pluginSettings?.dateFormat && pluginSettings.dateFormat !== "YYYY-MM-DD")) {
     info.source = "manual";

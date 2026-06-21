@@ -1,11 +1,13 @@
-import { ItemView, setIcon, Notice, debounce, Modal, MarkdownRenderer } from 'obsidian';
-import { VIEW_TYPE_WEEKLY, DAY_KEYS, resolveHabitColorHex, DEBOUNCE_DELAY_MS, normalizeReflectionType, DEFAULT_REFLECTION_HEADING, DEFAULT_HABIT_NOTES_HEADING, REFLECTION_ENTRY_TYPES } from '../constants.js';
+import { ItemView, setIcon, Notice, debounce, Modal } from 'obsidian';
+import { VIEW_TYPE_WEEKLY, DAY_KEYS, resolveHabitColorHex, DEBOUNCE_DELAY_MS, normalizeReflectionType, DEFAULT_REFLECTION_HEADING, DEFAULT_HABIT_NOTES_HEADING } from '../constants.js';
 import { Utils } from '../utils/Utils.js';
 import { AddHabitModal } from '../modals/AddHabitModal.js';
 import { HabitCommentPopup } from '../modals/HabitCommentPopup.js';
 import { ReflectionPopup } from '../modals/ReflectionPopup.js';
 import { StreakCalculator } from '../services/StreakCalculator.js';
-import { getNoteByDate, toggleHabit, findHabitEntry, DateUtils, TextUtils, calculateCurrentLevel, buildHierarchyLabels, injectHabitCommentIntoDailyNote, injectReflectionIntoDailyNote, fixAudioDuration } from '../utils/helpers.js';
+import { getNoteByDate, toggleHabit, findHabitEntry, DateUtils, TextUtils, calculateCurrentLevel, buildHierarchyLabels, injectHabitCommentIntoDailyNote, injectReflectionIntoDailyNote } from '../utils/helpers.js';
+import { DiaryRenderer } from './DiaryRenderer.js';
+import { DashboardRenderer } from './DashboardRenderer.js';
 
 class WeeklyGridView extends ItemView {
   get isAr() {
@@ -24,6 +26,8 @@ class WeeklyGridView extends ItemView {
     this.currentViewMode = "grid";
     this.diaryViewMode = this.plugin.settings.diaryViewMode || "grouped";
     this.dailyReflectionDays = new Set();
+    this.diaryRenderer = new DiaryRenderer(this);
+    this.dashboardRenderer = new DashboardRenderer(this);
     // Load persisted collapse state from plugin data (survives Obsidian restarts)
     // Migration: convert old ":settings_expanded" keys to new ":expanded" format
     let groups = this.plugin.settings.collapsedGroups || [];
@@ -224,9 +228,9 @@ class WeeklyGridView extends ItemView {
       await this.renderWeekHeader(tempContainer, isAr);
 
       if (this.currentViewMode === "dashboard") {
-        await this.renderDecisionDashboard(tempContainer);
+        await this.dashboardRenderer.render(tempContainer);
       } else if (this.currentViewMode === "diary") {
-        await this.renderDiaryView(tempContainer);
+        await this.diaryRenderer.render(tempContainer);
       } else {
         this.streakCalculator = new StreakCalculator(this.plugin, this._streakCache);
         const today = window.moment();
@@ -556,14 +560,16 @@ class WeeklyGridView extends ItemView {
 
     if (this.plugin.settings.enableReflectionJournal) {
       const tfoot = table.createDiv({ cls: "habits-tfoot" });
-      const footerRow = tfoot.createDiv({ cls: "dh-reflection-footer-row dh-grid-row diary-row dh-mobile-card" });
+      const footerRow = tfoot.createDiv({ cls: "dh-reflection-footer-row dh-grid-row diary-row" });
       
       // Index column placeholder
       footerRow.createDiv({ cls: "habit-index-header dh-grid-cell" });
       
       // Diary Title column
       const titleCell = footerRow.createDiv({ cls: "dh-footer-title dh-grid-cell" });
-      titleCell.createSpan({ text: this.isAr ? "📝 يومياتي" : "📝 Diary" });
+      const iconSpan = titleCell.createSpan();
+      setIcon(iconSpan, "book-open");
+      titleCell.createSpan({ text: this.isAr ? " يومياتي" : " Diary" });
       
       const today = window.moment();
       for (let index = 0; index < 7; index++) {
@@ -1244,7 +1250,9 @@ class WeeklyGridView extends ItemView {
 
     try {
       if (this.plugin.settings.autoWriteHabits) {
-        await this.plugin.habitManager.ensureHabitsInNote(date);
+        await this.plugin.habitManager.ensureHabitsInNote(date, habit);
+        // Prevent Obsidian vault.read() cache race condition after vault.process()
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
 
       let dailyNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
@@ -1441,400 +1449,7 @@ class WeeklyGridView extends ItemView {
     new Notice(messages[Math.floor(Math.random() * messages.length)], 3000);
   }
 
-  /* -------------------------------------------------------------------------
-     NEW: Decision Dashboard Methods
-     ------------------------------------------------------------------------- */
-  async syncLifetimeAchievements(containerEl, isAr) {
-    if (typeof this.plugin.settings.lifetimeCompleted === "number") return;
 
-    const loadingEl = containerEl.createDiv({ cls: "dh-loading-spinner text-center" });
-
-    let totalCompleted = 0;
-    try {
-      let files = this.app.vault.getMarkdownFiles().filter(f => !f.path.startsWith(".obsidian") && f.stat.size < 500000);
-      if (files.length > 2000) {
-        files = files.slice(0, 2000);
-        new Notice(isAr ? "⚠️ تمت معالجة أحدث 2000 ملف فقط لتجنب ضغط الذاكرة" : "⚠️ Processed limit 2000 files to save memory", 5000);
-      }
-      const BATCH_SIZE = 20;
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        loadingEl.textContent = isAr
-          ? `جاري الحساب التراكمي... (${Math.min(i + BATCH_SIZE, files.length)}/${files.length} ملف) ⏳`
-          : `Calculating... (${Math.min(i + BATCH_SIZE, files.length)}/${files.length} files) ⏳`;
-        const batch = files.slice(i, i + BATCH_SIZE);
-        const batchResults = await Promise.all(batch.map(async (file) => {
-          const content = await this.app.vault.cachedRead(file);
-          if (!content.includes(this.plugin.settings.marker)) return 0;
-          const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-          return habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
-        }));
-        totalCompleted += batchResults.reduce((sum, n) => sum + n, 0);
-      }
-      this.plugin.settings.lifetimeCompleted = totalCompleted;
-      await this.plugin.saveSettings({ silent: true });
-    } catch (e) {
-      Utils.debugLog(this.plugin, "Failed to sync lifetime stats", e);
-      this.plugin.settings.lifetimeCompleted = 0;
-    }
-
-    loadingEl.remove();
-    await this.renderDecisionDashboard(containerEl.parentElement);
-  }
-
-  async analyzeLastFourWeeks() {
-    const now = Date.now();
-    if (this._lastFourWeeksCache && (now - this._lastFourWeeksCache.timestamp < 120000)) {
-      return this._lastFourWeeksCache.data;
-    }
-
-    const today = window.moment();
-    const isAr = this.isAr;
-    const weeksData = [];
-    const dayStats = {};
-    const habitStats = {};
-
-    // Analyze over the last 4 weeks leading up to the current week
-    const startOfAnalysisMs = this.currentWeekStart.clone().subtract(3, "weeks").startOf("day").valueOf();
-    const endOfAnalysisMs = this.currentWeekStart.clone().add(6, "days").endOf("day").valueOf();
-    const habits = this.plugin.habitManager.getHabitsForTimeRange(startOfAnalysisMs, endOfAnalysisMs);
-
-    if (habits.length === 0) return { weeksData: [], dayStats: {}, bestHabit: null, worstHabit: null, isAr };
-
-    for (const habit of habits) {
-      habitStats[habit.id] = {
-        id: habit.id,
-        name: (habit.name || habit.linkText || "Unknown").replace(/\[\[|\]\]/g, ""),
-        completed: 0,
-        total: 0
-      };
-    }
-
-    for (let w = 0; w < 4; w++) {
-      const weekStart = this.currentWeekStart.clone().subtract(w * 7, "days");
-      let weekCompleted = 0;
-      let weekTotal = 0;
-
-      const dayPromises = [];
-      for (let i = 0; i < 7; i++) {
-        const dayDate = weekStart.clone().add(i, "days");
-        if (dayDate.isAfter(today, "day")) continue;
-
-        const dayOfWeek = dayDate.day();
-        if (!dayStats[dayOfWeek]) {
-          dayStats[dayOfWeek] = { completed: 0, total: 0 };
-        }
-
-        dayPromises.push((async () => {
-          const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
-          if (!dailyNote) return null;
-
-          const content = await this.app.vault.cachedRead(dailyNote);
-          const scanned = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-
-          const results = [];
-          for (const habit of habits) {
-            const entry = findHabitEntry(scanned, habit.linkText, habit.nameHistory);
-            if (entry && !entry.skipped) {
-              results.push({
-                habitId: habit.id,
-                dayOfWeek,
-                completed: entry.completed ? 1 : 0
-              });
-            }
-          }
-          return results;
-        })());
-      }
-
-      const daysResults = [];
-      for (const promise of dayPromises) {
-        daysResults.push(await promise);
-      }
-
-      for (const results of daysResults) {
-        if (!results) continue;
-        for (const res of results) {
-          weekTotal++;
-          dayStats[res.dayOfWeek].total++;
-          habitStats[res.habitId].total++;
-          if (res.completed) {
-            weekCompleted++;
-            dayStats[res.dayOfWeek].completed++;
-            habitStats[res.habitId].completed++;
-          }
-        }
-      }
-
-      weeksData.push({
-        weekStart: weekStart,
-        rate: weekTotal > 0 ? Math.round((weekCompleted / weekTotal) * 100) : 0
-      });
-    }
-
-    let bestHabit = null;
-    let worstHabit = null;
-    let maxHabitPct = -1;
-    let minHabitPct = 101;
-
-    for (const hId in habitStats) {
-      const st = habitStats[hId];
-      if (st.total > 0) {
-        const pct = Math.round((st.completed / st.total) * 100);
-        if (pct > maxHabitPct) { maxHabitPct = pct; bestHabit = Object.assign({}, st, { pct }); }
-        if (pct < minHabitPct) { minHabitPct = pct; worstHabit = Object.assign({}, st, { pct }); }
-      }
-    }
-
-    const result = { weeksData, dayStats, bestHabit, worstHabit, isAr };
-    this._lastFourWeeksCache = { timestamp: now, data: result };
-    return result;
-  }
-
-  async renderDecisionDashboard(container) {
-    container.addClass("decision-dashboard-container");
-    const isAr = this.isAr;
-
-    if (typeof this.plugin.settings.lifetimeCompleted !== "number") {
-      const btnGroup = container.createDiv({ cls: "dh-pulse-card", style: "text-align: center; padding: 20px;" });
-      btnGroup.createEl("h3", { text: isAr ? "حساب الإنجازات التراكمية" : "Calculate Lifetime Achievements" });
-      btnGroup.createEl("p", { text: isAr ? "لحساب الإحصائيات الشاملة، نحتاج إلى فحص ملفاتك لمرة واحدة فقط." : "To calculate global stats, we need to scan your files once." });
-      const btn = btnGroup.createEl("button", { cls: "mod-cta" });
-      btn.textContent = isAr ? "بدء الحساب التراكمي الآن" : "Start Calculation Now";
-      btn.onclick = async () => {
-        btnGroup.empty();
-        await this.syncLifetimeAchievements(container, isAr);
-      };
-      return;
-    }
-
-    // --- Section 1: Global Pulse Cards ---
-    const cardsRow = container.createDiv({ cls: "dh-pulse-cards-row dh-grid-row" });
-
-    const lifetimeCard = cardsRow.createDiv({ cls: "dh-pulse-card" });
-    lifetimeCard.createDiv({ cls: "pulse-title", text: isAr ? "إجمالي الإنجازات" : "Lifetime Achievements" });
-    lifetimeCard.createDiv({ cls: "pulse-value", text: (this.plugin.settings.lifetimeCompleted || 0).toString() });
-    lifetimeCard.createDiv({ cls: "pulse-subtitle", text: isAr ? "🌟 علامة [x] مسطّرة في تاريخك" : "🌟 Total [x] in your vault" });
-
-    const activeHabits = this.plugin.habitManager.getActiveHabits();
-    const builds = activeHabits.filter(h => h.habitType === "build").length;
-    const breaks = activeHabits.filter(h => h.habitType === "break").length;
-
-    const identityCard = cardsRow.createDiv({ cls: "dh-pulse-card" });
-    identityCard.createDiv({ cls: "pulse-title", text: isAr ? "توزيع الهوية" : "Identity Mix" });
-    const identityVal = identityCard.createDiv({ cls: "pulse-value identity-value" });
-
-    const buildWrap = identityVal.createDiv({ cls: "id-stat build-stat" });
-    buildWrap.createSpan({ cls: "id-dot green-dot" });
-    buildWrap.createSpan({ text: isAr ? `بناء: ${builds}` : `Build: ${builds}` });
-
-    const breakWrap = identityVal.createDiv({ cls: "id-stat break-stat" });
-    breakWrap.createSpan({ cls: "id-dot red-dot" });
-    breakWrap.createSpan({ text: isAr ? `ترك: ${breaks}` : `Break: ${breaks}` });
-
-    // Header notice based on user request (no textareas)
-    const advisoryNote = container.createDiv({ cls: "dh-advisory-note" });
-    advisoryNote.createSpan({ cls: "adv-icon", text: "💡" });
-    advisoryNote.createSpan({
-      cls: "adv-text", text: isAr
-        ? "نصيحة: إذا اتخذت قراراً جديداً بناءً على هذه الأرقام، اكتبه فوراً في ملاحظة اليوم أو في ملف العادة لتثبيته."
-        : "Tip: If you make a new decision based on these trends, write it immediately in today's note or the habit file."
-    });
-
-    // Render skeleton loader while data crunches (prevents UI freeze feeling)
-    const loadingState = container.createDiv({ cls: "dh-skeleton-loader" });
-    const skeletonCardsGrid = loadingState.createDiv({ cls: "dh-skeleton-cards-grid" });
-    skeletonCardsGrid.createDiv({ cls: "dh-skeleton-card" });
-    skeletonCardsGrid.createDiv({ cls: "dh-skeleton-card" });
-    loadingState.createDiv({ cls: "dh-skeleton-row" });
-    loadingState.createDiv({ cls: "dh-skeleton-row short" });
-    loadingState.createDiv({ cls: "dh-skeleton-card" });
-    loadingState.createDiv({ cls: "dh-skeleton-row" });
-    loadingState.createDiv({ cls: "dh-skeleton-row short" });
-
-    const { weeksData, dayStats, bestHabit, worstHabit } = await this.analyzeLastFourWeeks();
-    loadingState.remove();
-
-    if (weeksData.length === 0) return;
-
-    // --- Section 2: Weekly Trends Table ---
-    const trendsSection = container.createDiv({ cls: "dh-dashboard-section" });
-    trendsSection.createEl("h3", { text: isAr ? "📈 اتجاهات الأسابيع الأخيرة" : "📈 Recent Weekly Trends" });
-    trendsSection.createEl("p", {
-      cls: "dh-section-desc",
-      text: isAr ? "نظرة على آخر 4 أسابيع فقط (وليس كل تاريخك) لمعرفة مسارك الحالي واتخاذ قرارات تصحيحية فورية." : "A look at your last 4 weeks only to discover your current trajectory and make quick course corrections."
-    });
-
-    const tableTrends = trendsSection.createEl("table", { cls: "dh-dashboard-table" });
-    const theadTrends = tableTrends.createEl("thead");
-    const trThTrends = theadTrends.createEl("tr");
-    trThTrends.createEl("th", { text: isAr ? "الأسبوع" : "Week" });
-    trThTrends.createEl("th", { text: isAr ? "نسبة الإنجاز" : "Completion Rate" });
-    trThTrends.createEl("th", { text: isAr ? "التغير (Trend)" : "Trend" });
-
-    const tbodyTrends = tableTrends.createEl("tbody");
-
-    // We show from Week 0 to Week -3
-    for (let i = 0; i < weeksData.length; i++) {
-      const tr = tbodyTrends.createEl("tr");
-      let weekName;
-      if (i === 0) weekName = isAr ? "هذا الأسبوع (مختار)" : "Current Week (Selected)";
-      else if (i === 1) weekName = isAr ? "الأسبوع الماضي" : "Last Week (-1)";
-      else weekName = isAr ? `الأسبوع -${i}` : `Week -${i}`;
-
-      tr.createEl("td", { text: weekName });
-      tr.createEl("td", { text: `${weeksData[i].rate}%` });
-
-      // Trend cell (compared to prior week if exists)
-      const trendCell = tr.createEl("td");
-      if (i < weeksData.length - 1) {
-        const diff = weeksData[i].rate - weeksData[i + 1].rate;
-        if (diff > 0) {
-          trendCell.textContent = isAr ? `🟢 تقدم بـ ${diff}%` : `🟢 +${diff}%`;
-          trendCell.style.color = 'var(--dh-progress-excellent)';
-        } else if (diff < 0) {
-          const absDiff = Math.abs(diff);
-          trendCell.textContent = isAr ? `🔴 تراجع بـ ${absDiff}%` : `🔴 -${absDiff}%`;
-          trendCell.style.color = 'var(--dh-progress-critical)';
-        } else {
-          trendCell.textContent = isAr ? `➖ استقرار` : `➖ 0%`;
-        }
-      } else {
-        trendCell.textContent = "—";
-      }
-    }
-
-    // --- Best & Worst Habits Highlighter ---
-    if (bestHabit && worstHabit && bestHabit.name !== worstHabit.name) {
-      const habitsFocus = container.createDiv({ cls: "dh-habit-focus-box" });
-
-      const bestEl = habitsFocus.createDiv({ cls: "focus-item best-focus clickable-card" });
-      bestEl.createDiv({ cls: "focus-icon", text: "🎯" });
-      const bText = bestEl.createDiv({ cls: "focus-text" });
-      bText.createDiv({ cls: "focus-label", text: isAr ? "العادة الأقوى التزاماً" : "Most Consistent" });
-      bText.createDiv({ cls: "focus-name", text: `${bestHabit.name} (${bestHabit.pct}%)` });
-
-      bestEl.onclick = () => {
-        const h = this.plugin.habitManager.getHabitById(bestHabit.id);
-        if (h) {
-          new AddHabitModal(
-            this.app,
-            this.plugin,
-            async (updatedData) => {
-              try {
-                if (updatedData.levelData) updatedData.currentLevel = calculateCurrentLevel(updatedData.levelData);
-                await this.plugin.habitManager.updateHabit(h.id, updatedData);
-                await this.renderWeeklyGrid();
-                new Notice(`✅ ${updatedData.name}`);
-              } catch (e) {
-                new Notice(`❌ Error: ${e.message}`);
-              }
-            },
-            h
-          ).open();
-        }
-      };
-
-      const worstEl = habitsFocus.createDiv({ cls: "focus-item worst-focus clickable-card" });
-      worstEl.createDiv({ cls: "focus-icon", text: "⚠️" });
-      const wText = worstEl.createDiv({ cls: "focus-text" });
-      wText.createDiv({ cls: "focus-label", text: isAr ? "العادة الأضعف (نقطة تسريب)" : "Needs Attention" });
-      wText.createDiv({ cls: "focus-name", text: `${worstHabit.name} (${worstHabit.pct}%)` });
-
-      worstEl.onclick = () => {
-        const h = this.plugin.habitManager.getHabitById(worstHabit.id);
-        if (h) {
-          new AddHabitModal(
-            this.app,
-            this.plugin,
-            async (updatedData) => {
-              try {
-                if (updatedData.levelData) updatedData.currentLevel = calculateCurrentLevel(updatedData.levelData);
-                await this.plugin.habitManager.updateHabit(h.id, updatedData);
-                await this.renderWeeklyGrid();
-                new Notice(`✅ ${updatedData.name}`);
-              } catch (e) {
-                new Notice(`❌ Error: ${e.message}`);
-              }
-            },
-            h
-          ).open();
-        }
-      };
-    }
-
-    // --- Section 3: Day-by-Day Analysis ---
-    const daySection = container.createDiv({ cls: "dh-dashboard-section" });
-    daySection.createEl("h3", { text: isAr ? "📅 تحليل الأنماط اليومية (المتوسط)" : "📅 Day-by-Day Patterns (Average)" });
-    daySection.createEl("p", {
-      cls: "dh-section-desc",
-      text: isAr ? "متوسط أداء كل يوم خلال الـ 28 يوماً الماضية. اكتشف يوم 'التسريب' وعالجه، ويوم ذروتك واستغله." : "Average performance over the last 28 days. Find your 'leaky' day to fix and your golden day to leverage."
-    });
-
-    const tableWrapperDays = daySection.createDiv({ cls: "dh-table-responsive-wrapper" });
-    const tableDays = tableWrapperDays.createEl("table", { cls: "dh-dashboard-table day-patterns-table" });
-    const theadDays = tableDays.createEl("thead");
-    const trThDays = theadDays.createEl("tr");
-
-    // Reorder days based on language settings
-    const wsd = this.plugin.settings.weekStartDay;
-    const dayOrder = Array.from({ length: 7 }, (_, i) => (wsd + i) % 7);
-
-    for (const d of dayOrder) {
-      trThDays.createEl("th", { text: this.plugin.translationManager.t(DAY_KEYS[d]) });
-    }
-
-    // Find min/max for highlighting
-    let maxPct = -1;
-    let minPct = 101;
-    let validDaysCount = 0;
-
-    const computedDays = {};
-    for (const d of dayOrder) {
-      const stats = dayStats[d];
-      if (!stats || stats.total === 0) {
-        computedDays[d] = NaN;
-      } else {
-        const pct = Math.round((stats.completed / stats.total) * 100);
-        computedDays[d] = pct;
-        validDaysCount++;
-        if (pct > maxPct) maxPct = pct;
-        if (pct < minPct) minPct = pct;
-      }
-    }
-
-    if (maxPct === minPct) {
-      minPct = -1;
-      maxPct = -1;
-    }
-
-    const tbodyDays = tableDays.createEl("tbody");
-    const trTbDays = tbodyDays.createEl("tr");
-
-    for (const d of dayOrder) {
-      const td = trTbDays.createEl("td");
-      const v = computedDays[d];
-      if (isNaN(v)) {
-        td.textContent = "—";
-      } else {
-        let content = `${v}%`;
-        if (v === maxPct) {
-          content += " ✅";
-          td.addClass("day-golden");
-        } else if (v === minPct) {
-          content += " 🔴";
-          td.addClass("day-weakest");
-        }
-        td.textContent = content;
-      }
-    }
-
-    if (validDaysCount > 0 && maxPct !== -1) {
-      const diagnosis = daySection.createDiv({ cls: "day-diagnosis-text" });
-      diagnosis.textContent = isAr
-        ? "توجيه: أضعف أيامك باللون الأحمر، وهو 'نقطة التسريب'. أما أقوى أيامك بالأخضر، فحاول استنساخ ما تفعله فيه!"
-        : "Guideline: Red indicates your weakest day that needs a routine fix, and Green is your strongest. Double down on what works!";
-    }
-  }
 
   refreshRowMeta(habit) {
     const container = this.getWeeklyContentContainer();
@@ -1980,31 +1595,7 @@ class WeeklyGridView extends ItemView {
     return entries;
   }
 
-  async readWeeklyDiaryEntries() {
-    const entries = [];
-    this.dailyReflectionDays = new Set();
-    this.activeFilePaths.clear();
 
-    for (let i = 0; i < 7; i++) {
-      const dayDate = this.currentWeekStart.clone().add(i, "days");
-      const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
-      if (!dailyNote) continue;
-
-      try {
-        const content = await this.app.vault.cachedRead(dailyNote);
-        this.activeFilePaths.add(dailyNote.path);
-        const dayEntries = this.parseDailyReflectionEntries(content, dayDate, dailyNote.path);
-        if (dayEntries.length > 0) {
-          this.dailyReflectionDays.add(DateUtils.formatDateKey(dayDate));
-          entries.push(...dayEntries);
-        }
-      } catch (e) {
-        Utils.debugLog(this.plugin, "Failed to read diary daily note", dailyNote.path, e);
-      }
-    }
-
-    return entries.sort((a, b) => b.timestamp - a.timestamp);
-  }
 
   openReflectionPopup(dayDate) {
     const dateKey = DateUtils.formatDateKey(dayDate);
@@ -2016,188 +1607,7 @@ class WeeklyGridView extends ItemView {
     }).open();
   }
 
-  renderDiaryEntryCard(parent, entry, isAr) {
-    const typeMeta = this.getReflectionTypeMeta(entry.type, isAr);
-    const entryCard = parent.createDiv({ cls: `dh-diary-entry-card type-${typeMeta.cls}` });
 
-    const cardHeader = entryCard.createDiv({ cls: "entry-card-header" });
-    const datePart = cardHeader.createDiv({ cls: "entry-date-part" });
-    datePart.createSpan({ cls: "entry-day", text: entry.moment.clone().locale(isAr ? "ar" : "en").format("dddd") });
-    datePart.createSpan({ cls: "entry-date", text: entry.moment.clone().locale(isAr ? "ar" : "en").format("D MMMM") });
-
-    const badgePart = cardHeader.createDiv({ cls: "entry-badge-part" });
-    badgePart.createSpan({ cls: `entry-type-badge type-${typeMeta.cls}`, text: typeMeta.label });
-    if (entry.time) {
-      badgePart.createSpan({ cls: "entry-time-badge", text: entry.time });
-    }
-
-    const bodyEl = entryCard.createDiv({ cls: "entry-card-body" });
-    const allWebmMatches = [...entry.text.matchAll(/!\[\[([^\]]+\.webm)\]\]/gi)];
-
-    if (allWebmMatches.length > 0) {
-      let remainingText = entry.text;
-      allWebmMatches.forEach(webmMatch => {
-        remainingText = remainingText.replace(webmMatch[0], "");
-        const fileName = webmMatch[1];
-        const audioFile = this.app.metadataCache.getFirstLinkpathDest(fileName, "");
-        if (audioFile) {
-          const src = this.app.vault.getResourcePath(audioFile);
-          const audioEl = bodyEl.createEl("audio", { attr: { controls: true, src: src } });
-          fixAudioDuration(audioEl);
-          audioEl.style.width = "100%";
-          audioEl.style.height = "36px";
-          audioEl.style.marginTop = "4px";
-          audioEl.style.borderRadius = "8px";
-          audioEl.onclick = (e) => e.stopPropagation();
-        }
-      });
-      remainingText = remainingText.trim();
-      if (remainingText) {
-        bodyEl.createDiv({ text: remainingText, cls: "entry-action-text", attr: { style: "margin-top: 6px;" } });
-      }
-    } else if (entry.text.includes("![[")) {
-      MarkdownRenderer.renderMarkdown(entry.text, bodyEl, entry.path || "", this);
-    } else {
-      bodyEl.setText(entry.text);
-    }
-
-    entryCard.onclick = async () => {
-      const dailyNote = await getNoteByDate(this.app, entry.moment, false, this.plugin.settings);
-      if (dailyNote) {
-        await this.app.workspace.getLeaf(false).openFile(dailyNote);
-      }
-    };
-  }
-
-  renderDiaryTypeSections(container, entries, isAr) {
-    REFLECTION_ENTRY_TYPES.forEach(type => {
-      const typeMeta = this.getReflectionTypeMeta(type, isAr);
-      const typeEntries = entries
-        .filter(entry => normalizeReflectionType(entry.type) === type)
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      if (typeEntries.length === 0) return;
-
-      const typeSection = container.createEl("details", {
-        cls: `dh-diary-week-section dh-diary-type-section type-${typeMeta.cls}`,
-        attr: { open: "true" }
-      });
-      const typeHeader = typeSection.createEl("summary", { cls: `dh-diary-week-header dh-diary-type-header type-${typeMeta.cls}` });
-
-      const titleWrap = typeHeader.createDiv({ cls: "week-title-wrap" });
-      titleWrap.createSpan({ cls: `dh-type-dot type-${typeMeta.cls}` });
-      titleWrap.createSpan({ cls: "week-title", text: typeMeta.label });
-
-      const metaWrap = typeHeader.createDiv({ cls: "week-meta-wrap" });
-      metaWrap.createSpan({ cls: "entry-count", text: isAr ? `${typeEntries.length} تدوينة` : `${typeEntries.length} entries` });
-
-      const entriesList = typeSection.createDiv({ cls: "dh-diary-entries-list" });
-      typeEntries.forEach(entry => this.renderDiaryEntryCard(entriesList, entry, isAr));
-    });
-  }
-
-  async renderDiaryView(container) {
-    container.addClass("dh-diary-view-container");
-    const isAr = this.plugin.settings.language === "ar";
-    const weekEnd = this.currentWeekStart.clone().add(6, "days");
-    const entries = await this.readWeeklyDiaryEntries();
-
-    const toolbar = container.createDiv({ cls: "dh-diary-toolbar" });
-    const titleWrap = toolbar.createDiv({ cls: "dh-diary-title-wrap" });
-    titleWrap.createDiv({
-      cls: "dh-diary-title",
-      text: isAr ? "يوميات الأسبوع" : "Weekly diary",
-    });
-    titleWrap.createDiv({
-      cls: "dh-diary-range",
-      text: isAr
-        ? `${this.currentWeekStart.clone().locale("ar").format("D MMMM")} - ${weekEnd.clone().locale("ar").format("D MMMM")}`
-        : `${this.currentWeekStart.clone().locale("en").format("D MMM")} - ${weekEnd.clone().locale("en").format("D MMM")}`,
-    });
-
-    const actions = toolbar.createDiv({ cls: "dh-diary-actions" });
-    const todayBtn = actions.createEl("button", {
-      cls: "dh-diary-add-btn",
-      text: isAr ? "تدوينة اليوم" : "Today entry",
-    });
-    todayBtn.onclick = () => this.openReflectionPopup(window.moment());
-
-    const modeSwitch = actions.createEl("select", { cls: "dh-diary-mode-select dropdown" });
-    [
-      { id: "grouped", label: isAr ? "حسب الأيام" : "Grouped" },
-      { id: "timeline", label: isAr ? "خط زمني" : "Timeline" },
-      { id: "types", label: isAr ? "حسب النوع" : "By type" },
-    ].forEach(mode => {
-      const option = modeSwitch.createEl("option", {
-        value: mode.id,
-        text: mode.label,
-      });
-      if (this.diaryViewMode === mode.id) option.selected = true;
-    });
-    modeSwitch.onchange = async (e) => {
-      const newMode = e.target.value;
-      if (this.diaryViewMode === newMode) return;
-      this.diaryViewMode = newMode;
-      this.plugin.settings.diaryViewMode = newMode;
-      await this.plugin.saveSettings({ silent: true });
-      await this.renderWeeklyGrid();
-    };
-
-    if (entries.length === 0) {
-      const emptyState = container.createDiv({ cls: "dh-diary-empty-state" });
-      emptyState.createEl("h3", { text: isAr ? "لا توجد تدوينات في هذا الأسبوع" : "No entries this week" });
-      emptyState.createEl("p", { text: isAr ? "اكتب تدوينة اليوم من الزر بالأعلى. سيتم حفظها داخل ملف اليوم نفسه." : "Use the button above. Entries are saved inside the matching Daily Note." });
-      return;
-    }
-
-    if (this.diaryViewMode === "timeline") {
-      const list = container.createDiv({ cls: "dh-diary-entries-list dh-diary-timeline-list" });
-      entries.forEach(entry => this.renderDiaryEntryCard(list, entry, isAr));
-      return;
-    }
-
-    if (this.diaryViewMode === "types") {
-      this.renderDiaryTypeSections(container, entries, isAr);
-      return;
-    }
-
-    for (let i = 0; i < 7; i++) {
-      const dayDate = this.currentWeekStart.clone().add(i, "days");
-      const dateKey = DateUtils.formatDateKey(dayDate);
-      const dayEntries = entries
-        .filter(entry => entry.dateKey === dateKey)
-        .sort((a, b) => a.timestamp - b.timestamp);
-      if (dayEntries.length === 0) continue;
-
-      const isOpen = dayDate.isSame(window.moment(), "day");
-      const daySection = container.createEl("details", {
-        cls: "dh-diary-week-section",
-        attr: isOpen ? { open: "true" } : {}
-      });
-      const dayHeader = daySection.createEl("summary", { cls: "dh-diary-week-header" });
-      const titleWrap = dayHeader.createDiv({ cls: "week-title-wrap" });
-      titleWrap.createSpan({ cls: "week-icon", text: "📅" });
-      titleWrap.createSpan({
-        cls: "week-title",
-        text: dayDate.clone().locale(isAr ? "ar" : "en").format(isAr ? "dddd، D MMMM" : "dddd, D MMMM"),
-      });
-
-      const metaWrap = dayHeader.createDiv({ cls: "week-meta-wrap" });
-      metaWrap.createSpan({ cls: "entry-count", text: isAr ? `${dayEntries.length} تدوينة` : `${dayEntries.length} entries` });
-      const addDayBtn = metaWrap.createEl("button", {
-        cls: "dh-diary-day-add-btn",
-        text: "+",
-        title: isAr ? "إضافة تدوينة لهذا اليوم" : "Add entry for this day",
-      });
-      addDayBtn.onclick = (e) => {
-        e.stopPropagation();
-        this.openReflectionPopup(dayDate);
-      };
-
-      const entriesList = daySection.createDiv({ cls: "dh-diary-entries-list" });
-      dayEntries.forEach(entry => this.renderDiaryEntryCard(entriesList, entry, isAr));
-    }
-  }
 
 }
 

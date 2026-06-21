@@ -1,6 +1,6 @@
 import { PluginSettingTab, Setting, Notice, Modal, setIcon } from 'obsidian';
 import { Utils } from '../utils/Utils.js';
-import { HABIT_COLORS_PALETTE, DEFAULT_MARKER, VIEW_TYPE_WEEKLY, DAY_KEYS, DEFAULT_HABIT_NOTES_HEADING, DEFAULT_REFLECTION_HEADING, resolveHabitColorHex, DEFAULT_SETTINGS } from '../constants.js';
+import { VIEW_TYPE_WEEKLY, DAY_KEYS, DEFAULT_HABIT_NOTES_HEADING, DEFAULT_REFLECTION_HEADING, resolveHabitColorHex, DEFAULT_SETTINGS } from '../constants.js';
 import { AddHabitModal } from '../modals/AddHabitModal.js';
 import { RenameProgressModal } from '../modals/RenameProgressModal.js';
 import { FileSuggestModal } from '../modals/FileSuggestModal.js';
@@ -32,7 +32,7 @@ class DailyHabitsSettingTab extends PluginSettingTab {
     containerEl.createEl("h1", { text: t("settings_title") });
 
     // 1. Render Tab Navigation
-    this.renderTabBar(containerEl, t, isAr);
+    this.renderTabBar(containerEl, t);
 
     // 2. Create Panel Containers
     this.basicsPanel = containerEl.createDiv({ cls: "dh-settings-panel", attr: { id: "panel-basics" } });
@@ -50,7 +50,7 @@ class DailyHabitsSettingTab extends PluginSettingTab {
     this.switchTab(this.activeTab);
   }
 
-  renderTabBar(containerEl, t, isAr) {
+  renderTabBar(containerEl, t) {
     const tabsContainer = containerEl.createDiv({ cls: "dh-settings-tabs-container" });
 
     this.tabs = {
@@ -395,7 +395,7 @@ class DailyHabitsSettingTab extends PluginSettingTab {
   }
 
   renderAdvancedPanel(panel, t, isAr) {
-    const formattingHeader = panel.createDiv({
+    panel.createDiv({
       cls: "dh-settings-section-header",
       text: isAr ? "📐 إعدادات البنية والتنسيق (Formatting & Structure)" : "📐 Formatting & Structure",
     });
@@ -792,7 +792,6 @@ class DailyHabitsSettingTab extends PluginSettingTab {
                 updatedData.currentLevel = calculateCurrentLevel(updatedData.levelData);
               }
               const shouldRenameAll = updatedData._renameInFiles;
-              delete updatedData._renameInFiles;
 
               const oldName = habit.name;
               const newName = updatedData.name.trim();
@@ -877,7 +876,7 @@ class DailyHabitsSettingTab extends PluginSettingTab {
                 const deletedHabit = { ...habit };
                 await this.plugin.habitManager.deleteHabit(habit.id);
                 this.refreshUI();
-                this.showUndoDeleteNotice(deletedHabit, t);
+                this.showUndoDeleteNotice(deletedHabit);
               } catch (e) {
                 console.error('[Core Habits] Delete Error:', e);
                 new Notice(`❌ Error: ${e.message}`);
@@ -956,7 +955,6 @@ class DailyHabitsSettingTab extends PluginSettingTab {
   renderArchivedHabitsList(container) {
     container.empty();
     const isAr = this.isAr;
-    const t = (key) => this.plugin.translationManager.t(key);
 
     const archivedHabits = this.plugin.habitManager.getArchivedHabits().sort((a, b) => a.order - b.order);
 
@@ -1054,7 +1052,7 @@ class DailyHabitsSettingTab extends PluginSettingTab {
    * Note: This state is held in memory and purposefully reset on app close (the habit
    * is deleted instantly from settings, but held within the notice closure).
    */
-  showUndoDeleteNotice(deletedHabit, t) {
+  showUndoDeleteNotice(deletedHabit) {
     const isAr = this.isAr;
 
     const fragment = document.createDocumentFragment();

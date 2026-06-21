@@ -1,0 +1,363 @@
+/* --- 1. DESIGN TOKENS --- */
+
+:root {
+  /* ---------- Brand Colors ---------- */
+  --dh-brand-primary: var(--interactive-accent);
+  --dh-brand-success: var(--color-green, #10b981);
+  --dh-brand-warning: var(--color-yellow, #f59e0b);
+  --dh-brand-danger: var(--color-orange, #f97316);
+  /* Amber: missed/fixable */
+  --dh-brand-info: var(--color-blue, #3b82f6);
+  --dh-brand-skipped: #b08d57;
+  --dh-brand-critical: var(--color-red, #f43f5e);
+
+  /* ---------- Brand Colors (RGB) ---------- */
+  --dh-brand-primary-rgb: 124, 58, 237;
+  --dh-brand-success-rgb: 16, 185, 129;
+  --dh-brand-warning-rgb: 245, 158, 11;
+  --dh-brand-danger-rgb: 249, 115, 22;
+  --dh-brand-info-rgb: 59, 130, 246;
+  --dh-brand-skipped-rgb: 176, 141, 87;
+  --dh-brand-critical-rgb: 244, 63, 94;
+
+  /* ---------- Cell State Colors ---------- */
+  --dh-state-completed-bg: rgba(var(--dh-brand-success-rgb), 0.15);
+  --dh-state-completed-text: var(--dh-brand-success-dark);
+  --dh-state-completed-border: rgba(var(--dh-brand-success-rgb), 0.3);
+  --dh-state-missed-bg: rgba(var(--dh-brand-danger-rgb), 0.1);
+  --dh-state-missed-text: var(--dh-brand-warning-dark);
+  /* Amber variant */
+  --dh-state-missed-border: rgba(var(--dh-brand-danger-rgb), 0.2);
+  --dh-state-pending-bg: rgba(var(--dh-brand-warning-rgb), 0.04);
+  --dh-state-pending-border: rgba(var(--dh-brand-warning-rgb), 0.12);
+  --dh-state-today-bg: rgba(var(--dh-brand-primary-rgb), 0.08);
+  --dh-state-today-border: rgba(var(--dh-brand-primary-rgb), 0.2);
+
+  /* ---------- Semantic Dark Variants ---------- */
+  --dh-brand-success-dark: #059669;
+  --dh-brand-warning-dark: #c2600a;
+  --dh-brand-skipped-dark: #8b6914;
+
+  /* --- Tokens --- */
+  --dh-grid-min-width: 600px;
+
+  /* ---------- Streak Badge ---------- */
+  --dh-streak-color: #fb923c;
+  --dh-streak-bg: rgba(var(--dh-brand-warning-rgb), 0.12);
+
+  /* ---------- Progress Colors (Semantic) ---------- */
+  --dh-progress-critical: #f97316;
+  /* Amber: motivational */
+  --dh-progress-low: #fbbf24;
+  --dh-progress-medium: #eab308;
+  --dh-progress-good: #22c55e;
+  --dh-progress-excellent: var(--dh-brand-success);
+  --dh-progress-perfect: #8b5cf6;
+
+  /* ---------- Typography Scale ---------- */
+  --dh-font-xs: 0.7rem;
+  --dh-font-sm: 0.8rem;
+  --dh-font-base: 0.875rem;
+  --dh-font-md: 0.95rem;
+  --dh-font-lg: 1.05rem;
+  --dh-font-xl: 1.2rem;
+  --dh-font-2xl: 1.4rem;
+
+  /* ---------- Font Weights ---------- */
+  --dh-weight-normal: 400;
+  --dh-weight-medium: 500;
+  --dh-weight-semibold: 600;
+  --dh-weight-bold: 700;
+  --dh-weight-extrabold: 800;
+
+  /* ---------- Font Stacks ---------- */
+  --dh-font-arabic: "Cairo", "Tajawal", "IBM Plex Sans Arabic", "Amiri", system-ui, sans-serif;
+
+  /* ---------- Spacing Scale ---------- */
+  --dh-space-2xs: 0.125rem;
+  --dh-space-xs: 0.25rem;
+  --dh-space-sm: 0.375rem;
+  --dh-space-md: 0.5rem;
+  --dh-space-lg: 0.75rem;
+  --dh-space-xl: 1rem;
+  --dh-space-2xl: 1.25rem;
+  --dh-space-3xl: 1.5rem;
+  --dh-space-4xl: 2rem;
+
+  /* ---------- Border Radius ---------- */
+  --dh-radius-sm: 4px;
+  --dh-radius-md: 6px;
+  --dh-radius-lg: 8px;
+  --dh-radius-xl: 12px;
+  --dh-radius-2xl: 16px;
+  --dh-radius-full: 9999px;
+
+  /* ---------- Shadows ---------- */
+  --dh-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --dh-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --dh-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.08);
+  --dh-shadow-lg: 0 8px 12px rgba(0, 0, 0, 0.1);
+  --dh-shadow-xl: 0 12px 20px rgba(0, 0, 0, 0.12);
+
+  /* ---------- Transitions ---------- */
+  --dh-transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --dh-transition-normal: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --dh-transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --dh-transition-bounce: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dh-transition-bounce-fast: 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---------- Z-Index Scale ---------- */
+  --dh-z-base: 1;
+  --dh-z-step: 5;
+  --dh-z-sticky: 10;
+  --dh-z-modal: 40;
+
+  /* Level Badge Colors */
+  --dh-badge-level-1-color: #cd7f32;
+  --dh-badge-level-2-color: #94a3b8;
+  --dh-badge-level-3-color: #eab308;
+  --dh-badge-level-4-color: #06b6d4;
+
+  /* Streak RGB for transparent variants */
+  --dh-streak-color-rgb: 251, 146, 60;
+}
+
+.theme-dark {
+  --dh-brand-danger: #f97316;
+  --dh-state-missed-text: #fb923c;
+  --dh-progress-critical: #f97316;
+  --dh-progress-low: #fbbf24;
+  --dh-progress-medium: #f59e0b;
+  --dh-progress-good: #10b981;
+  --dh-progress-excellent: var(--dh-brand-success);
+  --dh-progress-perfect: #8b5cf6;
+}
+
+/* --- 2. BASE & RESETS --- */
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Focus Visible */
+*:focus-visible {
+  outline: 2px solid var(--dh-brand-primary);
+  outline-offset: 2px;
+}
+
+/* --- 3. SHARED UI --- */
+.dh-type-dot {
+  display: inline-block;
+  width: var(--dh-dot-size, 7px);
+  height: var(--dh-dot-size, 7px);
+  background-color: var(--dh-dot-color, var(--dh-row-color));
+  box-shadow: var(--dh-dot-shadow, none);
+
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+  vertical-align: middle;
+  transition:
+    transform var(--dh-transition-fast),
+    box-shadow var(--dh-transition-fast),
+    opacity var(--dh-transition-fast);
+  opacity: var(--dh-dot-opacity, 1);
+}
+
+/* Hover State */
+.habit-row:hover .dh-type-dot,
+.dh-habit-row:hover .dh-type-dot {
+  opacity: 1;
+}
+
+/* Weekly View Overrides */
+.weekly-grid-container .dh-type-dot {
+  --dh-dot-size: 9px;
+  --dh-dot-color: var(--dh-row-color, var(--dh-brand-primary));
+  --dh-dot-shadow:
+    0 0 0 2px var(--dh-row-color-bg, rgba(var(--dh-brand-primary-rgb), 0.12)),
+    0 0 6px var(--dh-row-color-alpha, rgba(var(--dh-brand-primary-rgb), 0.3));
+}
+
+.weekly-grid-container .habit-row:hover .dh-type-dot,
+.weekly-grid-container .habit-row.dh-group-hover-active .dh-type-dot {
+  transform: scale(1.4);
+  --dh-dot-shadow:
+    0 0 0 3px var(--dh-row-color-bg, rgba(var(--dh-brand-primary-rgb), 0.15)),
+    0 0 8px var(--dh-row-color-alpha, rgba(var(--dh-brand-primary-rgb), 0.4));
+}
+
+/* Children in grid: smaller and more discrete */
+.weekly-grid-container .habit-row-child .dh-type-dot {
+  --dh-dot-opacity: 0.5;
+  --dh-dot-size: 7px;
+}
+
+/* Settings Overrides */
+.daily-habits-plugin .daily-habits-settings-container .dh-type-dot,
+.daily-habits-plugin .dh-settings-tab .dh-type-dot {
+  --dh-dot-opacity: 0.75;
+}
+
+.daily-habits-plugin .dh-settings-tab .dh-habit-row-child .dh-type-dot {
+  --dh-dot-opacity: 0.4;
+  --dh-dot-size: 6px;
+}
+
+/* --- 10. ANIMATIONS --- */
+
+@keyframes habitPulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dayGlow {
+  0% {
+    box-shadow: inset 0 0 0 0 rgba(var(--dh-brand-success-rgb), 0);
+  }
+  20% {
+    box-shadow: inset 0 0 10px 2px rgba(var(--dh-brand-success-rgb), 0.35);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(var(--dh-brand-success-rgb), 0);
+  }
+}
+
+@keyframes dh-badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-in-panel {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes perfectPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes pulse-success {
+  0% {
+    transform: scale(1);
+    background-color: rgba(var(--dh-brand-success-rgb), 0.2);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+    background-color: rgba(var(--dh-brand-success-rgb), 0.08);
+  }
+}
+
+@keyframes fadeSlideIn {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- 11. UTILITIES --- */
+
+.text-center {
+  text-align: center;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.visible {
+  display: block !important;
+}
+
+.clickable-card {
+  cursor: pointer;
+  transition: transform var(--dh-transition-normal), filter var(--dh-transition-normal);
+}
+
+.clickable-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  filter: brightness(1.15);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+.clickable-card:active {
+  transform: translateY(-2px) scale(1);
+}
+
+/* --- 12. RTL & A11Y --- */
+
+@media (prefers-contrast: high) {
+  .dh-grid-cell {
+    border-width: 2px;
+  }
+
+  .day-header.today {
+    border-bottom-width: 4px !important;
+  }
+}
+
+[dir="rtl"] .week-nav-buttons {
+  flex-direction: row-reverse;
+}

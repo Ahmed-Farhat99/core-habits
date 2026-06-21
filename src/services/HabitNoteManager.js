@@ -106,7 +106,6 @@ export class HabitNoteManager {
    * @returns {string} YAML block including opening/closing ---
    */
   buildFrontmatter(habit) {
-    const isAr = this.plugin.settings.language === "ar";
     const scheduleStr = habit.schedule?.type === "daily"
       ? "daily"
       : (habit.schedule?.days || []).join(",");

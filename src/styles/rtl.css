@@ -1,0 +1,615 @@
+/* ═══════════════════════════════════════════════════════════ */
+/* --- 13. MOBILE & TOUCH DEVICES ---                         */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* ---- 13.1 GRID: Card-Based Layout (No Horizontal Scroll) ---- */
+
+body.is-mobile .habits-grid-wrapper {
+  overflow: visible;
+}
+
+body.is-mobile .habits-grid {
+  display: flex;
+  flex-direction: column;
+  min-width: unset;
+  width: 100%;
+}
+
+/* Header rows */
+body.is-mobile .habits-thead .dh-grid-row {
+  display: flex;
+  width: 100%;
+  min-width: unset;
+  border: none;
+}
+
+body.is-mobile .habits-thead .habit-index-header,
+body.is-mobile .habits-thead .corner-cell,
+body.is-mobile .habits-thead .stats-corner {
+  display: none;
+}
+
+body.is-mobile .habits-thead .day-header,
+body.is-mobile .habits-thead .day-stat-cell {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  padding: 4px 1px;
+}
+
+body.is-mobile .habits-thead .day-name {
+  font-size: 0.72em;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+body.is-mobile .habits-thead .day-date {
+  font-size: 0.58em;
+}
+
+body.is-mobile .habits-thead .day-date-hijri {
+  font-size: 0.5em;
+  opacity: 0.7;
+}
+
+body.is-mobile .header-row-stats {
+  display: flex;
+  width: 100%;
+  min-width: unset;
+}
+
+body.is-mobile .header-row-stats .habit-index-header,
+body.is-mobile .header-row-stats .stats-corner {
+  display: none;
+}
+
+body.is-mobile .header-row-stats .day-stat-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Habit rows */
+body.is-mobile .habits-tbody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+body.is-mobile .habits-tbody .dh-grid-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  min-width: unset;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+/* Collapsed rows */
+body.is-mobile .habits-tbody .dh-grid-row[style*="display: none"] {
+  display: none !important;
+}
+
+/* Habit index */
+body.is-mobile .habits-tbody .habit-index-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.12);
+  color: var(--interactive-accent);
+  font-size: 0.65em;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  min-width: 18px;
+  height: 18px;
+  width: auto;
+  position: static;
+  flex-shrink: 0;
+}
+
+/* Habit name */
+body.is-mobile .habits-tbody .habit-name-cell {
+  flex: 1 1 calc(100% - 40px);
+  min-width: calc(100% - 40px);
+  margin-bottom: 8px;
+  padding: 0;
+  border: none;
+  position: static;
+  z-index: auto;
+  box-shadow: none;
+  background: transparent;
+  overflow: visible;
+}
+
+body.is-mobile .habits-tbody .habit-name-cell .dh-name-content {
+  font-weight: 700;
+  font-size: 0.92em;
+  overflow: visible;
+  min-width: auto;
+}
+
+body.is-mobile .habits-tbody .habit-name-cell .habit-name-link {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+/* Day cells */
+body.is-mobile .habits-tbody .day-cell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 38px;
+  padding: 0;
+  border: none;
+  position: static;
+  z-index: auto;
+  box-shadow: none;
+  background: transparent;
+}
+
+body.is-mobile .habit-checkbox {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Remove sticky positioning */
+body.is-mobile .habits-grid-wrapper .dh-grid-cell {
+  position: static;
+  z-index: auto;
+  box-shadow: none;
+}
+
+/* ---- 13.2 JOURNAL FOOTER ROW ---- */
+
+body.is-mobile .habits-tfoot {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+body.is-mobile .habits-tfoot .dh-grid-row {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: unset;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+body.is-mobile .habits-tfoot .habit-index-header {
+  display: none;
+}
+
+body.is-mobile .habits-tfoot .dh-footer-title {
+  flex: 0 0 100%;
+  width: 100%;
+  margin-bottom: 8px;
+  border: none;
+  padding: 0;
+  font-weight: 700;
+  font-size: 0.9em;
+}
+
+body.is-mobile .habits-tfoot .day-cell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 38px;
+  padding: 0;
+  border: none;
+}
+
+body.is-mobile .dh-footer-add-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  background: rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.06);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 14px;
+}
+
+body.is-mobile .dh-footer-add-btn.has-reflection {
+  background: rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.15);
+  border: 1px solid var(--interactive-accent);
+}
+
+/* ---- 13.3 DATE NAVIGATOR ---- */
+
+body.is-mobile .dh-date-navigator-stage {
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+}
+
+body.is-mobile .dh-date-title-wrap {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px;
+  width: 100%;
+}
+
+body.is-mobile .dh-date-text-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  min-width: 0;
+}
+
+body.is-mobile .dh-date-text {
+  font-size: 0.85em;
+  text-align: center;
+  line-height: 1.3;
+}
+
+body.is-mobile .hijri-indicator {
+  color: var(--interactive-accent);
+  font-weight: 800;
+  font-size: 0.7em;
+  background: rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.1);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.dh-date-mode-pill .active {
+  color: var(--interactive-accent);
+  font-weight: 800;
+}
+
+/* ---- 13.4 PROGRESS BAR ---- */
+
+body.is-mobile .unified-progress-wrapper {
+  margin-bottom: 10px;
+}
+
+body.is-mobile .unified-rate-text {
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+/* ---- 13.5 NAVIGATION TABS ---- */
+
+body.is-mobile .dh-nav-tab-label {
+  display: none;
+}
+
+/* ---- 13.6 MODALS & FORMS ---- */
+
+body.is-mobile .dh-modal-actions {
+  padding: 14px 16px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+  background: var(--background-primary);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+body.is-mobile .dh-modal-actions button {
+  height: 46px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1em;
+}
+
+body.is-mobile .modal {
+  max-height: 100dvh;
+}
+
+body.is-mobile .modal-content {
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+}
+
+/* Settings tabs: scrollable */
+body.is-mobile .dh-modal-tabs-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- 13.7 TOUCH TARGETS ---- */
+
+body.is-mobile .dh-icon-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+body.is-mobile .dh-header-text-btn {
+  min-height: 36px;
+  padding: 6px 12px;
+}
+
+body.is-mobile .dh-nav-arrow-btn {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* ---- 13.8 ANIMATIONS ---- */
+
+body.is-mobile .habit-checkbox,
+body.is-mobile .dh-icon-btn,
+body.is-mobile .dh-nav-tab {
+  transition-duration: 0.1s;
+}
+
+/* ---- 13.9 SETTINGS: Card Layout ---- */
+
+body.is-mobile .dh-habit-row.dh-list-header {
+  display: none;
+}
+
+body.is-mobile .dh-habit-row {
+  display: flex;
+  flex-direction: column;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+body.is-mobile .dh-col-id {
+  display: none;
+}
+
+body.is-mobile .dh-col-name {
+  font-size: 1.1em;
+  font-weight: bold;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+body.is-mobile .dh-col-level,
+body.is-mobile .dh-col-schedule {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+body.is-mobile .dh-col-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--background-modifier-border);
+}
+
+body.is-mobile .setting-item-control {
+  flex-wrap: wrap;
+}
+
+/* ---- 13.10 LEVELS MODAL ---- */
+
+body.is-mobile .levels-cols-header-clean {
+  display: none;
+}
+
+body.is-mobile .level-row-clean {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+body.is-mobile .level-inputs-col-clean {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+body.is-mobile .level-inputs-col-clean > input,
+body.is-mobile .level-inputs-col-clean > select {
+  width: 100%;
+}
+
+/* ---- 13.11 DASHBOARD ---- */
+
+body.is-mobile .decision-dashboard-container {
+  padding: 8px;
+}
+
+body.is-mobile .dh-dashboard-table {
+  font-size: 0.85em;
+}
+
+body.is-mobile .dh-dashboard-table th,
+body.is-mobile .dh-dashboard-table td {
+  padding: 6px 4px;
+}
+
+/* ---- 13.12 DIARY VIEW ---- */
+
+body.is-mobile .dh-diary-view-container {
+  padding-bottom: 100px;
+}
+
+body.is-mobile .dh-diary-entries-list,
+body.is-mobile .dh-diary-timeline-list {
+  padding-bottom: 80px;
+}
+
+/* ---- 13.13 AUDIO ---- */
+
+body.is-mobile audio {
+  width: 100%;
+  height: 40px;
+  margin: 6px 0;
+  border-radius: 10px;
+}
+
+/* ---- 13.14 BOTTOM SAFE AREA ---- */
+
+body.is-mobile .weekly-grid-container {
+  padding-bottom: 120px;
+}
+
+/* ---- 13.15 COMMENT ICON ---- */
+
+body.is-mobile .dh-comment-hover-icon {
+  display: none !important;
+}
+
+/* ---- 13.16 TOUCH TARGET FIXES ---- */
+
+body.is-mobile .habits-tbody .day-cell {
+  min-height: 44px;
+  min-width: 38px;
+}
+
+body.is-mobile .dh-color-swatch {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+body.is-mobile .dh-color-swatches {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+body.is-mobile .day-chip-clean {
+  min-height: 40px;
+  min-width: 40px;
+  font-size: 0.85em;
+}
+
+/* ---- 13.17 SAFE AREA INSETS ---- */
+
+body.is-mobile .weekly-grid-container {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+body.is-mobile .weekly-header-controls {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* ---- 13.18 DASHBOARD TABLE OVERFLOW ---- */
+
+body.is-mobile .dh-dashboard-section {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.is-mobile .day-patterns-table {
+  min-width: 320px;
+}
+
+/* ---- 13.19 PROGRESS CAPTION TEXT OVERFLOW ---- */
+
+body.is-mobile .weekly-barrier-caption {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  padding-inline: 8px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+/* ---- 13.20 INLINE STYLE OVERRIDES ---- */
+
+body.is-mobile .dh-name-input-wrapper {
+  width: 100% !important;
+}
+
+body.is-mobile .dh-rename-checkbox-container {
+  flex-wrap: wrap;
+}
+
+body.is-mobile .dh-log-section-header-row {
+  flex-direction: column !important;
+  gap: 8px;
+}
+
+body.is-mobile .dh-log-add-note-btn {
+  width: 100%;
+}
+
+/* ---- 13.21 LEVEL INPUTS MOBILE SIZING ---- */
+
+body.is-mobile .dh-level-condition-select {
+  min-height: 40px;
+  font-size: 0.9em;
+}
+
+body.is-mobile .dh-level-goal-input {
+  min-height: 40px;
+  font-size: 0.9em;
+}
+
+/* ---- 13.22 PARENT SELECT MOBILE ---- */
+
+body.is-mobile .dh-parent-select {
+  min-height: 40px;
+  font-size: 0.9em;
+  width: 100%;
+}
+
+/* ---- 14. INLINE STYLE REPLACEMENTS ---- */
+.dh-name-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 4px;
+}
+
+.dh-habit-file-path {
+  margin-top: 2px;
+}
+
+.dh-rename-checkbox-container {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.dh-atomic-hint {
+  display: none;
+  font-size: 0.8em;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.dh-log-section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dh-log-section-title {
+  margin: 0;
+}

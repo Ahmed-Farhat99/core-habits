@@ -1,9 +1,8 @@
-import { Modal, Setting, Notice, FuzzySuggestModal, debounce, Platform } from 'obsidian';
-import { Utils } from '../utils/Utils.js';
-import { HABIT_COLORS_PALETTE, resolveHabitColorHex, REFLECTION_ENTRY_TYPES } from '../constants.js';
-import { calculateCurrentLevel, injectHabitCommentIntoDailyNote, injectReflectionIntoDailyNote, extractHabitHistoryFromDailyNotes, fixAudioDuration } from '../utils/helpers.js';
-import { StreakCalculator } from '../services/StreakCalculator.js';
-import { HabitCommentPopup } from './HabitCommentPopup.js';
+import { Modal, Notice, debounce, Platform } from 'obsidian';
+import { HABIT_COLORS_PALETTE } from '../constants.js';
+import { calculateCurrentLevel } from '../utils/helpers.js';
+import { StreakStatsComponent } from '../components/StreakStatsComponent.js';
+import { LogViewer } from '../components/LogViewer.js';
 
 class AddHabitModal extends Modal {
   constructor(app, plugin, onSubmit, existingHabit = null) {
@@ -60,7 +59,7 @@ class AddHabitModal extends Modal {
 
     // 2. Streak Stats (Only in Edit Mode)
     if (isEdit) {
-      this.renderStreakStats(contentEl, t, isAr);
+      new StreakStatsComponent(this.plugin, this.existingHabit).render(contentEl);
     }
 
     // 3. Form Container
@@ -84,7 +83,7 @@ class AddHabitModal extends Modal {
 
     // Only render log if habit context is enabled and editing an existing habit
     if (this.plugin.settings.enableHabitContext && isEdit) {
-      this.renderLogSection(this.panels.log, t, isAr);
+      new LogViewer(this.app, this.plugin, this.existingHabit, this.formState).render(this.panels.log);
     } else {
       this.panels.log.createDiv({
         cls: "dh-log-empty-state",
@@ -147,104 +146,12 @@ class AddHabitModal extends Modal {
         if (id === tabId) {
           const textareas = this.panels[id].querySelectorAll('textarea.dh-auto-textarea');
           textareas.forEach(ta => {
-            ta.style.setProperty("height", "auto", "important");
-            ta.style.setProperty("height", `${ta.scrollHeight}px`, "important");
+            ta.style.height = "auto";
+            ta.style.height = `${ta.scrollHeight}px`;
           });
         }
       });
     }
-  }
-
-  renderStreakStats(container, t, isAr) {
-    const statsContainer = container.createDiv({ cls: "streak-stats-compact" });
-    const badgesRow = statsContainer.createDiv({ cls: "streak-badges-row" });
-    const detailsContainer = statsContainer.createDiv({ cls: "streak-details-container" });
-
-    const line1 = badgesRow.createDiv({ cls: "streak-compact-line" });
-    line1.textContent = isAr ? "جاري الحساب..." : "Calculating...";
-
-    this.plugin._sharedStreakCache = this.plugin._sharedStreakCache || new Map();
-    const calculator = new StreakCalculator(this.plugin, this.plugin._sharedStreakCache);
-    calculator.calculate(this.existingHabit).then(({ currentStreak, longestStreak, firstCompletionDate, consistencyScore, consistencyLabel, consistencyCompleted, consistencyScheduled, recoveryScore, ongoingGapLength }) => {
-      badgesRow.empty();
-
-      const streakWordAr = (n) => n === 1 ? "يوم" : n === 2 ? "يومين" : n <= 10 ? "أيام" : "يوماً";
-      const longestText = longestStreak > 0 ? `${longestStreak} ${isAr ? streakWordAr(longestStreak) : "days"}` : (isAr ? "لا يوجد" : "None");
-      const currentText = currentStreak > 0 ? `${currentStreak} ${isAr ? streakWordAr(currentStreak) : "days"}` : (isAr ? "لا يوجد" : "None");
-
-      const longestBadge = badgesRow.createDiv({ cls: "streak-badge streak-badge-longest" });
-      longestBadge.createSpan({ cls: "streak-badge-icon", text: "🏆" });
-      longestBadge.createSpan({ cls: "streak-badge-label", text: isAr ? "أطول سلسلة:" : "Longest:" });
-      longestBadge.createSpan({ cls: "streak-badge-value", text: longestText });
-
-      const currentBadge = badgesRow.createDiv({ cls: "streak-badge streak-badge-current" });
-      currentBadge.createSpan({ cls: "streak-badge-icon", text: "🔥" });
-      currentBadge.createSpan({ cls: "streak-badge-label", text: isAr ? "السلسلة الحالية:" : "Current:" });
-      currentBadge.createSpan({ cls: "streak-badge-value", text: currentText });
-
-      if (firstCompletionDate) {
-        const line2 = detailsContainer.createDiv({ cls: "streak-detail-item" });
-        line2.createSpan({ cls: "streak-detail-icon", text: "📅" });
-        const dateStr = firstCompletionDate.locale(isAr ? "ar" : "en").format(isAr ? "D MMMM YYYY" : "D MMM YYYY");
-        const daysSince = window.moment().diff(firstCompletionDate, "days");
-        const dWord = isAr ? streakWordAr(daysSince) : (daysSince === 1 ? "day" : "days");
-        line2.createSpan({ cls: "streak-detail-label", text: isAr ? "أول إنجاز" : "First completion" });
-        line2.createSpan({ cls: "streak-detail-value", text: `${dateStr}` });
-        line2.createSpan({ cls: "streak-detail-sub", text: `(${isAr ? "مضى " : ""}${daysSince} ${dWord})` });
-      }
-
-      if (consistencyScore !== null) {
-        const line3 = detailsContainer.createDiv({ cls: "streak-detail-item" });
-        line3.createSpan({ cls: "streak-detail-icon", text: "📈" });
-        line3.createSpan({ cls: "streak-detail-label", text: isAr ? "الالتزام" : "Consistency" });
-        line3.createSpan({ cls: "streak-detail-value", text: `${consistencyCompleted}/${consistencyScheduled}` });
-
-        const pctCls = consistencyScore >= 80 ? "excellent" : consistencyScore >= 60 ? "good" : consistencyScore >= 40 ? "fair" : "low";
-        line3.createSpan({ cls: `streak-detail-pct ${pctCls}`, text: `${consistencyScore}%` });
-        line3.createSpan({ cls: "streak-detail-sub", text: isAr ? "(آخر 30 يوماً)" : "(30 days)" });
-      }
-
-      if (recoveryScore !== null) {
-        const rRate = Math.round(recoveryScore * 10) / 10;
-        const rateRounded = Math.round(recoveryScore);
-        const line4 = detailsContainer.createDiv({ cls: "streak-detail-item dh-recovery-row" });
-        line4.title = isAr ? "كلما قل هذا الرقم، كلما كنت أسرع في العودة بعد الانقطاع" : "Lower number means faster recovery after missing a habit";
-        line4.createSpan({ cls: "streak-detail-icon", text: "⏱️" });
-        line4.createSpan({ cls: "streak-detail-label", text: isAr ? "سرعة التعافي" : "Recovery Speed" });
-
-        let rateText = isAr ? `تعود للعادة خلال ${rRate} يوم في المتوسط` : `Returns in ${rRate} days on avg`;
-        let decisionMsg;
-        let rateCls;
-
-        if (ongoingGapLength > rateRounded + 0.5 && ongoingGapLength >= 2) {
-          rateCls = "low";
-          decisionMsg = isAr ? `متأخر عن المعتاد (${rRate}يوم).. بسّط وعد اليوم!` : `Behind average (${rRate}d). Simplify & recover!`;
-        } else if (rateRounded <= 1.5) {
-          rateCls = "excellent";
-          decisionMsg = isAr ? "مرونة عالية - بطل التعافي!" : "High resilience champ!";
-        } else if (rateRounded <= 2.5) {
-          rateCls = "good";
-          decisionMsg = isAr ? "تعافي جيد غالباً" : "Good recovery speed";
-        } else {
-          rateCls = "low";
-          decisionMsg = isAr ? "قرار: بسّط العادة فور السقوط" : "Decision: Simplify post-fail";
-        }
-
-        line4.createSpan({ cls: `streak-detail-pct ${rateCls}`, text: rateText });
-        line4.createSpan({ cls: "streak-detail-sub dh-recovery-sub", text: `(${decisionMsg})` });
-      } else if (ongoingGapLength > 1) {
-        // Fallback when no past gaps exist but they are failing now
-        const line5 = detailsContainer.createDiv({ cls: "streak-detail-item dh-recovery-row" });
-        line5.createSpan({ cls: "streak-detail-icon", text: "⚠️" });
-        line5.createSpan({ cls: "streak-detail-label", text: isAr ? "تنبيه تسريب" : "Leak Alert" });
-        line5.createSpan({ cls: `streak-detail-pct low`, text: isAr ? `${ongoingGapLength} أيام` : `${ongoingGapLength} days` });
-        line5.createSpan({ cls: "streak-detail-sub dh-recovery-sub", text: isAr ? "(بسّط العادة لإيقاف النزيف!)" : "(Simplify habit to stop the leak!)" });
-      }
-    }).catch(() => {
-      badgesRow.empty();
-      const lineErr = badgesRow.createDiv({ cls: "streak-compact-line" });
-      lineErr.textContent = isAr ? "خطأ في جلب الإحصائيات" : "Error loading stats";
-    });
   }
 
   renderBasicInfoSection(panel, t, isAr) {
@@ -271,7 +178,7 @@ class AddHabitModal extends Modal {
     // Add checkbox for Rename in all notes
     const renameContainer = inputWrapper.createDiv({ cls: "dh-rename-checkbox-container" });
     const renameCheckbox = renameContainer.createEl("input", { type: "checkbox", id: "dh-rename-all-notes" });
-    const renameLabel = renameContainer.createEl("label", { text: isAr ? "إعادة التسمية في جميع الملاحظات القديمة؟ (اختياري)" : "Rename in all older notes? (Optional)", attr: { for: "dh-rename-all-notes" }, cls: "dh-atomic-hint" });
+    renameContainer.createEl("label", { text: isAr ? "إعادة التسمية في جميع الملاحظات القديمة؟ (اختياري)" : "Rename in all older notes? (Optional)", attr: { for: "dh-rename-all-notes" }, cls: "dh-atomic-hint" });
 
     const renameHint = inputWrapper.createDiv({ cls: "dh-atomic-hint" });
     renameHint.textContent = isAr
@@ -386,7 +293,7 @@ class AddHabitModal extends Modal {
     // 4. Schedule
     basicSection.createEl("div", { cls: "dh-section-divider" }); // Visual separator
     const scheduleGroup = basicSection.createDiv({ cls: "form-group-clean dh-schedule-group" });
-    const scheduleLabel = scheduleGroup.createEl("label", { text: isAr ? "أيام التكرار" : "Frequency", cls: "form-label-clean" });
+    scheduleGroup.createEl("label", { text: isAr ? "أيام التكرار" : "Frequency", cls: "form-label-clean" });
     const scheduleHint = scheduleGroup.createDiv({ cls: "dh-atomic-hint" });
     scheduleHint.textContent = isAr ? "(تحديد جميع الأيام يعني أن العادة يومية)" : "(Selecting all days means it's a daily habit)";
 
@@ -470,8 +377,8 @@ class AddHabitModal extends Modal {
     });
     notesInput.value = this.formState.notes;
     const autoResizeNotes = () => {
-      notesInput.style.setProperty("height", "auto", "important");
-      notesInput.style.setProperty("height", `${notesInput.scrollHeight}px`, "important");
+      notesInput.style.height = "auto";
+      notesInput.style.height = `${notesInput.scrollHeight}px`;
     };
     notesInput.oninput = (e) => { this.formState.notes = e.target.value; autoResizeNotes(); };
     setTimeout(autoResizeNotes, 0);
@@ -548,8 +455,8 @@ class AddHabitModal extends Modal {
     input.value = initialValue;
 
     const autoResize = () => {
-      input.style.setProperty("height", "auto", "important");
-      input.style.setProperty("height", `${input.scrollHeight}px`, "important");
+      input.style.height = "auto";
+      input.style.height = `${input.scrollHeight}px`;
     };
     input.oninput = (e) => { onInput(e.target.value); autoResize(); };
     setTimeout(autoResize, 0);
@@ -562,7 +469,7 @@ class AddHabitModal extends Modal {
     const heroSection = levelsSection.createDiv({ cls: "gradation-hero-section" });
 
 
-    const heroHint = heroSection.createDiv({
+    heroSection.createDiv({
       cls: `gradation-hint ${this.formState.useLevels ? "is-visible" : ""}`,
       text: isAr ? "تدرج في عملك حتى تصل لغايتك" : "Graduate in your work until you reach your goal"
     });
@@ -668,175 +575,23 @@ class AddHabitModal extends Modal {
     renderLevels();
   }
 
-  async renderLogSection(panel, t, isAr) {
-    const logSection = panel.createDiv({ cls: "form-section dh-log-section" });
 
-    // Compact Header with Action Button
-    const headerRow = logSection.createDiv({ cls: "dh-log-section-header-row" });
-    headerRow.createEl("h3", {
-      text: isAr ? "سجل المتابعة والتعليقات" : "Habit Context Log",
-      cls: "dh-log-section-title"
-    });
-
-    const container = logSection.createDiv({ cls: "dh-log-entries-container" });
-
-    const addNoteBtn = headerRow.createEl("button", {
-      text: isAr ? "🎙️ أضف ملاحظة لليوم" : "🎙️ Add Note Today",
-      cls: "dh-log-add-note-btn dh-brand-btn"
-    });
-    
-    addNoteBtn.onclick = () => {
-      new HabitCommentPopup(
-        this.app,
-        this.plugin,
-        this.existingHabit || this.formState,
-        window.moment(),
-        async (text) => {
-          if (this.plugin.habitNoteManager) {
-            const dateStr = window.moment().format("YYYY-MM-DD");
-            await this.plugin.habitNoteManager.appendToHabitNoteLog(this.existingHabit || this.formState, dateStr, text);
-          } else {
-            await injectHabitCommentIntoDailyNote(this.app, this.plugin, this.existingHabit || this.formState, window.moment(), text);
-          }
-          this.renderLogSectionOnly(container, isAr);
-        }
-      ).open();
-    };
-
-    container.textContent = isAr ? "جاري تحميل السجل..." : "Loading log...";
-    this.renderLogSectionOnly(container, isAr);
-  }
-
-  async renderLogSectionOnly(container, isAr) {
-    try {
-      const habitName = this.existingHabit?.linkText || this.existingHabit?.name || this.formState.name;
-      if (!habitName) {
-        container.empty();
-        return;
-      }
-      
-      let entries = [];
-      if (this.plugin.habitNoteManager && this.existingHabit) {
-        entries = await this.plugin.habitNoteManager.readHabitNoteLog(this.existingHabit);
-      } else {
-        entries = await extractHabitHistoryFromDailyNotes(this.app, this.plugin, habitName, 90);
-      }
-
-      container.empty();
-
-      if (entries.length === 0) {
-        container.createDiv({
-          cls: "dh-log-empty-state",
-          text: isAr ? "السجل فارغ. استمر في العادة ووثق تقدمك يوماً بيوم!" : "Log is empty. Keep tracking and document your progress day by day!"
-        });
-        return;
-      }
-
-      // Group entries by Month
-      const grouped = {};
-      entries.forEach(entry => {
-        const monthKey = entry.date.locale(isAr ? 'ar' : 'en').format("MMMM YYYY");
-        if (!grouped[monthKey]) grouped[monthKey] = [];
-        grouped[monthKey].push(entry);
-      });
-
-      Object.keys(grouped).forEach((monthKey, idx) => {
-        const details = container.createEl("details", { cls: "dh-log-month-group" });
-        if (idx === 0) details.open = true;
-        
-        details.createEl("summary", { text: monthKey, cls: "dh-log-month-summary" });
-        const groupDiv = details.createDiv({ cls: "dh-log-month-content" });
-
-        grouped[monthKey].forEach(entry => {
-          const entryDiv = groupDiv.createDiv({ cls: "dh-log-entry" });
-
-          const dateFormatted = entry.date.locale(isAr ? 'ar' : 'en').format("DD MMM");
-          let temp = `**${dateFormatted}** | ${entry.text}`;
-
-          const tokens = [];
-
-          // Process audio voice notes first
-          temp = temp.replace(/!\[\[([^\]]+\.webm)\]\]/gi, (match, p1) => {
-            tokens.push({ type: 'audio', text: p1 });
-            return `__TOKEN_${tokens.length - 1}__`;
-          });
-
-          // Replace links
-          temp = temp.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
-            tokens.push({ type: 'link', text: p1 });
-            return `__TOKEN_${tokens.length - 1}__`;
-          });
-          // Replace rates
-          temp = temp.replace(/\[Rate:: (.*?)\]/g, (match, p1) => {
-            tokens.push({ type: 'rate', text: p1 });
-            return `__TOKEN_${tokens.length - 1}__`;
-          });
-          // Replace bold
-          temp = temp.replace(/\*\*(.*?)\*\*/g, (match, p1) => {
-            tokens.push({ type: 'bold', text: p1 });
-            return `__TOKEN_${tokens.length - 1}__`;
-          });
-
-          // Append nodes securely
-          const parts = temp.split(/(__TOKEN_\d+__)/);
-          parts.forEach(part => {
-            const tokenMatch = part.match(/__TOKEN_(\d+)__/);
-            if (tokenMatch) {
-              const token = tokens[parseInt(tokenMatch[1])];
-              if (token.type === 'link') entryDiv.createSpan({ cls: "dh-log-link", text: token.text });
-              else if (token.type === 'audio') {
-                const audioFile = this.app.metadataCache.getFirstLinkpathDest(token.text, "");
-                if (audioFile) {
-                  const src = this.app.vault.getResourcePath(audioFile);
-                  const audioEl = entryDiv.createEl("audio", { attr: { controls: true, src: src } });
-                  fixAudioDuration(audioEl);
-
-                  audioEl.style.width = "100%";
-                  audioEl.style.height = "36px";
-                  audioEl.style.marginTop = "8px";
-                  audioEl.style.borderRadius = "8px";
-                  audioEl.onclick = (e) => e.stopPropagation();
-                  
-                  // Mutual exclusion for audio playback
-                  audioEl.addEventListener('play', () => {
-                    document.querySelectorAll('audio').forEach(a => {
-                      if (a !== audioEl && !a.paused) a.pause();
-                    });
-                  });
-                } else {
-                  entryDiv.createSpan({ text: token.text });
-                }
-              }
-              else if (token.type === 'rate') entryDiv.createSpan({ cls: "dh-log-rate-badge", text: token.text });
-              else if (token.type === 'bold') entryDiv.createEl("strong", { text: token.text });
-            } else if (part) {
-              entryDiv.appendChild(document.createTextNode(part));
-            }
-          });
-        });
-      });
-
-    } catch (e) {
-      console.error("[Core Habits] Error loading log:", e);
-      container.textContent = isAr ? "خطأ في تحميل السجل" : "Error loading log";
-    }
-  }
 
   renderFooter(container, t, isAr) {
-    const footer = container.createDiv({ cls: "dh-popup-footer dh-modal-footer" });
+    const footer = container.createDiv({ cls: "dh-modal-actions" });
 
     const saveBtn = footer.createEl("button", {
       text: isAr ? "💾 حفظ" : "💾 Save",
-      cls: "dh-popup-btn-save dh-save-habit-btn",
+      cls: "mod-cta",
     });
 
-    const cancelBtn = footer.createEl("button", { text: isAr ? "إلغاء" : "Cancel", cls: "dh-popup-btn-cancel" });
+    const cancelBtn = footer.createEl("button", { text: isAr ? "إلغاء" : "Cancel" });
     cancelBtn.onclick = () => this.close();
 
     saveBtn.onclick = async () => {
       try {
         saveBtn.disabled = true;
-        const { name, scheduleMode, selectedDays, useLevels, levelData, currentLevel, habitType, atomicIdentity, atomicCue, atomicFriction, atomicReward, selectedParentId, selectedColor, notes } = this.formState;
+        const { name, selectedDays, useLevels, levelData, habitType, atomicIdentity, atomicCue, atomicFriction, atomicReward, selectedParentId, selectedColor, notes } = this.formState;
 
         if (!name.trim()) {
           new Notice(t("error_name_required"));

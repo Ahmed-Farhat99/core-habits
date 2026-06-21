@@ -1,4 +1,4 @@
-const { Modal, setIcon } = require("obsidian");
+import { Modal } from "obsidian";
 
 export class OnboardingModal extends Modal {
   constructor(app, plugin) {
@@ -42,7 +42,7 @@ export class OnboardingModal extends Modal {
     this.renderBodyContent(body);
 
     // Footer
-    const footer = container.createDiv({ cls: "dh-onboarding-footer" });
+    const footer = container.createDiv({ cls: "dh-modal-actions" });
     
     if (this.currentStep > 1) {
       const btnBack = footer.createEl("button", { cls: "dh-btn-secondary" });

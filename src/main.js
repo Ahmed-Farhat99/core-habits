@@ -3,7 +3,16 @@ import { AudioEngine } from './services/AudioEngine.js';
 import { HabitScanner } from './services/HabitScanner.js';
 import { HabitNoteManager } from './services/HabitNoteManager.js';
 import { HabitManager } from './services/HabitManager.js';
+import { TranslationManager } from './services/TranslationManager.js';
 import { HabitPostProcessor } from './views/HabitPostProcessor.js';
+
+// CSS Styling Modules
+import './styles/base.css';
+import './styles/grid.css';
+import './styles/modal.css';
+import './styles/settings.css';
+import './styles/diary.css';
+import './styles/rtl.css';
 
 /*
   FILE STRUCTURE INDEX
@@ -20,18 +29,17 @@ import { HabitPostProcessor } from './views/HabitPostProcessor.js';
 // 1. Core Initialization — Constants, Imports, Utils, AudioEngine
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const {
+import {
   Plugin,
   Notice,
   TFile,
-} = require("obsidian");
+} from "obsidian";
 
 import {
   DEFAULT_REFLECTION_HEADING,
   DEFAULT_HABIT_NOTES_HEADING,
   VIEW_TYPE_WEEKLY,
-  DEFAULT_SETTINGS,
-  TRANSLATIONS
+  DEFAULT_SETTINGS
 } from './constants.js';
 
 import { getNoteByDate, findHabitEntry, getDailyNotesInfo } from './utils/helpers.js';
@@ -39,7 +47,7 @@ import { WeeklyGridView } from './views/WeeklyGridView.js';
 import { DailyHabitsSettingTab } from './views/DailyHabitsSettingTab.js';
 import { OnboardingModal } from './modals/OnboardingModal.js';
 
-module.exports = class DailyHabitsPlugin extends Plugin {
+export default class DailyHabitsPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
@@ -272,8 +280,6 @@ module.exports = class DailyHabitsPlugin extends Plugin {
     if (oldBasename === newBasename) return;
 
     const oldLink = `[[${oldBasename}]]`;
-    let changed = false;
-
     for (const habit of this.habitManager.getHabits()) {
       if (habit.linkText !== oldLink) continue;
 
@@ -284,7 +290,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
 
       habit.linkText = `[[${newBasename}]]`;
       habit.name = newBasename;
-      changed = true;
+      
       
       // Sync to properties
       const props = this.habitNoteManager._habitToProps(habit);
@@ -399,21 +405,5 @@ module.exports = class DailyHabitsPlugin extends Plugin {
  * @property {string[]} [nameHistory] - Previous linkText values for historical matching after renames
  */
 
-class TranslationManager {
-  constructor(plugin) {
-    this.plugin = plugin;
-  }
 
-  t(key, params = {}) {
-    const lang = this.plugin.settings.language || "ar";
-    const dict = TRANSLATIONS[lang] || TRANSLATIONS["en"];
-    let text = dict[key] || TRANSLATIONS["en"][key] || key;
-
-    Object.keys(params).forEach((param) => {
-      text = text.replace(`{${param}}`, params[param]);
-    });
-
-    return text;
-  }
-}
 
