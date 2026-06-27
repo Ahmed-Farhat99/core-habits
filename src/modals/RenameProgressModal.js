@@ -1,9 +1,8 @@
-import { Modal } from 'obsidian';
+import { BaseHabitModal } from './BaseHabitModal.js';
 
-class RenameProgressModal extends Modal {
+class RenameProgressModal extends BaseHabitModal {
   constructor(app, plugin, totalFiles, onCancel) {
-    super(app);
-    this.plugin = plugin;
+    super(app, plugin);
     this.totalFiles = totalFiles;
     this.processed = 0;
     this.onCancel = onCancel;
@@ -11,15 +10,15 @@ class RenameProgressModal extends Modal {
   }
 
   onOpen() {
+    super.onOpen();
     const { contentEl } = this;
     contentEl.addClass("rename-progress-modal");
 
     // Header
-    const isAr = this.plugin.settings.language === "ar";
-    contentEl.setAttr("dir", isAr ? "rtl" : "ltr");
+    const t = (key) => this.plugin.translationManager.t(key);
 
     contentEl.createEl("h2", {
-      text: isAr ? "جارٍ تحديث الملفات..." : "Updating files..."
+      text: t("rename_updating")
     });
 
     // Progress Bar Container
@@ -36,8 +35,8 @@ class RenameProgressModal extends Modal {
     // Cancel Button
     const footer = contentEl.createDiv({ cls: "modal-button-container" });
     const cancelBtn = footer.createEl("button", {
-      text: isAr ? "إلغاء" : "Cancel",
-      cls: "mod-warning",
+      text: t("cancel"),
+      cls: "dh-btn mod-warning",
     });
     cancelBtn.onclick = () => {
       this.cancelled = true;

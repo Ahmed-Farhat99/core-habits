@@ -11,6 +11,7 @@ Unlike other trackers that lock your data in complicated databases, Core Habits 
 ### ✨ Key Features
 
 - **Blazing Fast Weekly Dashboard**: A clean, responsive week-based grid that lets you toggle habits instantly without lag or UI flickering.
+- **Adaptive Layout & Sidebar Mode**: Automatically switches to an elegant, high-readability vertical list view when placed in the Obsidian sidebar or opened on mobile devices.
 - **Smart Streak System (🔥)**: Accurate streak calculation that goes back in time to find your true "First Completion Date" and longest streaks without double-counting.
 - **Dynamic Hijri & Gregorian Dates**: Seamlessly toggle between language-aware dates (e.g., displaying "Ramadan" or "رمضان" based on your interface language).
 - **Audio & Text Context**: Record voice memos or write quick thoughts directly inside a specific habit's record, tying your reflections intimately with your actions.

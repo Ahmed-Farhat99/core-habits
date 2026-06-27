@@ -10,6 +10,8 @@
   --dh-brand-info: var(--color-blue, #3b82f6);
   --dh-brand-skipped: #b08d57;
   --dh-brand-critical: var(--color-red, #f43f5e);
+  --dh-brand-teal: #14b8a6;
+
 
   /* ---------- Brand Colors (RGB) ---------- */
   --dh-brand-primary-rgb: 124, 58, 237;
@@ -19,6 +21,8 @@
   --dh-brand-info-rgb: 59, 130, 246;
   --dh-brand-skipped-rgb: 176, 141, 87;
   --dh-brand-critical-rgb: 244, 63, 94;
+  --dh-brand-teal-rgb: 20, 184, 166;
+
 
   /* ---------- Cell State Colors ---------- */
   --dh-state-completed-bg: rgba(var(--dh-brand-success-rgb), 0.15);
@@ -41,6 +45,18 @@
   /* --- Tokens --- */
   --dh-grid-min-width: 600px;
 
+  /* ---------- Grid Layout & Sizing ---------- */
+  --dh-grid-index-width: 32px;
+  --dh-grid-name-min-width: 180px;
+  --dh-grid-name-max-width: 360px;
+  --dh-grid-name-weight: 2fr;
+  --dh-grid-day-min-width: 55px;
+  --dh-grid-day-max-width: 1fr;
+  --dh-day-cell-size: 32px;
+  --dh-day-cell-font-size: 0.95em;
+  --dh-day-stat-badge-padding: 2px 6px;
+  --dh-day-stat-badge-font-size: 0.7rem;
+
   /* ---------- Streak Badge ---------- */
   --dh-streak-color: #fb923c;
   --dh-streak-bg: rgba(var(--dh-brand-warning-rgb), 0.12);
@@ -53,6 +69,9 @@
   --dh-progress-good: #22c55e;
   --dh-progress-excellent: var(--dh-brand-success);
   --dh-progress-perfect: #8b5cf6;
+  --dh-progress-perfect-rgb: 139, 92, 246;
+  --dh-progress-perfect-light: #a78bfa;
+
 
   /* ---------- Typography Scale ---------- */
   --dh-font-xs: 0.7rem;
@@ -114,9 +133,14 @@
 
   /* Level Badge Colors */
   --dh-badge-level-1-color: #cd7f32;
+  --dh-badge-level-1-color-rgb: 205, 127, 50;
   --dh-badge-level-2-color: #94a3b8;
+  --dh-badge-level-2-color-rgb: 148, 163, 184;
   --dh-badge-level-3-color: #eab308;
+  --dh-badge-level-3-color-rgb: 234, 179, 8;
   --dh-badge-level-4-color: #06b6d4;
+  --dh-badge-level-4-color-rgb: 6, 182, 212;
+
 
   /* Streak RGB for transparent variants */
   --dh-streak-color-rgb: 251, 146, 60;
@@ -135,23 +159,40 @@
 
 /* --- 2. BASE & RESETS --- */
 
+.daily-habits-plugin {
+  --dh-direction-sign: 1;
+}
+.daily-habits-plugin[dir="rtl"], [dir="rtl"] .daily-habits-plugin {
+  --dh-direction-sign: -1;
+}
+
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  .daily-habits-plugin *,
+  .daily-habits-plugin *::before,
+  .daily-habits-plugin *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
   }
 }
 
 /* Focus Visible */
-*:focus-visible {
+.daily-habits-plugin *:focus-visible {
   outline: 2px solid var(--dh-brand-primary);
   outline-offset: 2px;
 }
+
+/* View Content Slot */
+.daily-habits-plugin .dh-view-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
 
 /* --- 3. SHARED UI --- */
 .dh-type-dot {
@@ -210,6 +251,84 @@
 .daily-habits-plugin .dh-settings-tab .dh-habit-row-child .dh-type-dot {
   --dh-dot-opacity: 0.4;
   --dh-dot-size: 6px;
+}
+
+/* Unified Button Component */
+.daily-habits-plugin .dh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dh-space-sm);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  border-radius: var(--dh-radius-md);
+  padding: 6px 14px;
+  font-size: var(--dh-font-sm);
+  font-weight: var(--dh-weight-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: auto;
+  line-height: normal;
+  transition: 
+    background-color var(--dh-transition-normal), 
+    color var(--dh-transition-normal), 
+    border-color var(--dh-transition-normal),
+    transform var(--dh-transition-fast),
+    box-shadow var(--dh-transition-fast),
+    opacity var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-btn:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-color: var(--text-muted);
+}
+
+.daily-habits-plugin .dh-btn:active {
+  transform: translateY(0);
+}
+
+/* Primary/Accent Variant */
+.daily-habits-plugin .dh-btn.mod-cta {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: transparent;
+}
+
+.daily-habits-plugin .dh-btn.mod-cta:hover {
+  background-color: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.3);
+}
+
+/* Rounded Pill Variant */
+.daily-habits-plugin .dh-btn.mod-pill {
+  border-radius: var(--dh-radius-full);
+}
+
+/* Icon-only button (circular/square-ish) */
+.daily-habits-plugin .dh-btn.mod-icon {
+  padding: 6px;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+}
+
+/* Unified Card Component */
+.daily-habits-plugin .dh-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-lg);
+  box-shadow: var(--dh-shadow-sm);
+  transition: 
+    background-color var(--dh-transition-normal), 
+    border-color var(--dh-transition-normal), 
+    box-shadow var(--dh-transition-normal),
+    transform var(--dh-transition-normal),
+    filter var(--dh-transition-normal);
 }
 
 /* --- 10. ANIMATIONS --- */
@@ -319,45 +438,184 @@
 
 /* --- 11. UTILITIES --- */
 
-.text-center {
+.daily-habits-plugin .text-center {
   text-align: center;
 }
 
-.hidden {
-  display: none !important;
+.daily-habits-plugin .hidden {
+  display: none;
 }
 
-.visible {
-  display: block !important;
+.daily-habits-plugin .visible {
+  display: block;
 }
 
-.clickable-card {
+.daily-habits-plugin .clickable-card {
   cursor: pointer;
   transition: transform var(--dh-transition-normal), filter var(--dh-transition-normal);
 }
 
-.clickable-card:hover {
+.daily-habits-plugin .clickable-card:hover {
   transform: translateY(-4px) scale(1.02);
   filter: brightness(1.15);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
-.clickable-card:active {
+.daily-habits-plugin .clickable-card:active {
   transform: translateY(-2px) scale(1);
 }
 
 /* --- 12. RTL & A11Y --- */
 
 @media (prefers-contrast: high) {
-  .dh-grid-cell {
+  .daily-habits-plugin .dh-grid-cell {
     border-width: 2px;
   }
 
-  .day-header.today {
-    border-bottom-width: 4px !important;
+  .daily-habits-plugin.weekly-grid-container .habits-grid .day-header.today {
+    border-bottom-width: 4px;
   }
 }
 
-[dir="rtl"] .week-nav-buttons {
+.daily-habits-plugin[dir="rtl"] .week-nav-buttons,
+[dir="rtl"] .daily-habits-plugin .week-nav-buttons {
   flex-direction: row-reverse;
 }
+
+/* --- 13. COMMON UI STATES (EMPTY, LOADING, ERROR) --- */
+
+.daily-habits-plugin .dh-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--dh-space-4xl) var(--dh-space-xl);
+  background: rgba(var(--dh-brand-primary-rgb), 0.03);
+  border: 1px dashed rgba(var(--dh-brand-primary-rgb), 0.3);
+  border-radius: var(--dh-radius-xl);
+  margin: var(--dh-space-xl) 0;
+  text-align: center;
+}
+
+.daily-habits-plugin .dh-empty-state-icon {
+  font-size: 3rem;
+  color: var(--dh-brand-primary);
+  opacity: 0.8;
+  margin-bottom: var(--dh-space-md);
+  filter: drop-shadow(0 4px 12px rgba(var(--dh-brand-primary-rgb), 0.2));
+}
+
+.daily-habits-plugin .dh-empty-state-title {
+  font-size: var(--dh-font-lg);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+  margin-bottom: var(--dh-space-sm);
+}
+
+.daily-habits-plugin .dh-empty-state-desc {
+  font-size: var(--dh-font-sm);
+  color: var(--text-muted);
+  max-width: 300px;
+  margin-bottom: var(--dh-space-xl);
+  line-height: 1.5;
+}
+
+.daily-habits-plugin .dh-empty-state-btn {
+  background: var(--dh-brand-primary);
+  color: var(--text-on-accent);
+  border: none;
+  padding: var(--dh-space-md) var(--dh-space-3xl);
+  border-radius: var(--dh-radius-full);
+  font-size: var(--dh-font-sm);
+  font-weight: var(--dh-weight-bold);
+  cursor: pointer;
+  transition: transform var(--dh-transition-fast), box-shadow var(--dh-transition-fast);
+  box-shadow: 0 4px 12px rgba(var(--dh-brand-primary-rgb), 0.3);
+}
+
+.daily-habits-plugin .dh-empty-state-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(var(--dh-brand-primary-rgb), 0.4);
+}
+
+/* Error States */
+.daily-habits-plugin .dh-empty-state.error-state {
+  background: rgba(var(--dh-brand-danger-rgb), 0.05);
+  border-color: rgba(var(--dh-brand-danger-rgb), 0.3);
+}
+
+.daily-habits-plugin .dh-empty-state.error-state .error-icon {
+  color: var(--dh-brand-danger);
+  filter: drop-shadow(0 4px 12px rgba(var(--dh-brand-danger-rgb), 0.2));
+}
+
+.daily-habits-plugin .dh-empty-state.error-state .error-text {
+  color: var(--text-error, var(--dh-brand-danger));
+}
+
+/* Loading States */
+.daily-habits-plugin .dh-loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--dh-space-4xl) var(--dh-space-xl);
+  font-size: var(--dh-font-md);
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-bold);
+  text-align: center;
+}
+
+.daily-habits-plugin .dh-spinner-icon {
+  font-size: 2.5rem;
+  margin-bottom: var(--dh-space-md);
+  animation: habitPulse 1.5s infinite ease-in-out;
+}
+
+.daily-habits-plugin .dh-loading-text {
+  font-size: var(--dh-font-base);
+  color: var(--text-muted);
+  margin-top: var(--dh-space-md);
+}
+
+/* --- 14. HABIT POST PROCESSOR STYLES --- */
+
+.daily-habits-plugin.core-habits-post-processor {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-lg);
+  padding: var(--dh-space-xl);
+  margin-block: var(--dh-space-xl);
+  background-color: var(--background-secondary);
+}
+
+.daily-habits-plugin.core-habits-post-processor .ch-pp-badge {
+  color: white;
+  padding: 4px 8px;
+  border-radius: var(--dh-radius-sm);
+  font-size: var(--dh-font-xs);
+  font-weight: var(--dh-weight-bold);
+}
+
+.daily-habits-plugin.core-habits-post-processor .ch-pp-badge.break {
+  background-color: var(--color-red, var(--dh-brand-critical));
+}
+
+.daily-habits-plugin.core-habits-post-processor .ch-pp-badge.build {
+  background-color: var(--color-teal, var(--dh-brand-success));
+}
+
+.daily-habits-plugin.core-habits-post-processor .ch-pp-section {
+  margin-top: var(--dh-space-xl);
+}
+
+.daily-habits-plugin.core-habits-post-processor .ch-pp-condition {
+  font-size: var(--dh-font-xs);
+  opacity: 0.8;
+  margin-inline-start: var(--dh-space-3xl);
+}
+
+.daily-habits-plugin.core-habits-post-processor .ch-pp-level-item.is-current {
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-accent);
+}
+

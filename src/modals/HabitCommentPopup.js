@@ -1,24 +1,26 @@
-import { Modal, Notice, Platform } from 'obsidian';
-import { VoiceRecorderUtility } from '../services/VoiceRecorderUtility.js';
+import { Notice, Platform } from 'obsidian';
+import { BaseHabitModal } from './BaseHabitModal.js';
+import { autoResizeTextarea } from '../utils/helpers.js';
+import { VoiceRecorderComponent } from '../components/VoiceRecorderComponent.js';
 
-class HabitCommentPopup extends Modal {
+class HabitCommentPopup extends BaseHabitModal {
   constructor(app, plugin, habit, date, onSave) {
-    super(app);
-    this.plugin = plugin;
+    super(app, plugin);
     this.habit = habit;
     this.date = date;
     this.onSave = onSave;
   }
 
   onOpen() {
+    super.onOpen();
     const { contentEl, modalEl } = this;
-    const isAr = this.plugin.settings.language === "ar";
+    const t = (k, params = {}) => this.plugin.translationManager.t(k, params);
+    contentEl.addClass("daily-habits-modal");
     contentEl.addClass("dh-popup-compact");
-    if (isAr) contentEl.addClass("is-rtl");
-    contentEl.setAttr("dir", isAr ? "rtl" : "ltr");
     modalEl.addClass("dh-popup-modal-parent");
 
-    const dateStr = this.date.clone().locale(isAr ? "ar" : "en").format("D MMM");
+    const lang = this.plugin.settings.language || "ar";
+    const dateStr = this.date.clone().locale(lang).format(t("date_format_medium"));
 
     // Compact header row: icon + title + meta inline
     const header = contentEl.createDiv({ cls: "dh-popup-header" });
@@ -29,78 +31,60 @@ class HabitCommentPopup extends Modal {
 
     const inputWrapper = contentEl.createDiv({ cls: "dh-popup-input-wrapper" });
     const input = inputWrapper.createEl("textarea", {
-      cls: "dh-popup-input dh-popup-input-standalone",
+      cls: "dh-popup-input dh-popup-input-standalone dh-auto-textarea",
       attr: {
-        placeholder: isAr ? "ماذا حدث؟ لماذا تأخرت؟ ما شعورك؟" : "What happened? Why delayed? Feeling?",
+        placeholder: t("comment_placeholder"),
         rows: 3
       }
+    });
+
+    const autoResize = () => autoResizeTextarea(input);
+    input.oninput = autoResize;
+
+    // Load existing comment text
+    input.disabled = true;
+    input.placeholder = t("comment_loading");
+    
+    this.plugin.habitCommentRepository.getCommentForHabitDate(this.habit, this.date).then(existingComment => {
+      input.disabled = false;
+      input.placeholder = t("comment_placeholder");
+      input.value = existingComment || "";
+      input.focus();
+      autoResize();
+      if (Platform.isMobile) {
+        setTimeout(() => input.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+      }
+    }).catch(err => {
+      console.warn("[Core Habits] Failed to load existing comment:", err);
+      input.disabled = false;
+      input.placeholder = t("comment_placeholder");
+      input.focus();
+      autoResize();
     });
 
     const footer = contentEl.createDiv({ cls: "dh-modal-actions dh-popup-footer-split" });
 
     const actionsLeft = footer.createDiv({ cls: "dh-popup-actions-left" });
-    const micBtn = actionsLeft.createEl("button", {
-      cls: "dh-popup-mic-btn",
-      text: isAr ? "🎙️ تسجيل (اضغط مطولاً)" : "🎙️ Record (Hold)",
-      title: isAr ? "اضغط مطولاً لتسجيل ملاحظة صوتية" : "Press and hold to record a voice note"
+    this.voiceRecorder = new VoiceRecorderComponent(actionsLeft, {
+      app: this.app,
+      plugin: this.plugin,
+      inputEl: input,
+      placeholderDefault: t("comment_placeholder")
     });
 
     const actionsRight = footer.createDiv({ cls: "dh-popup-actions-right" });
 
     const saveBtn = actionsRight.createEl("button", {
-      text: isAr ? "💾 حفظ" : "💾 Save",
-      cls: "mod-cta"
+      text: t("comment_save"),
+      cls: "dh-btn mod-cta"
     });
 
-    const cancelBtn = actionsRight.createEl("button", { text: isAr ? "إلغاء" : "Cancel" });
+    const cancelBtn = actionsRight.createEl("button", { text: t("cancel"), cls: "dh-btn" });
     cancelBtn.onclick = () => this.close();
 
-    let isRecording = false;
-    let recordTimer = null;
-    let seconds = 0;
-
-    micBtn.onclick = async () => {
-      if (!isRecording) {
-        const started = await VoiceRecorderUtility.startRecording();
-        if (started) {
-          isRecording = true;
-          micBtn.addClass("is-recording");
-          micBtn.textContent = isAr ? "⏹ إيقاف" : "⏹ Stop";
-          input.disabled = true;
-          input.placeholder = isAr ? "جاري التسجيل... 00:00" : "Recording... 00:00";
-          seconds = 0;
-          recordTimer = setInterval(() => {
-            seconds++;
-            const mm = String(Math.floor(seconds/60)).padStart(2, '0');
-            const ss = String(seconds%60).padStart(2,'0');
-            input.placeholder = isAr ? `جاري التسجيل... ${mm}:${ss}` : `Recording... ${mm}:${ss}`;
-          }, 1000);
-        } else {
-          new Notice(isAr ? "فشل الوصول للميكروفون!" : "Microphone access failed!");
-        }
-      } else {
-        clearInterval(recordTimer);
-        input.placeholder = isAr ? "معالجة الصوت..." : "Processing audio...";
-        const fileName = await VoiceRecorderUtility.stopAndSaveRecording(this.app);
-        isRecording = false;
-        micBtn.removeClass("is-recording");
-        micBtn.textContent = isAr ? "🎙️ تسجيل صوتي" : "🎙️ Voice Note";
-        input.disabled = false;
-        input.placeholder = isAr ? "ماذا حدث؟ لماذا تأخرت؟ ما شعورك؟" : "What happened? Why delayed? Feeling?";
-        
-        if (fileName) {
-          const sep = input.value ? "\n" : "";
-          input.value += `${sep}![[${fileName}]]`;
-          input.focus();
-        } else {
-           new Notice(isAr ? "فشل حفظ الملف الصوتي!" : "Failed to save audio file!");
-        }
-      }
-    };
-
     const submit = () => {
-      if (isRecording) {
-        new Notice(isAr ? "أوقف التسجيل أولاً!" : "Stop recording first!");
+      if (this.voiceRecorder && this.voiceRecorder.isRecording) {
+        new Notice(t("reflection_mic_stop_first"));
         return;
       }
       const sanitized = input.value
@@ -110,16 +94,14 @@ class HabitCommentPopup extends Modal {
         .trim();
       if (sanitized) {
         saveBtn.disabled = true;
-        saveBtn.textContent = isAr ? "جاري..." : "Saving...";
+        saveBtn.textContent = t("reflection_saving");
         this.onSave(sanitized).then((savedFile) => {
-          new Notice(isAr
-            ? `✅ تم حفظ التعليق في: ${savedFile || this.habit.name}`
-            : `✅ Saved to: ${savedFile || this.habit.name}`);
+          new Notice(t("reflection_save_success_comment", { file: savedFile || this.habit.name }));
           this.close();
         }).catch(e => {
           new Notice(`❌ ${e.message}`);
           saveBtn.disabled = false;
-          saveBtn.textContent = isAr ? "💾 حفظ" : "💾 Save";
+          saveBtn.textContent = t("comment_save");
         });
       } else {
         this.close();
@@ -130,32 +112,14 @@ class HabitCommentPopup extends Modal {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
     });
-    setTimeout(() => {
-      input.focus();
-      // Mobile: scroll input into view when keyboard appears
-      if (Platform.isMobile) {
-        setTimeout(() => input.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
-      }
-    }, 50);
   }
 
   onClose() {
-    if (VoiceRecorderUtility.isRecording) {
-      if (VoiceRecorderUtility.stream) {
-        VoiceRecorderUtility.stream.getTracks().forEach(t => t.stop());
-      }
-      if (VoiceRecorderUtility.mediaRecorder && VoiceRecorderUtility.mediaRecorder.state !== "inactive") {
-        VoiceRecorderUtility.mediaRecorder.stop();
-      }
-      VoiceRecorderUtility.isRecording = false;
-      VoiceRecorderUtility.chunks = [];
+    if (this.voiceRecorder) {
+      this.voiceRecorder.cleanup();
     }
-    this.contentEl.empty();
+    super.onClose();
   }
 }
 
-/**
- * Feature: Daily Note Reflection
- * Small popup modal for writing the daily overall reflection
- */
 export { HabitCommentPopup };

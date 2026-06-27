@@ -1,23 +1,62 @@
 /* --- 6. SETTINGS --- */
 
-.habits-list-settings {
+/* Search & Path Display */
+.daily-habits-plugin .dh-search-container {
+  margin: var(--dh-space-lg) 0;
+}
+.daily-habits-plugin .dh-search-input {
+  width: 100%;
+  padding: var(--dh-space-md) var(--dh-space-xl);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-lg);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--dh-font-base);
+  font-family: var(--dh-font-arabic);
+  transition: border-color var(--dh-transition-fast), box-shadow var(--dh-transition-fast);
+  box-sizing: border-box;
+}
+.daily-habits-plugin .dh-search-input:focus {
+  border-color: var(--dh-brand-primary);
+  box-shadow: 0 0 0 2px rgba(var(--dh-brand-primary-rgb), 0.15);
+  outline: none;
+}
+.daily-habits-plugin .dh-search-input::placeholder {
+  color: var(--text-faint);
+}
+.daily-habits-plugin .dh-habit-file-path {
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  margin-top: var(--dh-space-xs);
+  font-family: var(--font-monospace);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.daily-habits-plugin .habits-list-settings {
+
+
   margin-top: var(--dh-space-lg);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--dh-radius-md);
   padding: var(--dh-space-lg);
 }
+.daily-habits-plugin .habits-list-settings .setting-item {
 
-.habits-list-settings .setting-item {
+
   border-bottom: 1px solid var(--background-modifier-border);
   padding: var(--dh-space-lg) 0;
 }
+.daily-habits-plugin .habits-list-settings .setting-item:last-child {
 
-.habits-list-settings .setting-item:last-child {
+
   border-bottom: none;
 }
+/* Settings Controls & Layout */.daily-habits-plugin .dh-settings-tabs-container {
 
-/* Settings Controls & Layout */
-.dh-settings-tabs-container {
+
   display: flex;
   background: var(--background-secondary);
   padding: var(--dh-space-xs);
@@ -28,14 +67,16 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
+.daily-habits-plugin .dh-settings-tabs-container::-webkit-scrollbar {
 
-.dh-settings-tabs-container::-webkit-scrollbar {
+
   display: none;
 }
+.daily-habits-plugin .dh-tab-btn {
 
-.dh-tab-btn {
+
   flex: 1;
-  padding: 8px 16px;
+  padding: var(--dh-space-md) var(--dh-space-xl);
   font-size: var(--dh-font-sm);
   font-weight: var(--dh-weight-semibold);
   color: var(--text-muted);
@@ -47,90 +88,41 @@
   white-space: nowrap;
   text-align: center;
 }
+.daily-habits-plugin .dh-tab-btn:hover {
 
-.dh-tab-btn:hover {
+
   color: var(--text-normal);
   background: var(--background-modifier-hover);
 }
+.daily-habits-plugin .dh-tab-btn.is-active {
 
-.dh-tab-btn.is-active {
+
   background: var(--background-primary);
   color: var(--interactive-accent);
   box-shadow: var(--dh-shadow-sm);
 }
+.daily-habits-plugin .dh-settings-panel {
 
-.dh-settings-panel {
+
   display: none;
   animation: fadeSlideIn 0.2s ease-out forwards;
 }
+.daily-habits-plugin .dh-settings-panel.is-active {
 
-.dh-settings-panel.is-active {
+
   display: block;
 }
+/* Settings List */.daily-habits-plugin .dh-habits-list {
 
-.dh-empty-state {
+
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--dh-space-4xl) var(--dh-space-xl);
-  background: rgba(var(--dh-brand-primary-rgb), 0.03);
-  border: 1px dashed rgba(var(--dh-brand-primary-rgb), 0.3);
-  border-radius: var(--dh-radius-xl);
-  margin: var(--dh-space-xl) 0;
-  text-align: center;
-}
-
-.dh-empty-state-icon {
-  font-size: 3rem;
-  color: var(--dh-brand-primary);
-  opacity: 0.8;
-  margin-bottom: var(--dh-space-md);
-  filter: drop-shadow(0 4px 12px rgba(var(--dh-brand-primary-rgb), 0.2));
-}
-
-.dh-empty-state-title {
-  font-size: var(--dh-font-lg);
-  font-weight: var(--dh-weight-bold);
-  color: var(--text-normal);
-  margin-bottom: var(--dh-space-sm);
-}
-
-.dh-empty-state-desc {
-  font-size: var(--dh-font-sm);
-  color: var(--text-muted);
-  max-width: 300px;
-  margin-bottom: var(--dh-space-xl);
-  line-height: 1.5;
-}
-
-.dh-empty-state-btn {
-  background: var(--dh-brand-primary);
-  color: var(--text-on-accent);
-  border: none;
-  padding: 10px 24px;
-  border-radius: var(--dh-radius-full);
-  font-size: var(--dh-font-sm);
-  font-weight: var(--dh-weight-bold);
-  cursor: pointer;
-  transition: transform var(--dh-transition-fast), box-shadow var(--dh-transition-fast);
-  box-shadow: 0 4px 12px rgba(var(--dh-brand-primary-rgb), 0.3);
-}
-
-.dh-empty-state-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(var(--dh-brand-primary-rgb), 0.4);
-}
-
-/* Settings List */
-.dh-habits-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  gap: var(--dh-space-sm);
   margin-top: var(--dh-space-xl);
 }
+.daily-habits-plugin .dh-habit-row.dh-list-header {
 
-.dh-habit-row.dh-list-header {
+
   background: transparent;
   border: none;
   font-weight: var(--dh-weight-semibold);
@@ -140,30 +132,23 @@
   border-bottom: 2px solid var(--background-modifier-border);
   border-radius: 0;
 }
+.daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-id, .daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-level, .daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-streak, .daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-schedule, .daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-actions, .daily-habits-plugin.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-id, .daily-habits-plugin.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-level, .daily-habits-plugin.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-streak, .daily-habits-plugin.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-schedule, .daily-habits-plugin.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-actions {
 
-.daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-id,
-.daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-level,
-.daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-streak,
-.daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-schedule,
-.daily-habits-plugin .dh-habit-row.dh-list-header .dh-col-actions,
-.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-id,
-.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-level,
-.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-streak,
-.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-schedule,
-.daily-habits-settings-container .dh-habit-row.dh-list-header .dh-col-actions {
+
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   height: 100%;
 }
+.daily-habits-plugin .dh-habit-row {
 
-.dh-habit-row {
+
   display: grid;
   grid-template-columns: 40px 1fr 60px 100px 190px;
   align-items: center;
   gap: var(--dh-space-md);
-  padding: 12px var(--dh-space-md);
+  padding: var(--dh-space-lg) var(--dh-space-md);
   background-color: color-mix(in srgb, var(--dh-row-color) 10%, transparent);
   border-bottom: 1px solid var(--background-modifier-border);
   border-top: none;
@@ -171,106 +156,114 @@
   border-right: none;
   border-radius: 0;
   transition: background-color 0.2s ease;
+  text-align: start;
 }
-
-.dh-habit-row:not(.dh-list-header) {
-  box-shadow: 4px 0 0 0 var(--dh-row-color, transparent) inset;
+.daily-habits-plugin .dh-habit-row.is-hidden {
+  display: none;
 }
-
-[dir="rtl"] .dh-habit-row:not(.dh-list-header) {
-  box-shadow: -4px 0 0 0 var(--dh-row-color, transparent) inset;
+.daily-habits-plugin .dh-habit-row:not(.dh-list-header) {
+  box-shadow: calc(4px * var(--dh-direction-sign)) 0 0 0 var(--dh-row-color, transparent) inset;
 }
+.daily-habits-plugin .dh-habit-row:not(.dh-list-header):hover {
 
-.dh-habit-row:not(.dh-list-header):hover {
+
   background-color: var(--background-modifier-hover);
   border-color: var(--background-modifier-border-hover);
   transform: none;
 }
+.daily-habits-plugin .dh-habit-row.archived {
 
-.dh-habit-row.archived {
+
   grid-template-columns: 40px 1fr 120px 100px 70px;
   opacity: 0.75;
   background: var(--background-primary-alt);
   border-bottom: 1px dashed var(--background-modifier-border);
-  padding: 12px var(--dh-space-md);
+  padding: var(--dh-space-lg) var(--dh-space-md);
   border-radius: 0;
   margin-bottom: 0;
   transition: background-color var(--dh-transition-normal), opacity var(--dh-transition-normal);
 }
+.daily-habits-plugin .dh-habit-row.dh-list-header.archived {
 
-.dh-habit-row.dh-list-header.archived {
+
   opacity: 1;
   background: transparent;
   border-bottom: 2px solid var(--background-modifier-border);
 }
+.daily-habits-plugin .dh-habit-row.archived:hover {
 
-.dh-habit-row.archived:hover {
+
   opacity: 0.9;
   background: var(--background-modifier-hover);
 }
+.daily-habits-plugin .dh-habit-row.archived .dh-col-name {
 
-[dir="rtl"] .dh-habit-row {
-  text-align: start;
-}
 
-.dh-habit-row.archived .dh-col-name {
   color: var(--text-muted);
 }
+.daily-habits-plugin .dh-habit-row.archived .dh-habit-name {
 
-.dh-habit-row.archived .dh-habit-name {
+
   font-style: italic;
   text-decoration: line-through;
   text-decoration-color: var(--text-faint);
 }
+.daily-habits-plugin .dh-col-id {
 
-.dh-col-id {
+
   font-family: var(--font-monospace);
   color: var(--text-muted);
   font-size: var(--dh-font-sm);
   text-align: center;
 }
+.daily-habits-plugin .dh-col-name {
 
-.dh-col-name {
+
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
 }
+.daily-habits-plugin .dh-habit-name {
 
-.dh-habit-name {
+
   font-weight: var(--dh-weight-semibold);
   color: var(--text-normal);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.daily-habits-plugin .dh-habit-link {
 
-.dh-habit-link {
+
   font-size: var(--dh-font-xs);
   color: var(--text-muted);
   font-family: var(--font-monospace);
   margin-top: var(--dh-space-2xs);
 }
+.daily-habits-plugin .dh-col-level {
 
-.dh-col-level {
+
   display: flex;
 }
+.daily-habits-plugin .dh-col-streak {
 
-.dh-col-streak {
+
   display: flex;
   justify-content: center;
   align-items: center;
   color: var(--text-muted);
   font-size: var(--dh-font-sm);
 }
+.daily-habits-plugin .dh-col-level, .daily-habits-plugin .dh-level-badge {
 
-.dh-col-level,
-.dh-level-badge {
+
   justify-content: center;
   align-items: center;
 }
+.daily-habits-plugin .dh-level-badge {
 
-.dh-level-badge {
+
   display: inline-flex;
   width: 24px;
   height: 24px;
@@ -280,50 +273,48 @@
   background: var(--background-modifier-border);
   color: var(--text-muted);
 }
-
-.dh-level-badge.level-1 {
-  background: rgba(205, 127, 50, 0.15);
+.daily-habits-plugin .dh-level-badge.level-1 {
+  background: rgba(var(--dh-badge-level-1-color-rgb), 0.15);
   color: var(--dh-badge-level-1-color);
-  border: 1px solid rgba(205, 127, 50, 0.3);
+  border: 1px solid rgba(var(--dh-badge-level-1-color-rgb), 0.3);
 }
-
-.dh-level-badge.level-2 {
-  background: rgba(148, 163, 184, 0.15);
+.daily-habits-plugin .dh-level-badge.level-2 {
+  background: rgba(var(--dh-badge-level-2-color-rgb), 0.15);
   color: var(--dh-badge-level-2-color);
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  border: 1px solid rgba(var(--dh-badge-level-2-color-rgb), 0.3);
 }
-
-.dh-level-badge.level-3 {
-  background: rgba(234, 179, 8, 0.15);
+.daily-habits-plugin .dh-level-badge.level-3 {
+  background: rgba(var(--dh-badge-level-3-color-rgb), 0.15);
   color: var(--dh-badge-level-3-color);
-  border: 1px solid rgba(234, 179, 8, 0.3);
+  border: 1px solid rgba(var(--dh-badge-level-3-color-rgb), 0.3);
 }
-
-.dh-level-badge.level-4 {
-  background: rgba(6, 182, 212, 0.15);
+.daily-habits-plugin .dh-level-badge.level-4 {
+  background: rgba(var(--dh-badge-level-4-color-rgb), 0.15);
   color: var(--dh-badge-level-4-color);
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  border: 1px solid rgba(var(--dh-badge-level-4-color-rgb), 0.3);
 }
-
-.dh-level-badge.level-5 {
+.daily-habits-plugin .dh-level-badge.level-5 {
   background: rgba(var(--dh-brand-danger-rgb), 0.15);
-  color: #f97316;
+  color: var(--dh-brand-danger);
   border: 1px solid rgba(var(--dh-brand-danger-rgb), 0.3);
   box-shadow: 0 0 8px rgba(var(--dh-brand-danger-rgb), 0.2);
 }
+.daily-habits-plugin .dh-level-badge.level-completed {
 
-.dh-level-badge.level-completed {
+
   background: var(--dh-brand-success);
   color: var(--text-on-accent);
 }
+.daily-habits-plugin .dh-col-schedule {
 
-.dh-col-schedule {
+
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.daily-habits-plugin .dh-schedule-tag {
 
-.dh-schedule-tag {
+
   font-size: var(--dh-font-xs);
   padding: var(--dh-space-2xs) var(--dh-space-md);
   border-radius: var(--dh-radius-full);
@@ -332,42 +323,39 @@
   color: var(--text-muted);
   white-space: nowrap;
 }
+.daily-habits-plugin .dh-schedule-tag.daily {
 
-.dh-schedule-tag.daily {
+
   background: color-mix(in srgb, var(--dh-row-color, var(--dh-brand-primary)) 10%, transparent);
   border-color: color-mix(in srgb, var(--dh-row-color, var(--dh-brand-primary)) 20%, transparent);
   color: var(--dh-row-color, var(--dh-brand-primary));
 }
+/* Actions Column */.daily-habits-plugin .dh-col-actions {
 
-/* Actions Column */
-.dh-col-actions {
+
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: left;
   gap: var(--dh-space-xs);
   flex-wrap: nowrap;
   min-width: fit-content;
 }
+/* Hide actions until hover */.daily-habits-plugin .dh-habit-row:not(.dh-list-header) .dh-col-actions .dh-icon-btn {
 
-/* Hide actions until hover */
-.dh-habit-row:not(.dh-list-header) .dh-col-actions .dh-icon-btn {
+
   opacity: 0;
   transform: scale(0.9);
 }
-.dh-habit-row:not(.dh-list-header):hover .dh-col-actions .dh-icon-btn,
-.dh-habit-row:not(.dh-list-header):focus-within .dh-col-actions .dh-icon-btn {
+.daily-habits-plugin .dh-habit-row:not(.dh-list-header):hover .dh-col-actions .dh-icon-btn, .daily-habits-plugin .dh-habit-row:not(.dh-list-header):focus-within .dh-col-actions .dh-icon-btn {
+
+
   opacity: 1;
   transform: scale(1);
 }
+/* Action Icons */.daily-habits-plugin .dh-icon-btn {
 
-[dir="rtl"] div.daily-habits-settings-container div.dh-col-actions,
-[dir="rtl"] div.daily-habits-plugin div.dh-col-actions {
-  justify-content: flex-end;
-}
 
-/* Action Icons */
-.dh-icon-btn {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -385,42 +373,45 @@
   border: 1px solid transparent;
   box-shadow: none;
 }
+.daily-habits-plugin .dh-icon-btn svg {
 
-.dh-icon-btn svg {
+
   width: 16px;
   height: 16px;
   margin: 0;
   display: block;
 }
+.daily-habits-plugin .dh-icon-btn:hover {
 
-.dh-icon-btn:hover {
+
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
   border-color: var(--background-modifier-border);
 }
+.daily-habits-plugin .dh-icon-btn.mod-warning, .daily-habits-plugin .dh-icon-btn.delete {
 
-.dh-icon-btn.mod-warning,
-.dh-icon-btn.delete {
+
   color: var(--text-muted);
   background-color: transparent;
   border-color: transparent;
 }
+.daily-habits-plugin .dh-icon-btn.mod-warning:hover, .daily-habits-plugin .dh-icon-btn.delete:hover {
 
-.dh-icon-btn.mod-warning:hover,
-.dh-icon-btn.delete:hover {
+
   background-color: rgba(var(--dh-brand-danger-rgb), 0.1);
   color: var(--dh-brand-danger);
   border-color: var(--dh-brand-danger);
 }
+.daily-habits-plugin .dh-icon-btn.is-disabled {
 
-.dh-icon-btn.is-disabled {
+
   opacity: 0.3;
   cursor: not-allowed;
   pointer-events: none;
 }
+/* Add Habit Button */.daily-habits-plugin .dh-add-habit-btn-hero {
 
-/* Add Habit Button */
-.dh-add-habit-btn-hero {
+
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -440,14 +431,15 @@
   transition: background-color var(--dh-transition-normal), box-shadow var(--dh-transition-normal);
   box-shadow: 0 4px 12px rgba(var(--dh-brand-primary-rgb), 0.2);
 }
+.daily-habits-plugin .dh-add-habit-btn-hero:hover {
 
-.dh-add-habit-btn-hero:hover {
+
   background-color: var(--interactive-accent-hover);
   opacity: 1;
 }
+/* Settings Sections */.daily-habits-plugin .dh-settings-section-header {
 
-/* Settings Sections */
-.dh-settings-section-header {
+
   font-size: var(--dh-font-md);
   font-weight: var(--dh-weight-bold);
   color: var(--text-normal);
@@ -458,78 +450,82 @@
   align-items: center;
   gap: var(--dh-space-md);
 }
+.daily-habits-plugin .dh-settings-section-header:first-child {
 
-.dh-settings-section-header:first-child {
+
   margin-top: 0;
 }
+.daily-habits-plugin .dh-import-section {
 
-.dh-import-section {
+
   margin: var(--dh-space-lg) 0;
   padding: 0;
   background: transparent;
   border-radius: 0;
   border: none;
 }
+.daily-habits-plugin .dh-no-habits-message {
 
-.dh-no-habits-message {
+
   text-align: center;
   padding: var(--dh-space-4xl);
   color: var(--text-muted);
   font-size: var(--dh-font-md);
   font-style: italic;
 }
+/* Settings list child rows */.daily-habits-plugin .dh-habit-row.dh-habit-row-child {
 
-/* Settings list child rows */
-.dh-habit-row.dh-habit-row-child {
-  background: color-mix(in srgb, var(--dh-row-color) 2%, transparent) !important;
+
+  background: color-mix(in srgb, var(--dh-row-color) 2%, transparent);
   border-inline-start: 2px solid color-mix(in srgb, var(--dh-row-color) 20%, transparent);
   border-inline-end: 2px solid color-mix(in srgb, var(--dh-row-color) 35%, transparent);
   border-radius: 0;
 }
+.daily-habits-plugin .dh-habit-row-child .dh-col-name {
 
-.dh-habit-row-child .dh-col-name {
-  padding-inline-start: 24px;
+
+  padding-inline-start: var(--dh-space-3xl);
 }
+.daily-habits-plugin .dh-child-indent-cell {
 
-[dir="rtl"] .dh-col-name {
-  text-align: right;
-}
 
-.dh-child-indent-cell {
   color: var(--text-faint);
 }
+.daily-habits-plugin .dh-child-marker {
 
-.dh-child-marker {
+
   font-size: 0.9em;
   opacity: 0.5;
 }
+/* Habit name row (type dot + name) in settings list */.daily-habits-plugin .dh-habit-name-row {
 
-/* Habit name row (type dot + name) in settings list */
-.dh-habit-name-row {
+
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--dh-space-sm);
 }
+/* Tree Hierarchy in Grid Row */.daily-habits-plugin .habits-grid .habit-row-child .habit-name-cell {
 
-/* Tree Hierarchy in Grid Row */
-.habits-grid .habit-row-child .habit-name-cell {
-  padding-inline-start: 32px;
+
+  padding-inline-start: var(--dh-space-4xl);
 }
+/* --- 6.1 GUIDE STYLES --- */.daily-habits-plugin .dh-guide-panel {
 
-/* --- 6.1 GUIDE STYLES --- */
-.dh-guide-panel {
+
   max-width: 800px;
   margin: 0 auto;
   padding: var(--dh-space-xl);
   flex-direction: column;
   gap: var(--dh-space-2xl);
 }
+.daily-habits-plugin .dh-settings-panel.is-active.dh-guide-panel {
 
-.dh-settings-panel.is-active.dh-guide-panel {
+
   display: flex;
 }
+.daily-habits-plugin .dh-guide-main-title {
 
-.dh-guide-main-title {
+
   font-size: var(--dh-font-2xl);
   font-weight: var(--dh-weight-extrabold);
   color: var(--dh-brand-primary);
@@ -537,8 +533,9 @@
   margin-bottom: var(--dh-space-xl);
   font-family: var(--dh-font-arabic);
 }
+.daily-habits-plugin .dh-guide-section {
 
-.dh-guide-section {
+
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--dh-radius-xl);
@@ -546,28 +543,32 @@
   box-shadow: var(--dh-shadow-sm);
   transition: transform var(--dh-transition-fast), box-shadow var(--dh-transition-fast);
 }
+.daily-habits-plugin .dh-guide-section:hover {
 
-.dh-guide-section:hover {
+
   box-shadow: var(--dh-shadow-md);
   border-color: var(--interactive-accent);
 }
+.daily-habits-plugin .dh-guide-header {
 
-.dh-guide-header {
+
   display: flex;
   align-items: center;
   gap: var(--dh-space-md);
   margin-bottom: var(--dh-space-lg);
   color: var(--text-normal);
 }
+.daily-habits-plugin .dh-guide-icon {
 
-.dh-guide-icon {
+
   color: var(--interactive-accent);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .daily-habits-plugin .dh-guide-section h3 {
+
+
   margin: 0;
   font-size: var(--dh-font-lg);
   font-weight: var(--dh-weight-bold);
@@ -575,25 +576,29 @@
   color: var(--text-normal);
   border-bottom: none;
 }
+.daily-habits-plugin .dh-guide-content {
 
-.dh-guide-content {
+
   color: var(--text-muted);
   font-size: var(--dh-font-base);
   line-height: 1.6;
 }
+.daily-habits-plugin .dh-guide-content p {
 
-.dh-guide-content p {
+
   margin-bottom: var(--dh-space-md);
 }
+.daily-habits-plugin .dh-guide-symbols-grid {
 
-.dh-guide-symbols-grid {
+
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--dh-space-md);
   margin-top: var(--dh-space-lg);
 }
+.daily-habits-plugin .dh-guide-symbol-row {
 
-.dh-guide-symbol-row {
+
   display: flex;
   align-items: center;
   gap: var(--dh-space-md);
@@ -601,23 +606,27 @@
   background: var(--background-secondary);
   border-radius: var(--dh-radius-md);
 }
+.daily-habits-plugin .dh-guide-symbol-text {
 
-.dh-guide-symbol-text {
+
   font-size: var(--dh-font-sm);
   color: var(--text-normal);
 }
+.daily-habits-plugin .dh-guide-steps {
 
-.dh-guide-steps {
+
   margin: 0;
   padding-inline-start: var(--dh-space-xl);
 }
+.daily-habits-plugin .dh-guide-steps li {
 
-.dh-guide-steps li {
+
   margin-bottom: var(--dh-space-sm);
   color: var(--text-normal);
 }
+.daily-habits-plugin .dh-guide-tip {
 
-.dh-guide-tip {
+
   margin-top: var(--dh-space-xl);
   padding: var(--dh-space-md) var(--dh-space-lg);
   background: rgba(var(--dh-brand-primary-rgb), 0.05);
@@ -628,7 +637,61 @@
   color: var(--text-normal);
 }
 
-[dir="rtl"] .dh-guide-tip {
-  border-inline-start: none;
-  border-inline-end: 4px solid var(--dh-brand-primary);
+/* Advanced Settings Detail Block */
+.daily-habits-plugin .dh-advanced-settings-block {
+  margin-top: var(--dh-space-2xl);
+  padding: var(--dh-space-md);
+  background: var(--background-secondary);
+  border-radius: var(--dh-radius-md);
 }
+
+.daily-habits-plugin .dh-advanced-settings-block summary {
+  font-weight: var(--dh-weight-bold);
+  cursor: pointer;
+}
+
+/* Undo Delete Notice */
+.dh-undo-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-sm);
+  align-items: flex-start;
+}
+
+.dh-undo-buttons {
+  display: flex;
+  gap: var(--dh-space-sm);
+  margin-top: var(--dh-space-xs);
+  width: 100%;
+}
+
+.dh-undo-btn, .dh-close-btn {
+  padding: 4px 12px;
+  font-size: var(--dh-font-sm);
+  border-radius: var(--dh-radius-sm);
+  cursor: pointer;
+  border: none;
+  font-weight: var(--dh-weight-medium);
+  transition: background-color var(--dh-transition-normal);
+}
+
+.dh-undo-btn {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.dh-undo-btn:hover {
+  background-color: var(--interactive-accent-hover);
+}
+
+.dh-close-btn {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+
+.dh-close-btn:hover {
+  background-color: var(--background-modifier-error-hover);
+  color: var(--text-normal);
+}
+
+
