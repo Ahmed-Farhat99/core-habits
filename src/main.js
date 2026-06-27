@@ -58,15 +58,6 @@ export default class DailyHabitsPlugin extends Plugin {
     await this.loadSettings();
     this.isFullyLoaded = false;
 
-    // Show Onboarding if newly updated or installed
-    this.app.workspace.onLayoutReady(() => {
-      if (this.settings.lastSeenVersion !== this.manifest.version) {
-        new OnboardingModal(this.app, this).open();
-        this.settings.lastSeenVersion = this.manifest.version;
-        this.saveSettings();
-      }
-    });
-
     this._openTimeouts = new Map();
     this.audioEngine = new AudioEngine(this);
 
@@ -106,6 +97,13 @@ export default class DailyHabitsPlugin extends Plugin {
       this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
         if (leaf.view && leaf.view.refresh) leaf.view.refresh();
       });
+
+      // Show Onboarding if newly updated or installed (fully initialized now)
+      if (this.settings.lastSeenVersion !== this.manifest.version) {
+        new OnboardingModal(this.app, this).open();
+        this.settings.lastSeenVersion = this.manifest.version;
+        this.saveSettings();
+      }
     });
 
     // Register Markdown Post Processor
@@ -229,7 +227,9 @@ export default class DailyHabitsPlugin extends Plugin {
       this._openTimeouts.clear();
       this._openTimeouts = null;
     }
-    await this.audioEngine.close();
+    if (this.audioEngine) {
+      await this.audioEngine.close();
+    }
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_WEEKLY);
   }
 
@@ -253,7 +253,7 @@ export default class DailyHabitsPlugin extends Plugin {
     delete this.settings.reflectionJournalPath;
 
     if (savedData.dailyParentHeading === undefined) {
-      if (this.settings.habitHeading.startsWith("## ")) {
+      if ((this.settings.habitHeading || "").startsWith("## ")) {
         this.settings.habitHeading = this.settings.habitHeading.replace(/^##\s+/, "### ");
       }
       if ((this.settings.reflectionHeading || "").startsWith("## ")) {
@@ -348,7 +348,7 @@ export default class DailyHabitsPlugin extends Plugin {
   async saveSettings(options = {}) {
     await this.saveData(this.settings);
 
-    if (!options.silent) {
+    if (!options.silent && this.isFullyLoaded) {
       // Refresh Weekly View if open
       this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
         if (leaf.view instanceof WeeklyGridView) leaf.view.refresh();
