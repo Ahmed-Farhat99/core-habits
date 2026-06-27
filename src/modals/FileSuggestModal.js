@@ -16,7 +16,7 @@ class FileSuggestModal extends FuzzySuggestModal {
     return file.path;
   }
 
-  onChooseItem(file, evt) {
+  onChooseItem(file) {
     //Call the callback with the selected file
     this.onSelect(file);
   }

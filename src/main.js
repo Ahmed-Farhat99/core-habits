@@ -3,7 +3,21 @@ import { AudioEngine } from './services/AudioEngine.js';
 import { HabitScanner } from './services/HabitScanner.js';
 import { HabitNoteManager } from './services/HabitNoteManager.js';
 import { HabitManager } from './services/HabitManager.js';
+import { TranslationManager } from './services/TranslationManager.js';
 import { HabitPostProcessor } from './views/HabitPostProcessor.js';
+import { HabitRepository } from './repositories/HabitRepository.js';
+import { HabitCommentRepository } from './repositories/HabitCommentRepository.js';
+import { MigrationManager } from './services/MigrationManager.js';
+import { StatsService } from './services/StatsService.js';
+
+// CSS Styling Modules
+import './styles/base.css';
+import './styles/grid.css';
+import './styles/modal.css';
+import './styles/settings.css';
+import './styles/diary.css';
+import './styles/dashboard.css';
+import './styles/mobile.css';
 
 /*
   FILE STRUCTURE INDEX
@@ -20,28 +34,29 @@ import { HabitPostProcessor } from './views/HabitPostProcessor.js';
 // 1. Core Initialization — Constants, Imports, Utils, AudioEngine
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const {
+import {
   Plugin,
   Notice,
   TFile,
-} = require("obsidian");
+} from "obsidian";
 
 import {
   DEFAULT_REFLECTION_HEADING,
   DEFAULT_HABIT_NOTES_HEADING,
   VIEW_TYPE_WEEKLY,
-  DEFAULT_SETTINGS,
-  TRANSLATIONS
+  DEFAULT_SETTINGS
 } from './constants.js';
 
-import { getNoteByDate, findHabitEntry, getDailyNotesInfo } from './utils/helpers.js';
+import { getNoteByDate, getDailyNotesInfo } from './utils/helpers.js';
 import { WeeklyGridView } from './views/WeeklyGridView.js';
 import { DailyHabitsSettingTab } from './views/DailyHabitsSettingTab.js';
 import { OnboardingModal } from './modals/OnboardingModal.js';
 
-module.exports = class DailyHabitsPlugin extends Plugin {
+export default class DailyHabitsPlugin extends Plugin {
   async onload() {
+    this.lockCount = 0;
     await this.loadSettings();
+    this.isFullyLoaded = false;
 
     // Show Onboarding if newly updated or installed
     this.app.workspace.onLayoutReady(() => {
@@ -58,16 +73,34 @@ module.exports = class DailyHabitsPlugin extends Plugin {
     // Initialize Core Managers
     this.translationManager = new TranslationManager(this);
     this.habitNoteManager = new HabitNoteManager(this.app, this);
+    this.habitRepository = new HabitRepository(this.app, this);
+    this.habitCommentRepository = new HabitCommentRepository(this.app, this);
     this.habitManager = new HabitManager(this);
+    this.migrationManager = new MigrationManager(this.app, this);
     this.habitScanner = new HabitScanner();
+    this.statsService = new StatsService(this);
 
-    // === DATA MIGRATION v3.0 ===
+    // === DATA MIGRATION v3.0 & startup initialization ===
     // Will run after layout ready to ensure vault files are accessible
     this.app.workspace.onLayoutReady(async () => {
-      await this.migrateV3Data();
-      
-      // Initialize HabitManager (Reads all files into memory)
+      // 1. Initialize HabitManager first (reads existing files) to prevent erasing collapsedGroups
       await this.habitManager.initialize();
+
+      // 2. Run v3 JSON-to-file migration if needed
+      await this.migrateV3Data();
+
+      // 3. Re-initialize if migration actually wrote new files (so they are loaded into memory)
+      if (this.settings.habitsBackup && this.settings.habitsBackup.length > 0) {
+        await this.habitManager.initialize();
+      }
+
+      // 4. Run our schema version 1 / comments migration
+      await this.migrationManager.runMigrations();
+
+      // 5. Re-initialize HabitManager to load updated schema/properties into memory
+      await this.habitManager.initialize();
+      
+      this.isFullyLoaded = true;
 
       // Refresh Weekly View if it was opened before habits were loaded
       this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
@@ -109,6 +142,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {
+        if (this.isInternalFileOperation) return;
         if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
         this.handleVaultRename(file, oldPath);
       })
@@ -130,6 +164,11 @@ module.exports = class DailyHabitsPlugin extends Plugin {
           // Strict parsing to detect if the opened file is a daily note
           const parsedDate = window.moment(file.basename, format, true);
           if (parsedDate.isValid()) {
+              // Only auto-write to the daily note if it is today or in the future
+              const today = window.moment();
+              if (parsedDate.isBefore(today, 'day')) {
+                  return;
+              }
               await this.habitManager.ensureHabitsInNote(parsedDate);
           }
         }, 1500);
@@ -140,6 +179,7 @@ module.exports = class DailyHabitsPlugin extends Plugin {
 
     this.registerEvent(
       this.app.metadataCache.on('changed', async (file) => {
+        if (this.isInternalFileOperation) return;
         if (!file || file.extension !== 'md') return;
         if (this.habitManager) {
           await this.habitManager.syncFile(file);
@@ -148,9 +188,10 @@ module.exports = class DailyHabitsPlugin extends Plugin {
     );
 
     this.registerEvent(
-      this.app.vault.on('delete', (file) => {
+      this.app.vault.on('delete', async (file) => {
+        if (this.isInternalFileOperation) return;
         if (this.habitManager) {
-          this.habitManager.removeFile(file);
+          await this.habitManager.removeFile(file);
         }
       })
     );
@@ -188,7 +229,6 @@ module.exports = class DailyHabitsPlugin extends Plugin {
       this._openTimeouts.clear();
       this._openTimeouts = null;
     }
-    this._sharedStreakCache = null;
     if (this.habitScanner) this.habitScanner.reset();
     await this.audioEngine.close();
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_WEEKLY);
@@ -238,85 +278,23 @@ module.exports = class DailyHabitsPlugin extends Plugin {
   }
 
   async handleVaultRename(file, oldPath) {
-    if (!this.habitManager) return;
-    
-    // كشف نقل يدوي بين Active/ و Archive/
-    if (this.habitNoteManager) {
-      const moveType = this.habitNoteManager.detectManualMove(file.path, oldPath);
-      if (moveType) {
-        const cache = this.app.metadataCache.getFileCache(file);
-        const habitId = cache?.frontmatter?.habit_id;
-        if (habitId) {
-          const habit = this.habitManager.getHabitById(habitId);
-          if (habit) {
-            habit.archived = moveType === 'archived';
-            habit.archivedDate = moveType === 'archived' ? Date.now() : null;
-            habit.restoredDate = moveType === 'restored' ? Date.now() : null;
-            
-            // Sync to properties
-            const props = this.habitNoteManager._habitToProps(habit);
-            await this.habitNoteManager.updateHabitNoteProps(file.path, props);
-            
-            // Update map
-            this.habitManager.habitsMap.set(habit.id, habit);
-
-            Utils.debugLog(this, `Manual move detected: ${habit.name} → ${moveType}`);
-            return; // لا تعالج كتغيير اسم
-          }
-        }
-      }
-    }
-
-    const oldBasename = oldPath.replace(/^.*\//, '').replace(/\.md$/, '');
-    const newBasename = file.basename;
-    if (oldBasename === newBasename) return;
-
-    const oldLink = `[[${oldBasename}]]`;
-    let changed = false;
-
-    for (const habit of this.habitManager.getHabits()) {
-      if (habit.linkText !== oldLink) continue;
-
-      if (!habit.nameHistory) habit.nameHistory = [];
-      if (!habit.nameHistory.includes(oldLink)) {
-        habit.nameHistory.push(oldLink);
-      }
-
-      habit.linkText = `[[${newBasename}]]`;
-      habit.name = newBasename;
-      changed = true;
-      
-      // Sync to properties
-      const props = this.habitNoteManager._habitToProps(habit);
-      await this.habitNoteManager.updateHabitNoteProps(file.path, props);
-      
-      // Update map
-      this.habitManager.habitsMap.set(habit.id, habit);
-
-      Utils.debugLog(this, `Vault rename synced: "${oldBasename}" → "${newBasename}"`);
+    if (this.habitManager) {
+      await this.habitManager.handleVaultRename(file, oldPath);
     }
   }
 
-  /**
-   * Count incomplete habits for today (for the open reminder)
-   * Only counts habits scheduled for today that have a daily note
-   * @returns {Promise<number>} Count of incomplete habits
-   */
   async getIncompleteHabitsCountForToday() {
-    if (!this.habitManager) return 0;
+    if (!this.habitManager || !this.statsService) return 0;
     const today = window.moment();
-    const dayOfWeek = today.day();
     const todayNote = await getNoteByDate(this.app, today, false, this.settings);
     if (!todayNote) return 0;
 
     const content = await this.app.vault.cachedRead(todayNote);
-    const scanned = this.habitScanner.scan(content, this.settings.marker);
-
     let count = 0;
-    const todayHabits = this.habitManager.getHabitsForDay(dayOfWeek);
-    for (const habit of todayHabits) {
-      const entry = findHabitEntry(scanned, habit.linkText, habit.nameHistory);
-      if (!entry || (!entry.completed && !entry.skipped)) {
+    const habits = this.habitManager.getHabits();
+    for (const habit of habits) {
+      const status = await this.statsService.getHabitStatus(habit, today, content);
+      if (status === "uncompleted") {
         count++;
       }
     }
@@ -378,42 +356,19 @@ module.exports = class DailyHabitsPlugin extends Plugin {
       });
     }
   }
+
+  get isInternalFileOperation() {
+    return (this.lockCount || 0) > 0;
+  }
+
+  async runWithLock(callback) {
+    if (this.lockCount === undefined) this.lockCount = 0;
+    this.lockCount++;
+    try {
+      return await callback();
+    } finally {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      this.lockCount = Math.max(0, this.lockCount - 1);
+    }
+  }
 };
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 3. State Management — DEFAULT_SETTINGS, TRANSLATIONS, TranslationManager, HabitManager
-// ═══════════════════════════════════════════════════════════════════════════════
-/**
- * @typedef {Object} HabitData
- * @property {string} id - Unique habit identifier
- * @property {string} name - Display name of the habit
- * @property {string} [linkText] - Text used in daily notes (e.g., [[Habit]])
- * @property {ScheduleData} schedule - Schedule configuration
- * @property {number} [currentLevel] - Current progression level (1-5)
- * @property {Array<LevelData>} [levelData] - Level progression data
- * @property {string|null} [parentId] - Parent habit id for sub-habits
- * @property {string} [color] - Theme color key (teal, blue, purple, etc.)
- * @property {'build'|'break'} [habitType] - Build or break habit
- * @property {number} [order] - Sort order among siblings
- * @property {string} [restoredDate] - Date when archived habit was restored
- * @property {string[]} [nameHistory] - Previous linkText values for historical matching after renames
- */
-
-class TranslationManager {
-  constructor(plugin) {
-    this.plugin = plugin;
-  }
-
-  t(key, params = {}) {
-    const lang = this.plugin.settings.language || "ar";
-    const dict = TRANSLATIONS[lang] || TRANSLATIONS["en"];
-    let text = dict[key] || TRANSLATIONS["en"][key] || key;
-
-    Object.keys(params).forEach((param) => {
-      text = text.replace(`{${param}}`, params[param]);
-    });
-
-    return text;
-  }
-}
-

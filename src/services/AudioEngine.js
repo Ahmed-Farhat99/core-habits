@@ -38,7 +38,7 @@ export class AudioEngine {
       if (!ctx) return false;
 
       if (ctx.state === "suspended") {
-        try { await ctx.resume(); } catch (e) { return false; }
+        try { await ctx.resume(); } catch { return false; }
       }
 
       const osc = ctx.createOscillator();
@@ -86,7 +86,7 @@ export class AudioEngine {
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + duration);
       return true;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -95,7 +95,7 @@ export class AudioEngine {
     if (this.sharedAudioContext) {
       try {
         await this.sharedAudioContext.close();
-      } catch(e) { /* ignore */ }
+      } catch { /* ignore */ }
     }
   }
 }

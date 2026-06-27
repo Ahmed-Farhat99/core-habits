@@ -1,10 +1,45 @@
-import { Notice } from "obsidian";
+import { ConfirmModal } from "../modals/ConfirmModal.js";
+
 
 export class Utils {
   static debugLog(plugin, ...args) {
     if (plugin?.settings?.debugMode) {
       console.log("[Core Habits]", ...args);
     }
+  }
+
+  static fixAudioDuration(audioEl) {
+    audioEl.addEventListener('loadedmetadata', () => {
+      if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
+        audioEl.currentTime = 1e101;
+        audioEl.addEventListener('timeupdate', function f() {
+          audioEl.currentTime = 0;
+          audioEl.removeEventListener('timeupdate', f);
+        });
+      }
+    });
+  }
+
+  static extractSectionLines(content, heading) {
+    const cleanHeading = (heading || "").trim();
+    if (!content || !cleanHeading) return [];
+
+    const headingRegex = new RegExp(`^${Utils.escapeRegExp(cleanHeading)}\\s*$`, "m");
+    const match = content.match(headingRegex);
+    if (!match) return [];
+
+    const insertPos = match.index + match[0].length;
+    const headingLevel = cleanHeading.match(/^#+/)?.[0]?.length || 2;
+    const nextHeadingRegex = new RegExp(`\\n#{1,${headingLevel}} `, "m");
+    const afterHeading = content.substring(insertPos);
+    const nextMatch = afterHeading.match(nextHeadingRegex);
+    const sectionEnd = nextMatch ? insertPos + nextMatch.index : content.length;
+
+    return content
+      .substring(insertPos, sectionEnd)
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean);
   }
 
   static escapeRegExp(string) {
@@ -30,39 +65,20 @@ export class Utils {
     return `#${((1 << 24) + (newR << 16) + (newG << 8) + newB).toString(16).slice(1)}`;
   }
 
-  static showConfirmNotice(message, options = {}) {
-    const { onConfirm, onCancel, isAr = false, confirmText, cancelText } = options;
-    const fragment = document.createDocumentFragment();
-    const container = document.createElement("div");
-    container.className = "dh-delete-all-confirm";
-
-    const msgSpan = document.createElement("span");
-    msgSpan.textContent = message;
-    container.appendChild(msgSpan);
-
-    const btnContainer = document.createElement("div");
-    btnContainer.className = "dh-confirm-buttons";
-    container.appendChild(btnContainer);
-
-    const confirmBtn = document.createElement("button");
-    confirmBtn.className = "dh-confirm-delete-btn";
-    confirmBtn.textContent = confirmText || (isAr ? "نعم، متأكد" : "Yes, sure");
-    confirmBtn.onclick = () => {
-      container.remove();
-      if (onConfirm) onConfirm();
-    };
-    btnContainer.appendChild(confirmBtn);
-
-    const cancelBtn = document.createElement("button");
-    cancelBtn.className = "dh-cancel-btn";
-    cancelBtn.textContent = cancelText || (isAr ? "إلغاء" : "Cancel");
-    btnContainer.appendChild(cancelBtn);
-
-    fragment.appendChild(container);
-    const notice = typeof Notice !== "undefined" ? new Notice(fragment, 0) : null;
-    confirmBtn.onclick = async () => { if (notice) notice.hide(); if (onConfirm) await onConfirm(); };
-    cancelBtn.onclick = () => { if (notice) notice.hide(); if (onCancel) onCancel(); };
-    return notice;
+  static showConfirmNotice(app, plugin, message, options = {}) {
+    if (!app || !plugin) {
+      console.error("[Core Habits] showConfirmNotice is missing app or plugin context!");
+      return null;
+    }
+    const { onConfirm, onCancel, confirmText, cancelText } = options;
+    const modal = new ConfirmModal(app, plugin, message, {
+      confirmText,
+      cancelText,
+      onConfirm,
+      onCancel
+    });
+    modal.open();
+    return modal;
   }
 
   static insertNestedContent(content, parentHeading, subHeading, newText) {
@@ -123,4 +139,145 @@ export class Utils {
       return content.substring(0, appendPos) + separator + cleanSub + "\n" + newText + "\n\n" + content.substring(appendPos).replace(/^\n+/, '');
     }
   }
+
+  static getSectionContent(content, parentHeading, subHeading) {
+    const cleanSub = subHeading.trim();
+    if (!parentHeading) {
+      const headingRegex = new RegExp(`^${Utils.escapeRegExp(cleanSub)}\\s*$`, "m");
+      const match = content.match(headingRegex);
+      if (match) {
+        const insertPos = match.index + match[0].length;
+        const headingLevel = cleanSub.match(/^#+/)?.[0]?.length || 2;
+        const nextHeadingRegex = new RegExp(`\\n#{1,${headingLevel}} `, 'm');
+        const afterHeading = content.substring(insertPos);
+        const nextMatch = afterHeading.match(nextHeadingRegex);
+        const sectionEnd = nextMatch ? insertPos + nextMatch.index : content.length;
+        return content.substring(insertPos, sectionEnd);
+      }
+      return null;
+    }
+
+    const cleanParent = parentHeading.trim();
+    const parentRegex = new RegExp(`^${Utils.escapeRegExp(cleanParent)}\\s*$`, "m");
+    const parentMatch = content.match(parentRegex);
+
+    if (!parentMatch) return null;
+
+    const parentInsertPos = parentMatch.index + parentMatch[0].length;
+    const parentLevel = cleanParent.match(/^#+/)?.[0]?.length || 2;
+    const nextParentRegex = new RegExp(`\\n#{1,${parentLevel}} `, 'm');
+    const afterParent = content.substring(parentInsertPos);
+    const nextParentMatch = afterParent.match(nextParentRegex);
+    const parentEnd = nextParentMatch ? parentInsertPos + nextParentMatch.index : content.length;
+
+    const parentBlock = content.substring(parentInsertPos, parentEnd);
+    const subRegex = new RegExp(`^${Utils.escapeRegExp(cleanSub)}\\s*$`, "m");
+    const subMatch = parentBlock.match(subRegex);
+
+    if (subMatch) {
+      const subInsertPos = parentInsertPos + subMatch.index + subMatch[0].length;
+      const subLevel = cleanSub.match(/^#+/)?.[0]?.length || 3;
+      const nextSubRegex = new RegExp(`\\n#{1,${subLevel}} `, 'm');
+      const afterSub = content.substring(subInsertPos, parentEnd);
+      const nextSubMatch = afterSub.match(nextSubRegex);
+      const subEnd = nextSubMatch ? subInsertPos + nextSubMatch.index : parentEnd;
+      return content.substring(subInsertPos, subEnd);
+    }
+    return null;
+  }
+
+  static replaceNestedContent(content, parentHeading, subHeading, newText) {
+    const cleanSub = subHeading.trim();
+    if (!parentHeading) {
+      const headingRegex = new RegExp(`^${Utils.escapeRegExp(cleanSub)}\\s*$`, "m");
+      const match = content.match(headingRegex);
+      if (match) {
+        const insertPos = match.index + match[0].length;
+        const headingLevel = cleanSub.match(/^#+/)?.[0]?.length || 2;
+        const nextHeadingRegex = new RegExp(`\\n#{1,${headingLevel}} `, 'm');
+        const afterHeading = content.substring(insertPos);
+        const nextMatch = afterHeading.match(nextHeadingRegex);
+        const sectionEnd = nextMatch ? insertPos + nextMatch.index : content.length;
+        return content.substring(0, insertPos) + "\n" + newText.trim() + "\n" + content.substring(sectionEnd);
+      } else {
+        return Utils.insertNestedContent(content, parentHeading, subHeading, newText);
+      }
+    }
+
+    const cleanParent = parentHeading.trim();
+    const parentRegex = new RegExp(`^${Utils.escapeRegExp(cleanParent)}\\s*$`, "m");
+    const parentMatch = content.match(parentRegex);
+
+    if (!parentMatch) {
+      return Utils.insertNestedContent(content, parentHeading, subHeading, newText);
+    }
+
+    const parentInsertPos = parentMatch.index + parentMatch[0].length;
+    const parentLevel = cleanParent.match(/^#+/)?.[0]?.length || 2;
+    const nextParentRegex = new RegExp(`\\n#{1,${parentLevel}} `, 'm');
+    const afterParent = content.substring(parentInsertPos);
+    const nextParentMatch = afterParent.match(nextParentRegex);
+    const parentEnd = nextParentMatch ? parentInsertPos + nextParentMatch.index : content.length;
+
+    const parentBlock = content.substring(parentInsertPos, parentEnd);
+    const subRegex = new RegExp(`^${Utils.escapeRegExp(cleanSub)}\\s*$`, "m");
+    const subMatch = parentBlock.match(subRegex);
+
+    if (subMatch) {
+      const subInsertPos = parentInsertPos + subMatch.index + subMatch[0].length;
+      const subLevel = cleanSub.match(/^#+/)?.[0]?.length || 3;
+      const nextSubRegex = new RegExp(`\\n#{1,${subLevel}} `, 'm');
+      const afterSub = content.substring(subInsertPos, parentEnd);
+      const nextSubMatch = afterSub.match(nextSubRegex);
+      const subEnd = nextSubMatch ? subInsertPos + nextSubMatch.index : parentEnd;
+      return content.substring(0, subInsertPos) + "\n" + newText.trim() + "\n" + content.substring(subEnd);
+    } else {
+      return Utils.insertNestedContent(content, parentHeading, subHeading, newText);
+    }
+  }
+
+
+  static normalizePath(path) {
+    if (!path) return "";
+    const parts = path.replace(/\\/g, "/").split("/");
+    const resolved = [];
+    for (const part of parts) {
+      const p = part.trim();
+      if (!p || p === ".") continue;
+      if (p === "..") {
+        resolved.pop();
+      } else {
+        resolved.push(p);
+      }
+    }
+    return resolved.join("/");
+  }
+
+  static isPathTraversal(path) {
+    if (!path) return false;
+    const parts = path.replace(/\\/g, "/").split("/");
+    let depth = 0;
+    for (const part of parts) {
+      const p = part.trim();
+      if (p === "..") {
+        depth--;
+        if (depth < 0) return true;
+      } else if (p && p !== ".") {
+        depth++;
+      }
+    }
+    return false;
+  }
+
+  static isPathInsideFolder(filePath, folderPath) {
+    const normFile = Utils.normalizePath(filePath);
+    const normFolder = Utils.normalizePath(folderPath);
+
+    if (!normFolder) {
+      return true;
+    }
+
+    return normFile.startsWith(normFolder + "/") || normFile === normFolder;
+  }
 }
+

@@ -1,11 +1,4 @@
 import { Notice } from 'obsidian';
-import { Utils } from './Utils.js';
-import { 
-  DEFAULT_REFLECTION_HEADING, 
-  DEFAULT_HABIT_NOTES_HEADING, 
-  normalizeReflectionType
-} from '../constants.js';
-import { StreakCalculator } from '../services/StreakCalculator.js';
 
 async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSettings = null) {
   const info = getDailyNotesInfo(app, pluginSettings);
@@ -23,178 +16,111 @@ async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSett
   let file = app.vault.getAbstractFileByPath(normalizedPath);
   if (!file && createIfNeeded) {
     try {
-      if (folder) {
-        const folderExists = app.vault.getAbstractFileByPath(folder);
-        if (!folderExists) await app.vault.createFolder(folder);
+      // 1. Try internal daily-notes plugin
+      const dnPlugin = app.internalPlugins.getPluginById("daily-notes");
+      if (dnPlugin && dnPlugin.enabled && dnPlugin.instance && typeof dnPlugin.instance.createDailyNote === "function") {
+        file = await dnPlugin.instance.createDailyNote(dateMoment);
       }
+    } catch (e) {
+      console.warn("[Core Habits] Failed to create daily note using daily-notes plugin:", e);
+    }
 
-      // Template support: read template and apply variables
-      let content = "";
-      if (templatePath) {
-        // Normalize template path
-        let templateFilePath = templatePath;
-        if (!templateFilePath.endsWith(".md")) {
-          templateFilePath += ".md";
+    if (!file) {
+      // 2. Try periodic-notes plugin
+      try {
+        const pnPlugin = app.plugins?.getPlugin("periodic-notes");
+        if (pnPlugin && typeof pnPlugin.createDailyNote === "function") {
+          file = await pnPlugin.createDailyNote(dateMoment);
+        }
+      } catch (e) {
+        console.warn("[Core Habits] Failed to create daily note using periodic-notes plugin:", e);
+      }
+    }
+
+    if (!file) {
+      // 3. Fallback: manual creation
+      try {
+        if (folder) {
+          const folderExists = app.vault.getAbstractFileByPath(folder);
+          if (!folderExists) await app.vault.createFolder(folder);
         }
 
-        const templateFile = app.vault.getAbstractFileByPath(templateFilePath);
-        if (templateFile) {
-          try {
-            content = await app.vault.read(templateFile);
-            content = content.replace(/\{\{date\}\}/g, fileName);
-            content = content.replace(/\{\{title\}\}/g, fileName);
-            content = content.replace(/\{\{date:([^}]+)\}\}/g, (match, fmt) => {
-              return dateMoment.clone().locale("en").format(fmt);
-            });
-          } catch (e) {
-            console.warn("[Core Habits] Could not read template:", e);
+        let content = "";
+        if (templatePath) {
+          // Normalize template path
+          let templateFilePath = templatePath;
+          if (!templateFilePath.endsWith(".md")) {
+            templateFilePath += ".md";
+          }
+
+          const templateFile = app.vault.getAbstractFileByPath(templateFilePath);
+          if (templateFile) {
+            try {
+              content = await app.vault.read(templateFile);
+              content = content.replace(/\{\{date\}\}/g, fileName);
+              content = content.replace(/\{\{title\}\}/g, fileName);
+              content = content.replace(/\{\{date:([^}]+)\}\}/g, (match, fmt) => {
+                return dateMoment.clone().locale("en").format(fmt);
+              });
+            } catch (e) {
+              console.warn("[Core Habits] Could not read template:", e);
+            }
           }
         }
-      }
 
-      file = await app.vault.create(normalizedPath, content);
-    } catch (err) {
-      console.error("[Core Habits] Failed to create daily note:", err);
-      new Notice(pluginSettings?.language === "ar" ? "⚠️ تعذر إنشاء الملاحظة اليومية" : "⚠️ Could not create daily note");
-      return null;
+        file = await app.vault.create(normalizedPath, content);
+      } catch (err) {
+        console.error("[Core Habits] Failed to create daily note manually:", err);
+        new Notice(pluginSettings?.language === "ar" ? "⚠️ تعذر إنشاء الملاحظة اليومية" : "⚠️ Could not create daily note");
+        return null;
+      }
     }
   }
   return file;
 }
 
-/**
- * Superfast extraction of habit logs from exactly the X most recent Daily Notes.
- * Completely decouples the habit log from the habit's own file.
- */
-async function extractHabitHistoryFromDailyNotes(app, plugin, habitName, daysToLookBack = 30) {
-  const entries = [];
-  const cleanHabitName = TextUtils.clean(habitName);
-  const now = window.moment();
-  
-  for (let i = 0; i < daysToLookBack; i++) {
-    const targetDate = now.clone().subtract(i, 'days');
-    const file = await getNoteByDate(app, targetDate, false, plugin.settings);
-    if (!file) continue;
 
-    const content = await app.vault.cachedRead(file);
-    const lines = content.split('\n');
-    
-    for (const line of lines) {
-      if (line.includes(`[habit-note:: ${cleanHabitName}]`)) {
-        let cleanLine = line.trim();
-        if (cleanLine.startsWith('- ')) {
-          cleanLine = cleanLine.substring(2).trim();
-        }
-        // Remove the habit label text the user already knows they're looking at
-        cleanLine = cleanLine.replace(new RegExp(`\\[habit-note:: ${Utils.escapeRegExp(cleanHabitName)}\\] .*? - `, "i"), "");
-        
-        entries.push({ date: targetDate, text: cleanLine });
-      }
-    }
-  }
-  return entries;
-}
-
-
-
-
-async function toggleHabit(plugin, app, file, habit, marker, targetState = null) {
-  try {
-    await app.vault.process(file, (data) => {
-      const separator = data.includes("\r\n") ? "\r\n" : "\n";
-      const lines = data.split(/\r?\n/);
-      let targetIndex = habit.lineIndex;
-
-      if (targetIndex >= 0 && targetIndex < lines.length) {
-        if (!lines[targetIndex].includes(habit.text)) {
-          targetIndex = -1;
-        }
-      } else {
-        targetIndex = -1;
-      }
-
-      if (targetIndex === -1) {
-        const safeText = Utils.escapeRegExp(habit.text);
-        targetIndex = lines.findIndex((line) => {
-          return /^\s*-\s*\[([ x-])\]/i.test(line) &&
-            new RegExp(`(\\[\\[)?${safeText}(\\]\\])?`, "i").test(line);
-        });
-      }
-
-      if (targetIndex === -1) {
-        new Notice(plugin.settings.language === "ar" ? "⚠️ تعذر العثور على العادة في الملف. يرجى التحديث." : "⚠️ Could not find habit in file. Please reload.");
-        return data;
-      }
-
-      const line = lines[targetIndex];
-      const checkboxRegex = /^(\s*-\s*\[)([ x-])(\].*)$/i;
-      const match = line.match(checkboxRegex);
-
-      if (match) {
-        let newChar;
-        if (targetState === "completed") {
-          newChar = "x";
-        } else if (targetState === "skipped") {
-          newChar = "-";
-        } else if (targetState === "uncompleted") {
-          newChar = " ";
-        } else {
-          const current = match[2].toLowerCase();
-          newChar = current === "x" ? " " : "x";
-        }
-        lines[targetIndex] = `${match[1]}${newChar}${match[3]}`;
-      }
-
-      return lines.join(separator);
-    });
-    StreakCalculator.invalidate(habit.id);
-    if (plugin._sharedStreakCache) {
-      plugin._sharedStreakCache.clear();
-    }
-  } catch (error) {
-    console.error("[Core Habits] Failed to toggle habit:", error);
-    const isAr = plugin.settings.language === "ar";
-    new Notice(isAr ? "⚠️ حدث خطأ أثناء تعديل الملاحظة." : "⚠️ Error modifying note.");
-  }
-}
-
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 5–6. UI — Modals, Views, Settings
-// ═══════════════════════════════════════════════════════════════════════════════
-/**
- * Simple file suggester modal using Obsidian's built-in FuzzySuggestModal.
- * This provides a clean, native Obsidian experience for file selection.
- */
-
-function fixAudioDuration(audioEl) {
-  audioEl.addEventListener('loadedmetadata', () => {
-    if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
-      audioEl.currentTime = 1e101;
-      audioEl.addEventListener('timeupdate', function f() {
-        audioEl.currentTime = 0;
-        audioEl.removeEventListener('timeupdate', f);
-      });
-    }
-  });
-}
 
 class TextUtils {
   static clean(text) {
     if (!text) return "";
     return text.normalize("NFC").replace(/\[\[|\]\]/g, "").trim();
   }
+
+  static foldArabic(text) {
+    if (!text) return "";
+    return text.normalize("NFC")
+      .replace(/[أإآٱ]/g, "ا")
+      .replace(/ة/g, "ه")
+      .replace(/ى/g, "ي")
+      .toLowerCase()
+      .trim();
+  }
+
+  static normalizeNumerals(str, toArabic = false) {
+    if (!str) return "";
+    const arabicDigits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+    const englishDigits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    if (toArabic) {
+      return str.replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
+    } else {
+      return str.replace(/[٠-٩]/g, (w) => englishDigits[arabicDigits.indexOf(w)]);
+    }
+  }
 }
 
-function findHabitEntry(scannedHabits, linkText, nameHistory = []) {
+function findHabitEntry(scannedHabits, linkText, nameHistory = [], habitId = null) {
   if (!scannedHabits) return null;
+  if (habitId) {
+    const match = scannedHabits.find(h => h.habitId === habitId);
+    if (match) return match;
+  }
   const allNames = [
-    TextUtils.clean(linkText),
-    ...nameHistory.map(n => TextUtils.clean(n)),
+    TextUtils.foldArabic(linkText),
+    ...nameHistory.map(n => TextUtils.foldArabic(n)),
   ];
   return scannedHabits.find(h => {
-    const t = TextUtils.clean(h.text);
+    const t = TextUtils.foldArabic(h.text);
     return allNames.some(name => t === name || t.startsWith(name + " "));
   });
 }
@@ -317,7 +243,7 @@ function getDailyNotesInfo(app, pluginSettings = null) {
       }
       return info;
     }
-  } catch(e) { /* ignore */ }
+  } catch { /* ignore */ }
 
   try {
     const pn = app.plugins?.getPlugin("periodic-notes");
@@ -328,7 +254,7 @@ function getDailyNotesInfo(app, pluginSettings = null) {
       info.template = pn.settings.daily.template || "";
       return info;
     }
-  } catch(e) { /* ignore */ }
+  } catch { /* ignore */ }
 
   if (fallbackFolder || (pluginSettings?.dateFormat && pluginSettings.dateFormat !== "YYYY-MM-DD")) {
     info.source = "manual";
@@ -337,61 +263,28 @@ function getDailyNotesInfo(app, pluginSettings = null) {
   return info;
 }
 
-/**
- * Safely ensures a section (heading) exists in a file and appends a new line under it.
- * Uses vault.process for atomic read-write to prevent data loss.
- * @param {App} app - Obsidian App instance
- * @param {TFile} file - The file to modify
- * @param {string} heading - The markdown heading (e.g. "## 📖 سجل المتابعة")
- * @param {string} newLine - The line to append under the heading
- */
-async function ensureNestedSectionInFile(app, file, parentHeading, subHeading, newLine) {
-  await app.vault.process(file, (content) => {
-    return Utils.insertNestedContent(content, parentHeading, subHeading, newLine);
-  });
-}
-
-/**
- * Injects a timestamped habit comment into the matching Daily Note.
- */
-async function injectHabitCommentIntoDailyNote(app, plugin, habit, targetDate, comment) {
-  const file = await getNoteByDate(app, targetDate, true, plugin.settings);
-  if (!file) {
-    throw new Error(plugin.settings.language === "ar"
-      ? "تعذر فتح ملف اليوم."
-      : "Could not open the daily note.");
+function autoResizeTextarea(textarea) {
+  if (!textarea) return;
+  if (textarea.offsetWidth > 0) {
+    // 1. Temporarily hide scrollbar to get accurate scrollHeight calculation
+    textarea.style.overflowY = "hidden";
+    textarea.style.height = "auto";
+    
+    const scrollHeight = textarea.scrollHeight;
+    
+    // 2. Set height to scrollHeight
+    textarea.style.height = `${scrollHeight}px`;
+    
+    // 3. If offsetHeight is less than scrollHeight, it reached max-height constraint
+    if (textarea.offsetHeight < scrollHeight) {
+      textarea.style.overflowY = "auto";
+    } else {
+      textarea.style.overflowY = "hidden";
+    }
+  } else {
+    textarea.style.height = "auto";
+    textarea.style.overflowY = "hidden";
   }
-
-  const timeStr = window.moment().format("HH:mm");
-  const cleanName = TextUtils.clean(habit.linkText || habit.name);
-  const habitLabel = habit.linkText || habit.name;
-  const commentLine = `- ${timeStr} [habit-note:: ${cleanName}] ${habitLabel} - ${comment}`;
-  const heading = plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
-
-  await ensureNestedSectionInFile(app, file, plugin.settings.dailyParentHeading, heading, commentLine);
-  return file.basename;
 }
 
-/**
- * Injects a typed daily reflection into the matching Daily Note.
- */
-async function injectReflectionIntoDailyNote(app, plugin, targetDate, text, type = "Idea") {
-  const file = await getNoteByDate(app, targetDate, true, plugin.settings);
-  if (!file) {
-    throw new Error(plugin.settings.language === "ar"
-      ? "تعذر فتح ملف اليوم."
-      : "Could not open the daily note.");
-  }
-
-  const timeStr = window.moment().format("HH:mm");
-  const reflectionType = normalizeReflectionType(type);
-  const reflectionLine = `- ${timeStr} [type:: ${reflectionType}] ${text}`;
-  const heading = plugin.settings.reflectionHeading || DEFAULT_REFLECTION_HEADING;
-
-  await ensureNestedSectionInFile(app, file, plugin.settings.dailyParentHeading, heading, reflectionLine);
-  return file.basename;
-}
-
-
-
-export { getNoteByDate, extractHabitHistoryFromDailyNotes, toggleHabit, fixAudioDuration, TextUtils, findHabitEntry, calculateCurrentLevel, buildHierarchyLabels, DateUtils, getDailyNotesInfo, ensureNestedSectionInFile, injectHabitCommentIntoDailyNote, injectReflectionIntoDailyNote };
+export { getNoteByDate, TextUtils, findHabitEntry, calculateCurrentLevel, buildHierarchyLabels, DateUtils, getDailyNotesInfo, autoResizeTextarea };

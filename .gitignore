@@ -2,3 +2,5 @@ node_modules/
 .obsidian/
 .DS_Store
 *.log
+main.js
+styles.css

@@ -1,28 +1,28 @@
-const { Modal, setIcon } = require("obsidian");
+import { BaseHabitModal } from "./BaseHabitModal.js";
 
-export class OnboardingModal extends Modal {
+export class OnboardingModal extends BaseHabitModal {
   constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
+    super(app, plugin);
     this.currentStep = 1;
-    this.isAr = this.plugin.settings.language === "ar";
     
     // Add custom class for styling
     this.modalEl.addClass("dh-onboarding-modal");
   }
 
   onOpen() {
+    super.onOpen();
     this.renderStep();
   }
 
   onClose() {
-    const { contentEl } = this;
-    contentEl.empty();
+    super.onClose();
   }
 
   renderStep() {
     const { contentEl } = this;
     contentEl.empty();
+
+    const t = (key) => this.plugin.translationManager.t(key);
 
     const container = contentEl.createDiv({ cls: "dh-onboarding-container" });
 
@@ -35,18 +35,18 @@ export class OnboardingModal extends Modal {
 
     // Header
     const header = container.createDiv({ cls: "dh-onboarding-header" });
-    header.createEl("h1", { text: this.getHeaderTitle() });
+    header.createEl("h1", { text: this.getHeaderTitle(t) });
 
     // Body
     const body = container.createDiv({ cls: "dh-onboarding-body" });
-    this.renderBodyContent(body);
+    this.renderBodyContent(body, t);
 
     // Footer
-    const footer = container.createDiv({ cls: "dh-onboarding-footer" });
+    const footer = container.createDiv({ cls: "dh-modal-actions" });
     
     if (this.currentStep > 1) {
-      const btnBack = footer.createEl("button", { cls: "dh-btn-secondary" });
-      btnBack.textContent = this.isAr ? "السابق" : "Back";
+      const btnBack = footer.createEl("button", { cls: "dh-btn dh-btn-secondary" });
+      btnBack.textContent = t("onboarding_back");
       btnBack.onclick = () => {
         this.currentStep--;
         this.renderStep();
@@ -55,66 +55,58 @@ export class OnboardingModal extends Modal {
       footer.createDiv(); // Empty spacer
     }
 
-    const btnNext = footer.createEl("button", { cls: "mod-cta" });
+    const btnNext = footer.createEl("button", { cls: "dh-btn mod-cta" });
     if (this.currentStep < 3) {
-      btnNext.textContent = this.isAr ? "التالي" : "Next";
+      btnNext.textContent = t("onboarding_next");
       btnNext.onclick = () => {
         this.currentStep++;
         this.renderStep();
       };
     } else {
-      btnNext.textContent = this.isAr ? "ابدأ الآن 🚀" : "Start Now 🚀";
+      btnNext.textContent = t("onboarding_start");
       btnNext.onclick = () => {
         this.close();
       };
     }
   }
 
-  getHeaderTitle() {
-    if (this.currentStep === 1) return this.isAr ? "🎉 مرحباً بك في Core Habits 3.0" : "🎉 Welcome to Core Habits 3.0";
-    if (this.currentStep === 2) return this.isAr ? "🧠 هندسة العادات (Habit Engineering)" : "🧠 Habit Engineering";
-    if (this.currentStep === 3) return this.isAr ? "⚡ محرك البيانات الجديد" : "⚡ The New Data Engine";
+  getHeaderTitle(t) {
+    if (this.currentStep === 1) return t("onboarding_title_1");
+    if (this.currentStep === 2) return t("onboarding_title_2");
+    if (this.currentStep === 3) return t("onboarding_title_3");
     return "";
   }
 
-  renderBodyContent(body) {
+  renderBodyContent(body, t) {
     if (this.currentStep === 1) {
       body.createEl("p", {
         cls: "dh-onboarding-desc",
-        text: this.isAr 
-          ? "لقد قمنا بإعادة بناء الإضافة بالكامل لتكون أسرع، أجمل، وأكثر ذكاءً. هذه ليست مجرد إضافة لتتبع العادات، إنها أداة لبناء 'هويتك الأساسية'." 
-          : "We have completely rebuilt the plugin to be faster, more beautiful, and smarter. This is not just a habit tracker; it's a tool to build your 'Core Identity'."
+        text: t("onboarding_desc_1")
       });
       const feats = body.createDiv({ cls: "dh-onboarding-features" });
-      this.addFeatureItem(feats, "✨", this.isAr ? "واجهة عصرية بالكامل" : "Completely modernized UI");
-      this.addFeatureItem(feats, "📊", this.isAr ? "تحليل قوي للأنماط والتعافي" : "Powerful pattern & recovery analytics");
-      this.addFeatureItem(feats, "🔒", this.isAr ? "أمان تام للبيانات (لا تضيع أبداً)" : "Absolute data safety (never lost)");
+      this.addFeatureItem(feats, "✨", t("onboarding_feat_1"));
+      this.addFeatureItem(feats, "📊", t("onboarding_feat_2"));
+      this.addFeatureItem(feats, "🔒", t("onboarding_feat_3"));
     } 
     else if (this.currentStep === 2) {
       body.createEl("p", {
         cls: "dh-onboarding-desc",
-        text: this.isAr
-          ? "العادة لا تُبنى بالضغط، بل بالهندسة الذكية. في الإصدار الجديد، يمكنك هندسة كل عادة بدقة:"
-          : "Habits are not built with pressure, but with smart engineering. In the new version, you can engineer every habit:"
+        text: t("onboarding_desc_2")
       });
       const feats = body.createDiv({ cls: "dh-onboarding-features" });
-      this.addFeatureItem(feats, "👤", this.isAr ? "حدد هويتك (من أريد أن أكون؟)" : "Define Identity (Who do I want to be?)");
-      this.addFeatureItem(feats, "⏰", this.isAr ? "اربطها بمحفز (زمان/مكان)" : "Link to a Cue (Time/Location)");
-      this.addFeatureItem(feats, "🛤️", this.isAr ? "قلل الاحتكاك (اجعلها سهلة)" : "Reduce Friction (Make it easy)");
-      this.addFeatureItem(feats, "🎁", this.isAr ? "حدد مكافأتك الفورية" : "Set an immediate Reward");
+      this.addFeatureItem(feats, "👤", t("onboarding_feat_4"));
+      this.addFeatureItem(feats, "⏰", t("onboarding_feat_5"));
+      this.addFeatureItem(feats, "🛤️", t("onboarding_feat_6"));
+      this.addFeatureItem(feats, "🎁", t("onboarding_feat_7"));
     }
     else if (this.currentStep === 3) {
       body.createEl("p", {
         cls: "dh-onboarding-desc",
-        text: this.isAr
-          ? "البيانات الآن لا مركزية! إنجازاتك (علامات الصح) تحفظ بداخل اليوميات نفسها. حتى لو قمت بحذف العادة من الإعدادات، إنجازاتك التاريخية ستظل محفورة في يومياتك للأبد في 'إجمالي الإنجازات'."
-          : "Data is now decentralized! Your completions (checkmarks) are saved directly in your daily notes. Even if you delete a habit, your historical achievements are saved forever."
+        text: t("onboarding_desc_3")
       });
       body.createDiv({
         cls: "dh-onboarding-alert",
-        text: this.isAr 
-          ? "💡 نصيحة: اكتب أفكارك ويومياتك عن العادة وسيقوم 'سجل التدوينات' بجمعها لك تلقائياً."
-          : "💡 Tip: Write your thoughts about the habit, and the 'Reflection Log' will collect them automatically."
+        text: t("onboarding_tip_3")
       });
     }
   }

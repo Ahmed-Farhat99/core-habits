@@ -1,0 +1,855 @@
+/* --- 8. HABIT CONTEXT & DIARY --- */.daily-habits-plugin .dh-popup-modal-parent {
+
+
+  max-width: 420px;
+  width: 90vw;
+}
+/* Popups (Comment & Reflection) */.daily-habits-plugin .dh-comment-popup, .daily-habits-plugin .dh-reflection-popup {
+
+
+  padding: var(--dh-space-md);
+}
+.daily-habits-plugin .dh-comment-popup-title {
+
+
+  margin-top: 0;
+  margin-bottom: var(--dh-space-sm);
+  color: var(--text-normal);
+  font-size: var(--dh-font-lg);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: var(--dh-space-xs);
+}
+.daily-habits-plugin .dh-comment-popup-meta {
+
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--dh-space-md);
+  font-size: var(--dh-font-sm);
+  color: var(--text-muted);
+}
+.daily-habits-plugin .dh-reflection-meta {
+
+
+  background: var(--background-secondary);
+  padding: var(--dh-space-xs) var(--dh-space-sm);
+  border-radius: var(--dh-radius-sm);
+  border: 1px solid var(--background-modifier-border);
+}
+.daily-habits-plugin .streak-detail-icon {
+
+
+  font-size: 1.1em;
+  color: var(--text-muted);
+}
+.daily-habits-plugin .streak-detail-label {
+
+
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-normal);
+}
+.daily-habits-plugin .streak-detail-value {
+
+
+  color: var(--text-normal);
+}
+.daily-habits-plugin .streak-detail-pct {
+
+
+  font-weight: var(--dh-weight-bold);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.daily-habits-plugin .streak-detail-pct.excellent {
+
+
+  background: rgba(var(--dh-brand-success-rgb), 0.15);
+  color: var(--dh-progress-excellent);
+}
+.daily-habits-plugin .streak-detail-pct.good {
+
+
+  background: rgba(var(--dh-brand-info-rgb), 0.15);
+  color: var(--dh-progress-good);
+}
+.daily-habits-plugin .streak-detail-pct.fair {
+  background: rgba(var(--dh-brand-warning-rgb), 0.15);
+  color: var(--dh-progress-medium);
+}
+.daily-habits-plugin .streak-detail-pct.low {
+
+
+  background: rgba(var(--dh-brand-danger-rgb), 0.15);
+  color: var(--dh-progress-critical);
+}
+.daily-habits-plugin .streak-detail-sub {
+
+
+  color: var(--text-muted);
+  font-size: 0.85em;
+  margin-inline-start: auto;
+}
+.daily-habits-plugin .dh-recovery-row {
+
+
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.daily-habits-plugin .dh-recovery-sub {
+
+
+  font-size: 0.8em;
+  font-style: italic;
+  flex-basis: 100%;
+  text-align: end;
+  margin-top: 4px;
+}
+.daily-habits-plugin .dh-reflection-rate-badge {
+
+
+  font-weight: var(--dh-weight-bold);
+  padding: 2px 6px;
+  border-radius: var(--dh-radius-full);
+  background: var(--background-secondary);
+}
+.daily-habits-plugin .dh-reflection-rate-badge.rate-excellent {
+
+
+  color: var(--dh-progress-excellent);
+  background: rgba(var(--dh-brand-success-rgb), 0.1);
+}
+.daily-habits-plugin .dh-reflection-rate-badge.rate-good {
+
+
+  color: var(--dh-progress-good);
+}
+.daily-habits-plugin .dh-reflection-rate-badge.rate-warn {
+
+
+  color: var(--dh-progress-low);
+}
+.daily-habits-plugin .dh-reflection-rate-badge.rate-danger {
+
+
+  color: var(--dh-progress-critical);
+}
+.daily-habits-plugin .dh-comment-popup-input {
+
+
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+  margin-bottom: var(--dh-space-md);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  padding: var(--dh-space-sm);
+  color: var(--text-normal);
+  font-family: inherit;
+}
+.daily-habits-plugin .dh-comment-popup-input:focus {
+
+
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(var(--dh-brand-primary-rgb), 0.2);
+  outline: none;
+}
+/* Habit Comment Hover Indicator */.daily-habits-plugin .dh-comment-hover-icon {
+
+
+  position: absolute;
+  top: 2px;
+  inset-inline-end: 2px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: 50%;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  transition: color var(--dh-transition-fast), border-color var(--dh-transition-fast), opacity var(--dh-transition-fast), transform var(--dh-transition-fast);
+  z-index: calc(var(--dh-z-base) + 1);
+  opacity: 0.18;
+}
+.daily-habits-plugin .day-cell:hover .dh-comment-hover-icon {
+
+
+  opacity: 0.85;
+}
+.daily-habits-plugin .dh-comment-hover-icon:hover {
+
+
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  opacity: 1;
+  transform: scale(1.15);
+}
+/* Comment indicator dot */.daily-habits-plugin .dh-has-comment-dot {
+
+
+  position: absolute;
+  bottom: 2px;
+  inset-inline-end: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  opacity: 0.7;
+  z-index: var(--dh-z-base);
+}
+/* Reflection Button built into Day Header */.daily-habits-plugin .day-stat-content {
+
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  width: 100%;
+}
+.daily-habits-plugin .day-stat-content.empty-stats-wrapper {
+
+
+  justify-content: center;
+}
+.daily-habits-plugin .dh-header-reflection-btn {
+
+
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--dh-transition-fast), opacity var(--dh-transition-fast), transform var(--dh-transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--dh-radius-sm);
+  padding: 2px;
+  background: transparent;
+  border: none;
+  opacity: 0.5;
+}
+.daily-habits-plugin .dh-header-reflection-btn svg {
+
+
+  width: 11px;
+  height: 11px;
+}
+.daily-habits-plugin .dh-header-reflection-btn:hover {
+
+
+  color: var(--interactive-accent);
+  opacity: 1;
+  transform: scale(1.15);
+}
+.daily-habits-plugin .dh-header-reflection-only {
+
+
+  margin: 0;
+}
+/* Habit Edit Modal: Log Tab */.daily-habits-plugin .dh-modal-panel.dh-modal-log-panel.is-active {
+
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.daily-habits-plugin .dh-log-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.daily-habits-plugin .dh-log-section-title {
+  margin-top: 0;
+  margin-bottom: var(--dh-space-md);
+  font-size: var(--dh-font-md);
+  color: var(--interactive-accent);
+}
+.daily-habits-plugin .dh-log-entries-container {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  padding: var(--dh-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-sm);
+}
+.daily-habits-plugin .dh-log-empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: var(--dh-space-xl) 0;
+  background: var(--background-secondary);
+  border-radius: var(--dh-radius-md);
+  border: 1px dashed var(--background-modifier-border);
+}
+
+/* Log Month Group (collapsible details) */
+.daily-habits-plugin .dh-log-month-group {
+  margin-bottom: var(--dh-space-md);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  overflow: hidden;
+  background-color: var(--background-primary);
+  transition: border-color var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-log-month-group[open] {
+  border-color: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-log-month-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--dh-space-md) var(--dh-space-lg);
+  background-color: var(--background-secondary);
+  font-weight: var(--dh-weight-semibold);
+  font-size: var(--dh-font-sm);
+  color: var(--text-normal);
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+  transition: background-color var(--dh-transition-normal);
+}
+
+.daily-habits-plugin .dh-log-month-group[open] .dh-log-month-summary {
+  border-bottom-color: var(--background-modifier-border);
+  background-color: var(--background-secondary-alt);
+}
+
+.daily-habits-plugin .dh-log-month-summary:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.daily-habits-plugin .dh-log-month-summary::-webkit-details-marker {
+  display: none;
+}
+
+.daily-habits-plugin .dh-log-month-summary::after {
+  content: "❯";
+  font-size: 0.8em;
+  color: var(--text-muted);
+  transition: transform var(--dh-transition-normal);
+}
+
+[dir="rtl"] .daily-habits-plugin .dh-log-month-summary::after {
+  content: "❮";
+}
+
+.daily-habits-plugin .dh-log-month-group[open] .dh-log-month-summary::after {
+  transform: rotate(90deg);
+}
+
+.daily-habits-plugin .dh-log-month-content {
+  padding: var(--dh-space-lg) var(--dh-space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-lg);
+  position: relative;
+}
+
+/* Timeline Item (Log Entry) */
+.daily-habits-plugin .dh-log-entry {
+  display: flex;
+  gap: var(--dh-space-md);
+  position: relative;
+  align-items: flex-start;
+  padding-left: 32px;
+  border: none;
+  background: transparent;
+  margin: 0;
+  padding-top: 4px;
+  padding-bottom: 12px;
+}
+
+[dir="rtl"] .daily-habits-plugin .dh-log-entry {
+  padding-left: 0;
+  padding-right: 32px;
+}
+
+/* Timeline Circle Node */
+.daily-habits-plugin .dh-log-entry::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--interactive-accent);
+  border: 2px solid var(--background-primary);
+  z-index: 2;
+  transition: background-color var(--dh-transition-fast), border-color var(--dh-transition-fast);
+}
+
+[dir="rtl"] .daily-habits-plugin .dh-log-entry::before {
+  left: auto;
+  right: 12px;
+}
+
+/* Timeline Vertical Line Segment */
+.daily-habits-plugin .dh-log-entry::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: -16px;
+  left: 15px;
+  width: 2px;
+  background: var(--background-modifier-border);
+  z-index: 1;
+}
+
+[dir="rtl"] .daily-habits-plugin .dh-log-entry::after {
+  left: auto;
+  right: 15px;
+}
+
+.daily-habits-plugin .dh-log-entry:last-child::after {
+  display: none;
+}
+
+.daily-habits-plugin .dh-log-entry:hover::before {
+  background-color: var(--interactive-accent-hover);
+}
+
+.daily-habits-plugin .dh-log-entry-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-2xs);
+}
+
+.daily-habits-plugin .dh-log-entry-date {
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-semibold);
+}
+
+.daily-habits-plugin .dh-log-entry-text {
+  font-size: var(--dh-font-sm);
+  color: var(--text-normal);
+  line-height: 1.5;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: block;
+  max-width: 100%;
+}
+
+.daily-habits-plugin .dh-log-entry-audio-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-xs);
+  width: 100%;
+  max-width: 320px;
+  margin-top: var(--dh-space-xs);
+}
+
+
+.daily-habits-plugin .dh-log-link {
+
+
+  color: var(--text-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color var(--dh-transition-fast);
+}
+.daily-habits-plugin .dh-log-link:hover {
+
+
+  text-decoration-color: var(--text-accent);
+}
+.daily-habits-plugin .dh-log-rate-badge {
+
+
+  display: inline-block;
+  background: var(--background-modifier-form-field);
+  color: var(--text-muted);
+  padding: 0 4px;
+  border-radius: 4px;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  border: 1px solid var(--background-modifier-border);
+  margin: 0 4px;
+}
+/* --- Diary View Layout --- */.daily-habits-plugin .dh-diary-view-container {
+
+
+  padding: var(--dh-space-lg);
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+  animation: fadeIn 0.3s ease-out;
+  height: auto;
+  min-height: 100%;
+}
+.daily-habits-plugin .dh-diary-toolbar {
+
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dh-space-lg);
+  margin-bottom: var(--dh-space-lg);
+  padding: var(--dh-space-md) 0;
+}
+.daily-habits-plugin .dh-diary-title-wrap {
+
+
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.daily-habits-plugin .dh-diary-title {
+
+
+  font-size: var(--dh-font-lg);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+}
+.daily-habits-plugin .dh-diary-range {
+
+
+  color: var(--text-muted);
+  font-size: var(--dh-font-sm);
+}
+.daily-habits-plugin .dh-diary-actions {
+
+
+  display: flex;
+  align-items: center;
+  gap: var(--dh-space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.daily-habits-plugin .dh-diary-empty-state {
+
+
+  text-align: center;
+  padding: var(--dh-space-2xl);
+  color: var(--text-muted);
+}
+.daily-habits-plugin .dh-diary-week-section {
+
+
+  margin-bottom: var(--dh-space-xl);
+}
+.daily-habits-plugin .dh-diary-week-header {
+
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--background-secondary);
+  border-radius: var(--dh-radius-lg);
+  cursor: pointer;
+  border: 1px solid var(--background-modifier-border);
+  transition: background-color var(--dh-transition-normal), border-color var(--dh-transition-normal);
+  margin-bottom: 12px;
+}
+.daily-habits-plugin .dh-diary-week-header:hover {
+
+
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+.daily-habits-plugin .dh-diary-type-header {
+
+
+  cursor: default;
+}
+.daily-habits-plugin .dh-diary-type-header:hover {
+
+
+  background: var(--background-secondary);
+}
+.daily-habits-plugin .dh-diary-type-header.type-good {
+
+
+  border-color: rgba(var(--dh-brand-success-rgb), 0.35);
+}
+.daily-habits-plugin .dh-diary-type-header.type-bad {
+
+
+  border-color: rgba(var(--dh-brand-critical-rgb), 0.35);
+}
+.daily-habits-plugin .dh-diary-type-header.type-lesson {
+
+
+  border-color: rgba(var(--dh-brand-info-rgb), 0.35);
+}
+.daily-habits-plugin .dh-diary-type-header.type-idea {
+
+
+  border-color: rgba(var(--dh-brand-warning-rgb), 0.35);
+}
+.daily-habits-plugin .week-title-wrap {
+
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.daily-habits-plugin .week-icon {
+
+
+  font-size: 1.2em;
+}
+.daily-habits-plugin .week-title {
+
+
+  font-weight: var(--dh-weight-bold);
+  font-size: 1.1em;
+  color: var(--text-normal);
+}
+.daily-habits-plugin .week-meta-wrap {
+
+
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+.daily-habits-plugin .week-toggle-icon {
+
+
+  font-weight: bold;
+  opacity: 0.6;
+}
+/* --- Entry Cards --- */.daily-habits-plugin .dh-diary-entries-list {
+
+
+  padding: 0 var(--dh-space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.daily-habits-plugin .dh-diary-entry-card {
+
+
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--dh-radius-md);
+  padding: 16px;
+  cursor: pointer;
+  border-inline-start: 4px solid var(--background-modifier-border);
+}
+.daily-habits-plugin .dh-diary-entry-card:hover {
+
+
+  transform: translateX(4px);
+  border-inline-start-color: var(--interactive-accent);
+  background: var(--background-primary);
+  box-shadow: var(--dh-shadow-md);
+}
+[dir="rtl"] .daily-habits-plugin .dh-diary-entry-card:hover {
+
+
+  transform: translateX(-4px);
+}
+.daily-habits-plugin .entry-card-header {
+
+
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.daily-habits-plugin .entry-date-part {
+
+
+  display: flex;
+  flex-direction: column;
+}
+.daily-habits-plugin .entry-day {
+
+
+  font-size: 0.8em;
+  font-weight: var(--dh-weight-bold);
+  text-transform: uppercase;
+  color: var(--interactive-accent);
+}
+.daily-habits-plugin .entry-date {
+
+
+  font-weight: var(--dh-weight-semibold);
+  font-size: 1em;
+}
+.daily-habits-plugin .entry-badge-part {
+
+
+  display: flex;
+  gap: 8px;
+}
+.daily-habits-plugin .entry-rate-badge {
+
+
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: var(--dh-weight-bold);
+}
+.daily-habits-plugin .entry-rate-badge.excellent {
+
+
+  background: rgba(var(--dh-brand-success-rgb), 0.2);
+  color: var(--dh-brand-success);
+}
+.daily-habits-plugin .entry-rate-badge.good {
+
+
+  background: rgba(var(--dh-brand-info-rgb), 0.2);
+  color: var(--dh-brand-info);
+}
+.daily-habits-plugin .entry-rate-badge.warn {
+
+
+  background: rgba(var(--dh-brand-warning-rgb), 0.2);
+  color: var(--dh-brand-warning);
+}
+.daily-habits-plugin .entry-rate-badge.danger {
+
+
+  background: rgba(var(--dh-brand-critical-rgb), 0.2);
+  color: var(--dh-brand-critical);
+}
+.daily-habits-plugin .entry-type-badge {
+
+
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: var(--dh-weight-bold);
+}
+.daily-habits-plugin .entry-type-badge.type-good, .daily-habits-plugin .dh-diary-entry-card.type-good {
+
+
+  border-inline-start-color: var(--dh-brand-success);
+}
+.daily-habits-plugin .dh-type-dot.type-good {
+
+
+  background-color: var(--dh-brand-success);
+}
+.daily-habits-plugin .entry-type-badge.type-good {
+
+
+  color: var(--dh-brand-success);
+  background: rgba(var(--dh-brand-success-rgb), 0.16);
+}
+.daily-habits-plugin .entry-type-badge.type-bad, .daily-habits-plugin .dh-diary-entry-card.type-bad {
+
+
+  border-inline-start-color: var(--dh-brand-critical);
+}
+.daily-habits-plugin .dh-type-dot.type-bad {
+
+
+  background-color: var(--dh-brand-critical);
+}
+.daily-habits-plugin .entry-type-badge.type-bad {
+
+
+  color: var(--dh-brand-critical);
+  background: rgba(var(--dh-brand-critical-rgb), 0.16);
+}
+.daily-habits-plugin .entry-type-badge.type-lesson, .daily-habits-plugin .dh-diary-entry-card.type-lesson {
+
+
+  border-inline-start-color: var(--dh-brand-info);
+}
+.daily-habits-plugin .dh-type-dot.type-lesson {
+
+
+  background-color: var(--dh-brand-info);
+}
+.daily-habits-plugin .entry-type-badge.type-lesson {
+
+
+  color: var(--dh-brand-info);
+  background: rgba(var(--dh-brand-info-rgb), 0.16);
+}
+.daily-habits-plugin .entry-type-badge.type-idea, .daily-habits-plugin .dh-diary-entry-card.type-idea {
+
+
+  border-inline-start-color: var(--dh-brand-warning);
+}
+.daily-habits-plugin .dh-type-dot.type-idea {
+
+
+  background-color: var(--dh-brand-warning);
+}
+.daily-habits-plugin .entry-type-badge.type-idea {
+
+
+  color: var(--dh-brand-warning);
+  background: rgba(var(--dh-brand-warning-rgb), 0.16);
+}
+.daily-habits-plugin .entry-time-badge {
+
+
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-family: var(--font-monospace);
+}
+.daily-habits-plugin .entry-card-body {
+
+
+  line-height: 1.6;
+  color: var(--text-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.daily-habits-plugin .dh-log-section-header-row {
+
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.daily-habits-plugin .dh-log-section-title {
+
+
+  margin: 0;
+}
+/* Log Header Controls */.daily-habits-plugin .dh-log-header-controls {
+
+ display: flex; align-items: center; gap: 8px; }
+.daily-habits-plugin .dh-log-filter-select {
+
+ padding: 4px; border-radius: 4px; border: 1px solid var(--background-modifier-border); background: var(--background-primary); color: var(--text-normal); font-size: 0.9em; }
+.daily-habits-plugin .dh-log-export-btn {
+
+ background: var(--interactive-normal); color: var(--text-normal); margin-inline-end: var(--dh-space-md); }
+.daily-habits-plugin .dh-log-export-btn:hover {
+
+ background: var(--interactive-hover); }
+
+/* Audio and Action Text styling for Diary and Log views */
+.daily-habits-plugin .dh-diary-audio {
+  width: 100%;
+  height: 36px;
+  margin-top: var(--dh-space-sm);
+  border-radius: var(--dh-radius-lg);
+}
+
+.daily-habits-plugin .dh-diary-entry-action-text {
+  margin-top: var(--dh-space-sm);
+}
+

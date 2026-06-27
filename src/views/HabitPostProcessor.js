@@ -22,20 +22,14 @@ export class HabitPostProcessor {
     }
 
     // Render the Habit UI
-    const container = el.createEl("div", { cls: "core-habits-post-processor" });
+    const container = el.createEl("div", { cls: "core-habits-post-processor daily-habits-plugin" });
 
     // Header section: Type and Color
     const header = container.createEl("div", { cls: "ch-pp-header" });
     const typeLabel = habit.habitType === "break" ? "ترك عادة" : "بناء عادة";
-    const typeColor = habit.habitType === "break" ? "var(--color-red)" : "var(--color-teal)";
+    const typeClass = habit.habitType === "break" ? "break" : "build";
     
-    const badge = header.createEl("span", { cls: "ch-pp-badge", text: typeLabel });
-    badge.style.backgroundColor = typeColor;
-    badge.style.color = "white";
-    badge.style.padding = "4px 8px";
-    badge.style.borderRadius = "4px";
-    badge.style.fontSize = "0.85em";
-    badge.style.fontWeight = "bold";
+    header.createEl("span", { cls: `ch-pp-badge ${typeClass}`, text: typeLabel });
 
     // 🧠 Identity / Why Section
     if (habit.atomicDescription && habit.atomicDescription.identity) {
@@ -52,8 +46,8 @@ export class HabitPostProcessor {
     if (habit.atomicDescription && habit.atomicDescription.cue) {
       ul.createEl("li", { text: `📍 الإشارة (متى/أين): ${habit.atomicDescription.cue}` });
     }
-    if (habit.atomicDescription && habit.atomicDescription.routine) {
-      ul.createEl("li", { text: `⚡ السهولة (أصغر خطوة): ${habit.atomicDescription.routine}` });
+    if (habit.atomicDescription && habit.atomicDescription.friction) {
+      ul.createEl("li", { text: `⚡ السهولة (أصغر خطوة): ${habit.atomicDescription.friction}` });
     }
     if (habit.atomicDescription && habit.atomicDescription.reward) {
       ul.createEl("li", { text: `🎁 المكافأة الفورية: ${habit.atomicDescription.reward}` });
@@ -67,7 +61,8 @@ export class HabitPostProcessor {
       const levelsList = levelsBox.createEl("ul", { cls: "ch-pp-levels" });
       habit.levelData.forEach((level, idx) => {
         const isCurrent = (habit.currentLevel || 1) === (idx + 1);
-        const li = levelsList.createEl("li");
+        const liCls = (isCurrent && !level.achieved) ? "ch-pp-level-item is-current" : "ch-pp-level-item";
+        const li = levelsList.createEl("li", { cls: liCls });
         
         // Status checkbox mock
         const statusIcon = level.achieved ? "✅" : (isCurrent ? "🔄" : "⬜");
@@ -75,30 +70,9 @@ export class HabitPostProcessor {
         li.createEl("span", { text: `${statusIcon} المرحلة ${idx + 1}: ${level.goal}` });
         
         if (level.condition) {
-          const cond = li.createEl("div", { text: `شروط الانتقال: ${level.condition}`, cls: "ch-pp-condition" });
-          cond.style.fontSize = "0.85em";
-          cond.style.opacity = "0.8";
-          cond.style.marginRight = "24px";
-        }
-
-        if (isCurrent && !level.achieved) {
-          li.style.fontWeight = "bold";
-          li.style.color = "var(--text-accent)";
+          li.createEl("div", { text: `شروط الانتقال: ${level.condition}`, cls: "ch-pp-condition" });
         }
       });
     }
-
-    // Basic styling inside the component to ensure it looks decent immediately
-    container.style.border = "1px solid var(--background-modifier-border)";
-    container.style.borderRadius = "8px";
-    container.style.padding = "16px";
-    container.style.marginTop = "16px";
-    container.style.marginBottom = "16px";
-    container.style.backgroundColor = "var(--background-secondary)";
-
-    const sections = container.querySelectorAll('.ch-pp-section');
-    sections.forEach(sec => {
-      sec.style.marginTop = "16px";
-    });
   }
 }

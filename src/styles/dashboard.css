@@ -1,0 +1,301 @@
+/* --- 7. DASHBOARD --- */
+.daily-habits-plugin .decision-dashboard-container {
+
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-xl);
+  padding: var(--dh-space-lg) var(--dh-space-md);
+  animation: fade-in-up 0.3s ease-out forwards;
+  height: auto;
+  min-height: 100%;
+}
+.daily-habits-plugin .dh-pulse-cards-row {
+
+
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--dh-space-lg);
+  margin-bottom: var(--dh-space-xs);
+}
+.daily-habits-plugin .dh-pulse-card {
+
+
+  border-radius: var(--dh-radius-xl);
+  padding: var(--dh-space-xl) var(--dh-space-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.daily-habits-plugin .dh-pulse-card:hover {
+
+
+  transform: translateY(-2px);
+  box-shadow: var(--dh-shadow-md);
+}
+.daily-habits-plugin .dh-pulse-card .pulse-title {
+
+
+  font-size: var(--dh-font-sm);
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--dh-space-lg);
+}
+.daily-habits-plugin .dh-pulse-card .pulse-value {
+
+
+  font-size: 3rem;
+  font-weight: var(--dh-weight-extrabold);
+  color: var(--text-normal);
+  line-height: 1;
+  margin-bottom: var(--dh-space-md);
+}
+.daily-habits-plugin .dh-pulse-card .pulse-subtitle {
+
+
+  font-size: var(--dh-font-xs);
+  color: var(--text-faint);
+}
+.daily-habits-plugin .dh-pulse-cards-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--dh-space-xs);
+}
+.daily-habits-plugin .unified-overview-card {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.daily-habits-plugin .dh-identity-mix-row-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dh-space-sm);
+  margin-top: var(--dh-space-md);
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  background: var(--background-primary);
+  padding: var(--dh-space-xs) var(--dh-space-md);
+  border-radius: var(--dh-radius-md);
+  border: 1px solid var(--background-modifier-border);
+}
+.daily-habits-plugin .id-stat-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dh-space-xs);
+  font-weight: var(--dh-weight-semibold);
+}
+.daily-habits-plugin .id-stat-compact .id-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.daily-habits-plugin .id-dot.green-dot {
+  background: var(--color-green, var(--dh-brand-success));
+  box-shadow: 0 0 8px rgba(var(--dh-brand-success-rgb), 0.4);
+}
+.daily-habits-plugin .id-dot.red-dot {
+  background: var(--color-red, var(--dh-brand-danger));
+  box-shadow: 0 0 8px rgba(var(--dh-brand-danger-rgb), 0.4);
+}
+.daily-habits-plugin .dh-section-desc {
+
+
+  font-size: var(--dh-font-sm);
+  color: var(--text-muted);
+  margin-top: -8px;
+  margin-bottom: var(--dh-space-md);
+  line-height: 1.5;
+}
+.daily-habits-plugin .dh-habit-focus-box {
+
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dh-space-lg);
+  margin-bottom: var(--dh-space-xl);
+}
+@media (max-width: 600px) {
+.daily-habits-plugin .dh-habit-focus-box {
+
+
+    flex-direction: column;
+  }
+}
+.daily-habits-plugin .focus-item {
+
+
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: var(--dh-space-md);
+  padding: var(--dh-space-md) var(--dh-space-lg);
+}
+.daily-habits-plugin .focus-item.best-focus {
+
+
+  border-color: rgba(var(--dh-brand-success-rgb), 0.3);
+  background: rgba(var(--dh-brand-success-rgb), 0.05);
+}
+.daily-habits-plugin .focus-item.worst-focus {
+
+
+  border-color: rgba(var(--dh-brand-warning-rgb), 0.3);
+  background: rgba(var(--dh-brand-warning-rgb), 0.05);
+}
+.daily-habits-plugin .focus-icon {
+
+
+  font-size: 1.8rem;
+}
+.daily-habits-plugin .focus-label {
+
+
+  font-size: var(--dh-font-xs);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.daily-habits-plugin .focus-name {
+
+
+  font-size: var(--dh-font-md);
+  color: var(--text-normal);
+  font-weight: var(--dh-weight-bold);
+}
+.daily-habits-plugin .dh-dashboard-section h3 {
+
+
+  font-size: var(--dh-font-lg);
+  margin-top: 0;
+  margin-bottom: var(--dh-space-md);
+  color: var(--text-normal);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: var(--dh-space-xs);
+}
+.daily-habits-plugin .dh-dashboard-table {
+
+
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--background-secondary);
+  border-radius: var(--dh-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--dh-shadow-sm);
+  margin-bottom: var(--dh-space-lg);
+}
+.daily-habits-plugin .dh-dashboard-table th, .daily-habits-plugin .dh-dashboard-table td {
+
+
+  padding: var(--dh-space-md) var(--dh-space-lg);
+  text-align: start;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.daily-habits-plugin .dh-dashboard-table th {
+
+
+  background: var(--background-secondary);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-muted);
+  font-size: var(--dh-font-sm);
+}
+.daily-habits-plugin .dh-dashboard-table tr:last-child td {
+
+
+  border-bottom: none;
+}
+.daily-habits-plugin .dh-days-patterns-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: var(--dh-space-sm);
+  margin-bottom: var(--dh-space-lg);
+}
+
+.daily-habits-plugin .dh-day-pattern-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-lg);
+  padding: var(--dh-space-md) var(--dh-space-xs);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform var(--dh-transition-fast), border-color var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-day-pattern-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--background-modifier-border-hover);
+}
+
+.daily-habits-plugin .dh-day-pattern-card.day-golden {
+  border-color: rgba(var(--dh-brand-success-rgb), 0.3);
+  background: rgba(var(--dh-brand-success-rgb), 0.05);
+}
+
+.daily-habits-plugin .dh-day-pattern-card.day-weakest {
+  border-color: rgba(var(--dh-brand-danger-rgb), 0.3);
+  background: rgba(var(--dh-brand-danger-rgb), 0.05);
+}
+
+.daily-habits-plugin .dh-day-pattern-card .day-pattern-name {
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-semibold);
+  margin-bottom: var(--dh-space-xs);
+}
+
+.daily-habits-plugin .dh-day-pattern-card .day-pattern-val {
+  font-size: var(--dh-font-lg);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-day-pattern-card.day-golden .day-pattern-val {
+  color: var(--dh-progress-excellent);
+}
+
+.daily-habits-plugin .dh-day-pattern-card.day-weakest .day-pattern-val {
+  color: var(--dh-progress-critical);
+}
+
+.daily-habits-plugin .dh-day-pattern-card .day-pattern-badge {
+  font-size: var(--dh-font-xs);
+  margin-top: var(--dh-space-xs);
+}
+
+.daily-habits-plugin .day-diagnosis-text {
+  font-size: var(--dh-font-sm);
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  margin-top: var(--dh-space-sm);
+  padding: var(--dh-space-md);
+  background: var(--background-secondary);
+  border-radius: var(--dh-radius-md);
+}
+
+/* Dashboard Calc Button & Trend Cells styling */
+.daily-habits-plugin .dh-calc-btn-mini {
+  margin-top: var(--dh-space-md);
+  padding: var(--dh-space-xs) var(--dh-space-lg);
+  font-size: var(--dh-font-sm);
+}
+
+.daily-habits-plugin .dh-trend-cell.is-positive {
+  color: var(--dh-progress-excellent);
+}
+
+.daily-habits-plugin .dh-trend-cell.is-negative {
+  color: var(--dh-progress-critical);
+}
+

@@ -1,5 +1,5 @@
 const moment = window.moment;
-import { getNoteByDate, findHabitEntry } from '../utils/helpers.js';
+import { getNoteByDate } from '../utils/helpers.js';
 
 export class StreakCalculator {
   static #cache = new Map();
@@ -10,7 +10,7 @@ export class StreakCalculator {
   }
 
   async calculate(habit) {
-    const todayStr = moment().format("YYYY-MM-DD");
+    const todayStr = moment().locale("en").format("YYYY-MM-DD");
     const cached = StreakCalculator.#cache.get(habit.id);
     if (cached && cached.computedAtDate === todayStr && (Date.now() - cached.computedAt < 10 * 60 * 1000)) {
       return cached.value;
@@ -42,12 +42,23 @@ export class StreakCalculator {
         continue;
       }
 
-      if (habit.restoredDate && date.isBefore(window.moment(habit.restoredDate), "day")) {
-        break;
+      const isAfterArchive = habit.archived && habit.archivedDate && date.clone().startOf("day").isAfter(moment(habit.archivedDate).startOf("day"));
+      if (isAfterArchive) {
+        continue;
+      }
+
+      // Check if date falls in an archived period (between archivedDate and restoredDate)
+      if (habit.archivedDate && habit.restoredDate) {
+        const archMoment = moment(habit.archivedDate).startOf("day");
+        const restMoment = moment(habit.restoredDate).startOf("day");
+        const dateMoment = date.clone().startOf("day");
+        if (dateMoment.isSameOrAfter(archMoment) && dateMoment.isSameOrBefore(restMoment)) {
+          continue;
+        }
       }
 
       const dateKey = date.clone().locale("en").format("YYYY-MM-DD");
-      let content;
+      let content = null;
       let parsedHabits = null;
 
       if (this.contentCache && this.contentCache.has(dateKey)) {
@@ -60,37 +71,39 @@ export class StreakCalculator {
         }
       } else {
         const dailyNote = await getNoteByDate(this.plugin.app, date, false, this.plugin.settings);
-        if (!dailyNote) {
-          if (i > 0) {
-            if (!currentStreakBroken) currentStreakBroken = true;
+        if (dailyNote) {
+          fileReads++;
+          if (i === 0) {
+            content = await this.plugin.app.vault.read(dailyNote);
+          } else {
+            content = await this.plugin.app.vault.cachedRead(dailyNote);
           }
-          tempStreak = 0;
-          if (hasSeenFirstRightCompletion) currentGapLength++; else ongoingGapLength++;
-          continue;
-        }
-        
-        fileReads++;
-        if (i === 0) {
-          content = await this.plugin.app.vault.read(dailyNote);
-        } else {
-          content = await this.plugin.app.vault.cachedRead(dailyNote);
         }
       }
 
-      if (!parsedHabits) {
+      if (content !== null && !parsedHabits) {
         parsedHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
         if (this.contentCache) {
           this.contentCache.set(dateKey, { content, parsedHabits });
         }
       }
 
-      const entry = findHabitEntry(parsedHabits, habit.linkText, habit.nameHistory);
+      const status = await this.plugin.statsService.getHabitStatus(habit, date, parsedHabits || content);
 
-      if (entry && entry.skipped) {
+      if (status === "ignored") {
+        if (hasSeenFirstRightCompletion) {
+          currentGapLength++;
+        } else {
+          ongoingGapLength++;
+        }
         continue;
       }
 
-      if (entry && entry.completed) {
+      if (status === "skipped") {
+        continue;
+      }
+
+      if (status === "completed") {
         tempStreak++;
         
         if (!firstCompletionDate || date.isBefore(firstCompletionDate, 'day')) {
@@ -114,6 +127,7 @@ export class StreakCalculator {
           consistencyCompleted++;
         }
       } else {
+        // status === "uncompleted"
         if (i === 0) {
           if (i < CONSISTENCY_WINDOW) consistencyScheduled++;
           continue;
@@ -164,6 +178,10 @@ export class StreakCalculator {
 
   static invalidate(habitId) {
     StreakCalculator.#cache.delete(habitId);
+  }
+
+  static invalidateAll() {
+    StreakCalculator.#cache.clear();
   }
 
   getConsistencyLabel(score) {
