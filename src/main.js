@@ -253,7 +253,7 @@ export default class DailyHabitsPlugin extends Plugin {
     delete this.settings.reflectionJournalPath;
 
     if (savedData.dailyParentHeading === undefined) {
-      if (this.settings.habitHeading.startsWith("## ")) {
+      if ((this.settings.habitHeading || "").startsWith("## ")) {
         this.settings.habitHeading = this.settings.habitHeading.replace(/^##\s+/, "### ");
       }
       if ((this.settings.reflectionHeading || "").startsWith("## ")) {
