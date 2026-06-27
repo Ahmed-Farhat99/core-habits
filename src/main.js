@@ -229,7 +229,6 @@ export default class DailyHabitsPlugin extends Plugin {
       this._openTimeouts.clear();
       this._openTimeouts = null;
     }
-    if (this.habitScanner) this.habitScanner.reset();
     await this.audioEngine.close();
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_WEEKLY);
   }
