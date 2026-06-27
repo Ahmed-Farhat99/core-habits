@@ -296,7 +296,10 @@ class WeeklyGridView extends ItemView {
     }
 
     if (!this.plugin.isFullyLoaded) {
-      StatusView.renderLoading(container, this.plugin.translationManager.t("loading_habits"));
+      const loadingText = this.plugin.translationManager
+        ? this.plugin.translationManager.t("loading_habits")
+        : "Loading habits...";
+      StatusView.renderLoading(container, loadingText);
       this._isRendering = false;
       return;
     }
