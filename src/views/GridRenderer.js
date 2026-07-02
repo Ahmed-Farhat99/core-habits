@@ -428,7 +428,7 @@ export class GridRenderer {
           cell.textContent = "--";
           cell.addClass("not-scheduled");
         } else {
-          const cellKey = `${habit.id}:${dateKey}`;
+
 
           if (status === "completed") {
             cell.textContent = "✓";
