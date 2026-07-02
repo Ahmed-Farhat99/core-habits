@@ -43,6 +43,34 @@ export class GridRenderer {
     const rootContainer = container.closest(".weekly-grid-container") || container;
     rootContainer.setAttribute("data-today-index", String(todayIndex));
 
+    const hasParentHabits = habits.some(h => this.plugin.habitManager.isParent(h.id));
+    if (hasParentHabits) {
+      const bulkActions = container.createDiv({ cls: "dh-bulk-actions-bar" });
+      const collapsedCount = habits.filter(h => this.plugin.habitManager.isParent(h.id) && this.plugin.settings.collapsedGroups.includes(h.id)).length;
+      const totalParents = habits.filter(h => this.plugin.habitManager.isParent(h.id)).length;
+      const isAllCollapsed = collapsedCount === totalParents;
+
+      const bulkBtn = bulkActions.createEl("button", {
+        cls: "dh-btn dh-bulk-toggle-btn",
+        text: isAllCollapsed
+          ? this.plugin.translationManager.t("grid_expand_all")
+          : this.plugin.translationManager.t("grid_collapse_all")
+      });
+
+      bulkBtn.onclick = async () => {
+        const parentIds = habits.filter(h => this.plugin.habitManager.isParent(h.id)).map(h => h.id);
+        if (isAllCollapsed) {
+          this.plugin.settings.collapsedGroups = this.plugin.settings.collapsedGroups.filter(id => !parentIds.includes(id));
+        } else {
+          const currentCollapsed = new Set(this.plugin.settings.collapsedGroups);
+          parentIds.forEach(id => currentCollapsed.add(id));
+          this.plugin.settings.collapsedGroups = Array.from(currentCollapsed);
+        }
+        await this.plugin.saveSettings({ silent: true });
+        await this.context.renderWeeklyGrid();
+      };
+    }
+
     // Create wrapper for sticky header functionality
     const tableWrapper = container.createDiv({ cls: "habits-grid-wrapper dh-desktop-scroll" });
     const table = tableWrapper.createDiv({ cls: "habits-grid" });
@@ -405,23 +433,15 @@ export class GridRenderer {
           if (status === "completed") {
             cell.textContent = "✓";
             cell.addClass("completed");
-            this.context.getPreviousCellState().set(cellKey, true);
-            this.context.getPreviousSkipState().set(cellKey, false);
           } else if (status === "skipped") {
             cell.textContent = "⊘";
             cell.addClass("skipped");
-            this.context.getPreviousCellState().set(cellKey, false);
-            this.context.getPreviousSkipState().set(cellKey, true);
           } else if (status === "missed") {
             cell.textContent = "x";
             cell.addClass("missed");
-            this.context.getPreviousCellState().set(cellKey, false);
-            this.context.getPreviousSkipState().set(cellKey, false);
           } else {
             cell.textContent = "☐";
             cell.addClass("pending");
-            this.context.getPreviousCellState().set(cellKey, false);
-            this.context.getPreviousSkipState().set(cellKey, false);
           }
 
           cell.setAttribute("data-status", status === "missed" ? "uncompleted" : status);
@@ -576,6 +596,7 @@ export class GridRenderer {
   refreshRowMeta(habit) {
     const container = this.context.getWeeklyContentContainer();
     if (!container) return;
+    const currentToken = this.context.getRenderToken ? this.context.getRenderToken() : null;
 
     if (habit.parentId) {
       const parentRows = container.querySelectorAll(`.habit-row[data-group-id="${habit.parentId}"]`);
@@ -592,15 +613,24 @@ export class GridRenderer {
         );
         if (scheduled.length > 0) {
           const todayKey = DateUtils.formatDateKey(today);
-          let completedCount = 0;
-          for (const child of scheduled) {
-            const cellKey = `${child.id}:${todayKey}`;
-            if (this.context.getPreviousCellState().get(cellKey)) completedCount++;
-          }
-          const checkStr = completedCount === scheduled.length ? " \u2713" : "";
-          progressSlot.textContent = `(${completedCount}/${scheduled.length}${checkStr})`;
-          if (completedCount === scheduled.length) progressSlot.addClass("complete");
-          else progressSlot.removeClass("complete");
+          const weekContent = this.context.getWeekContentCache ? this.context.getWeekContentCache() : null;
+          const todayContent = weekContent ? weekContent.get(todayKey) || null : null;
+          
+          Promise.all(scheduled.map(c => this.getHabitStatusForDay(c, today, todayContent)))
+            .then(statuses => {
+              if (this.context.getRenderToken && this.context.getRenderToken() !== currentToken) {
+                return;
+              }
+              const completedCount = statuses.filter(s => s === "completed").length;
+              const total = scheduled.length;
+              const checkStr = completedCount === total ? " \u2713" : "";
+              progressSlot.textContent = `(${completedCount}/${total}${checkStr})`;
+              if (completedCount === total) progressSlot.addClass("complete");
+              else progressSlot.removeClass("complete");
+            })
+            .catch((err) => {
+              console.error("[Core Habits] Failed to update parent progress dynamically:", err);
+            });
         }
         break;
       }
@@ -846,6 +876,34 @@ export class GridRenderer {
     };
 
     // 2. Compact List Body
+    const hasParentHabits = habits.some(h => this.plugin.habitManager.isParent(h.id));
+    if (hasParentHabits) {
+      const bulkActions = compactWrapper.createDiv({ cls: "dh-bulk-actions-bar compact" });
+      const collapsedCount = habits.filter(h => this.plugin.habitManager.isParent(h.id) && this.plugin.settings.collapsedGroups.includes(h.id)).length;
+      const totalParents = habits.filter(h => this.plugin.habitManager.isParent(h.id)).length;
+      const isAllCollapsed = collapsedCount === totalParents;
+
+      const bulkBtn = bulkActions.createEl("button", {
+        cls: "dh-btn dh-bulk-toggle-btn",
+        text: isAllCollapsed
+          ? this.plugin.translationManager.t("grid_expand_all")
+          : this.plugin.translationManager.t("grid_collapse_all")
+      });
+
+      bulkBtn.onclick = async () => {
+        const parentIds = habits.filter(h => this.plugin.habitManager.isParent(h.id)).map(h => h.id);
+        if (isAllCollapsed) {
+          this.plugin.settings.collapsedGroups = this.plugin.settings.collapsedGroups.filter(id => !parentIds.includes(id));
+        } else {
+          const currentCollapsed = new Set(this.plugin.settings.collapsedGroups);
+          parentIds.forEach(id => currentCollapsed.add(id));
+          this.plugin.settings.collapsedGroups = Array.from(currentCollapsed);
+        }
+        await this.plugin.saveSettings({ silent: true });
+        await this.context.renderWeeklyGrid();
+      };
+    }
+
     const listBody = compactWrapper.createDiv({ cls: "dh-compact-list" });
     const { sorted: sortedHabits } = buildHierarchyLabels(habits);
 
@@ -884,6 +942,15 @@ export class GridRenderer {
       // Child indentation
       if (isChild) {
         nameSection.createSpan({ cls: "dh-child-indent", text: "└ " });
+      }
+
+      if (isParentHabit) {
+        const btn = nameSection.createSpan({
+          cls: "dh-collapse-btn",
+          title: this.plugin.translationManager.t("grid_collapse_expand_tooltip"),
+          attr: { "data-collapse-id": habit.id },
+        });
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dh-chevron-icon"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
       }
 
       // Habit Name Link
@@ -968,10 +1035,6 @@ export class GridRenderer {
           else if (status === "missed") statusBtn.textContent = "x";
           else statusBtn.textContent = "☐";
 
-          const cellKey = `${habit.id}:${dateKey}`;
-          this.context.getPreviousCellState().set(cellKey, status === "completed");
-          this.context.getPreviousSkipState().set(cellKey, status === "skipped");
-
           statusBtn.onclick = async (e) => {
             e.stopPropagation();
             const current = statusBtn.getAttribute("data-status");
@@ -984,9 +1047,6 @@ export class GridRenderer {
             if (success) {
               statusBtn.className = `dh-compact-status-btn status-${next}`;
               statusBtn.setAttribute("data-status", next);
-              
-              this.context.getPreviousCellState().set(cellKey, next === "completed");
-              this.context.getPreviousSkipState().set(cellKey, next === "skipped");
 
               if (next === "completed") {
                 statusBtn.textContent = "✓";
@@ -1037,7 +1097,43 @@ export class GridRenderer {
     });
 
     await Promise.all(rowPromises);
-    
+
+    // Wire up collapse/expand buttons for compact rows
+    const compactChildRowsMap = new Map();
+    const compactRows = listBody.querySelectorAll('.dh-compact-row');
+    for (const row of compactRows) {
+      const gid = row.getAttribute('data-group-id');
+      if (row.classList.contains('habit-row-child')) {
+        if (!compactChildRowsMap.has(gid)) compactChildRowsMap.set(gid, []);
+        compactChildRowsMap.get(gid).push(row);
+      }
+    }
+
+    compactChildRowsMap.forEach((childRows, pid) => {
+      const toggleBtn = listBody.querySelector(`[data-collapse-id="${pid}"]`);
+      if (!toggleBtn) return;
+
+      let collapsed = this.plugin.settings.collapsedGroups.includes(pid);
+
+      childRows.forEach(row => { row.style.display = collapsed ? "none" : ""; });
+      toggleBtn.classList.toggle("is-collapsed", collapsed);
+      toggleBtn.title = collapsed
+        ? this.plugin.translationManager.t("grid_expand_children")
+        : this.plugin.translationManager.t("grid_collapse_children");
+
+      toggleBtn.onclick = (e) => {
+        e.stopPropagation();
+        collapsed = !collapsed;
+        toggleBtn.classList.toggle("is-collapsed", collapsed);
+        toggleBtn.title = collapsed
+          ? this.plugin.translationManager.t("grid_expand_children")
+          : this.plugin.translationManager.t("grid_collapse_children");
+        childRows.forEach(row => { row.style.display = collapsed ? "none" : ""; });
+
+        this.context.toggleGroupCollapse(pid, collapsed);
+      };
+    });
+
     // Add comment dots to compact rows if enabled
     if (this.plugin.settings.enableHabitContext) {
       for (const habit of sortedHabits) {

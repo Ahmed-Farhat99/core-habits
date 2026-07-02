@@ -65,6 +65,7 @@ export const DEFAULT_SETTINGS = {
 
 
   enableOpenReminder: true,
+  enableMissedDaysNotice: true,
 
   enableSound: true,
 
@@ -127,7 +128,10 @@ export const TRANSLATIONS = {
     consistency_low: "Needs work",
     open_reminder: "Reminder on open",
     open_reminder_desc: "Show a notice with incomplete habits count when Obsidian opens.",
+    settings_missed_days_notice: "Missed days notice",
+    settings_missed_days_notice_desc: "Show a notice with the count of missed days since last daily note on startup.",
     open_reminder_notice: "incomplete habits today",
+    notice_action_open: "Open ➔",
     enable_sound: "Enable sound effects",
     enable_sound_desc: "Play feedback sounds when checking/unchecking habits and reaching milestones.",
     show_hijri_date: "Show Hijri date",
@@ -174,6 +178,9 @@ export const TRANSLATIONS = {
     streak_title: "Streak: {streak} consecutive day(s)",
     grid_previous_day_tooltip: "Previous day",
     grid_next_day_tooltip: "Next day",
+    grid_collapse_all: "Collapse All",
+    grid_expand_all: "Expand All",
+    missed_days_notice: "days without tracking — start today! 🚀",
 
     // Onboarding
     onboarding_title_1: "🎉 Welcome to Core Habits 3.2",
@@ -543,7 +550,10 @@ export const TRANSLATIONS = {
     consistency_low: "يحتاج تحسين",
     open_reminder: "تذكير عند الفتح",
     open_reminder_desc: "عرض إشعار بعدد العادات غير المكتملة عند فتح Obsidian.",
+    settings_missed_days_notice: "تنبيه الأيام الفائتة",
+    settings_missed_days_notice_desc: "إظهار تنبيه بعدد الأيام الفائتة منذ آخر ملاحظة يومية عند فتح Obsidian.",
     open_reminder_notice: "عادة غير مكتملة اليوم",
+    notice_action_open: "عرض ➔",
     enable_sound: "تفعيل المؤثرات الصوتية",
     enable_sound_desc: "تشغيل أصوات عند تحديد العادات وإلغائها والوصول إلى الإنجازات.",
     show_hijri_date: "إظهار التاريخ الهجري",
@@ -586,6 +596,9 @@ export const TRANSLATIONS = {
     streak_title: "سلسلة الاستمرار: {streak} يوم متواصل",
     grid_previous_day_tooltip: "اليوم السابق",
     grid_next_day_tooltip: "اليوم التالي",
+    grid_collapse_all: "طي الكل",
+    grid_expand_all: "فتح الكل",
+    missed_days_notice: "أيام مرت بدون تتبع — ابدأ اليوم! 🚀",
 
     // Onboarding
     onboarding_title_1: "🎉 مرحباً بك في Core Habits 3.2",

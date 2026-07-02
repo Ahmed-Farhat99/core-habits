@@ -159,6 +159,18 @@ export class BasicsPanel {
       );
 
     new Setting(container)
+      .setName(t("settings_missed_days_notice"))
+      .setDesc(t("settings_missed_days_notice_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.enableMissedDaysNotice ?? true)
+          .onChange(async (value) => {
+            this.plugin.settings.enableMissedDaysNotice = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(container)
       .setName(t("enable_sound"))
       .setDesc(t("enable_sound_desc"))
       .addToggle((toggle) =>

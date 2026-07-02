@@ -1436,8 +1436,8 @@
 }
 
 .daily-habits-plugin .dh-compact-row {
-  display: flex !important;
-  flex-direction: row !important;
+  display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   background: var(--background-secondary);
@@ -1452,16 +1452,28 @@
   gap: var(--dh-space-sm);
 }
 
-.daily-habits-plugin .dh-compact-row:hover {
-  background-color: var(--background-modifier-hover);
-  border-color: var(--text-muted);
-  box-shadow: var(--dh-shadow-md);
+.daily-habits-plugin .dh-compact-row:not(.habit-row-child) {
+  box-shadow: calc(4px * var(--dh-direction-sign)) 0 0 0 var(--dh-row-color, var(--dh-brand-primary)) inset;
+  background-color: var(--dh-row-color-bg);
 }
 
-.daily-habits-plugin .dh-compact-row.dh-compact-row-child {
+.daily-habits-plugin .dh-compact-row:not(.habit-row-child):hover {
+  background-color: var(--dh-row-color-alpha);
+  border-color: var(--text-muted);
+  box-shadow: calc(4px * var(--dh-direction-sign)) 0 0 0 var(--dh-row-color, var(--dh-brand-primary)) inset, var(--dh-shadow-md);
+}
+
+.daily-habits-plugin .dh-compact-row.habit-row-child {
   margin-inline-start: var(--dh-space-md);
   width: calc(100% - var(--dh-space-md));
-  border-inline-start: 3px solid var(--habit-color);
+  background-color: color-mix(in srgb, var(--dh-row-color) 2%, transparent);
+  box-shadow: calc(2px * var(--dh-direction-sign)) 0 0 0 color-mix(in srgb, var(--dh-row-color) 50%, transparent) inset;
+}
+
+.daily-habits-plugin .dh-compact-row.habit-row-child:hover {
+  background-color: color-mix(in srgb, var(--dh-row-color) 5%, transparent);
+  border-color: var(--text-muted);
+  box-shadow: calc(2px * var(--dh-direction-sign)) 0 0 0 var(--dh-row-color, var(--dh-brand-primary)) inset, var(--dh-shadow-md);
 }
 
 .daily-habits-plugin .dh-compact-name-section {
@@ -1578,4 +1590,63 @@
   border-color: rgba(var(--dh-brand-success-rgb), 0.25);
   color: var(--dh-brand-success-dark);
   border-style: solid;
+}
+
+/* Bulk actions bar styling */
+.daily-habits-plugin .dh-bulk-actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--dh-space-sm);
+  width: 100%;
+}
+
+.daily-habits-plugin .dh-bulk-actions-bar.compact {
+  justify-content: flex-end;
+  margin-bottom: var(--dh-space-xs);
+  padding: 0 var(--dh-space-sm);
+  box-sizing: border-box;
+}
+
+.daily-habits-plugin .dh-bulk-toggle-btn {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  padding: var(--dh-space-2xs) var(--dh-space-sm);
+  font-size: var(--dh-font-xs);
+  font-weight: var(--dh-weight-medium);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-bulk-toggle-btn:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--text-muted);
+  color: var(--text-normal);
+}
+
+/* Interactive startup notice wrapper (flex, no !important needed inside custom wrapper) */
+.dh-notice-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dh-space-md, 12px);
+  width: 100%;
+}
+
+.dh-notice-btn {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: var(--dh-radius-md, 4px);
+  padding: 4px 10px;
+  font-size: var(--dh-font-xs, 12px);
+  font-weight: var(--dh-weight-semibold, 600);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--dh-transition-fast, 0.15s) ease;
+}
+
+.dh-notice-btn:hover {
+  background-color: var(--interactive-accent-hover);
 }

@@ -22,8 +22,6 @@ class WeeklyGridView extends ItemView {
     this.isProcessing = false;
     this.isTogglingInProgress = false;
     this.activeFilePaths = new Set();
-    this.previousCellState = new Map();
-    this.previousSkipState = new Map();
     this.currentDateMode = "gregorian";
     this.currentViewMode = "grid";
     this.diaryViewMode = this.plugin.settings.diaryViewMode || "grouped";
@@ -64,8 +62,6 @@ class WeeklyGridView extends ItemView {
       setLastFourWeeksCache: (cache) => { this._lastFourWeeksCache = cache; },
       
       // Grid specific
-      getPreviousCellState: () => this.previousCellState,
-      getPreviousSkipState: () => this.previousSkipState,
       getDailyStats: () => this.dailyStats,
       setDailyStats: (stats) => { this.dailyStats = stats; },
       getWeekContentCache: () => this.weekContentCache,
@@ -242,8 +238,6 @@ class WeeklyGridView extends ItemView {
 
     // Clean up memory when view is closed
     this.dailyStats = {};
-    this.previousCellState.clear();
-    this.previousSkipState.clear();
     this.activeFilePaths.clear();
     if (this.milestoneHit) this.milestoneHit.clear();
     this.isProcessing = false;
@@ -317,8 +311,6 @@ class WeeklyGridView extends ItemView {
       tempContainer.className = "weekly-grid-container daily-habits-plugin";
       
       this._streakCache = new Map();
-      this.previousCellState.clear();
-      this.previousSkipState.clear();
       this._streakQueue = [];
       this.renderToken = Date.now();
 
@@ -652,6 +644,9 @@ class WeeklyGridView extends ItemView {
   async toggleHabitCompletion(habit, date, targetState) {
     this.isTogglingInProgress = true;
     try {
+      // Ensure habits checklist exists in the daily note BEFORE toggling
+      await this.plugin.habitManager.ensureHabitsInNote(date, habit, true);
+
       const file = await getNoteByDate(this.app, date, true, this.plugin.settings);
       if (!file) return false;
 

@@ -104,6 +104,59 @@ export default class DailyHabitsPlugin extends Plugin {
         this.settings.lastSeenVersion = this.manifest.version;
         this.saveSettings();
       }
+
+      // 6. Show Startup Notices (Open Reminder, Daily Notes warning, and Missed Days)
+      if (this.settings.enableOpenReminder) {
+        try {
+          const count = await this.getIncompleteHabitsCountForToday();
+          if (count > 0) {
+            const notice = new Notice("", 12000);
+            const container = notice.noticeEl;
+            container.empty();
+
+            const wrapper = container.createDiv({ cls: "dh-notice-wrapper" });
+            wrapper.createSpan({
+              text: `📋 ${count} ${this.translationManager.t("open_reminder_notice")}`
+            });
+
+            const btn = wrapper.createEl("button", {
+              cls: "dh-notice-btn",
+              text: this.translationManager.t("notice_action_open")
+            });
+
+            btn.onclick = () => {
+              this.activateWeeklyView();
+              notice.hide();
+            };
+          }
+        } catch (e) {
+          Utils.debugLog(this, "[Open Reminder] Failed:", e);
+        }
+      }
+
+      const dnInfo = getDailyNotesInfo(this.app, this.settings);
+      if (dnInfo.source === "defaults" && !this._defaultsWarningShown) {
+        const isAr = this.settings.language === "ar";
+        new Notice(isAr
+          ? "⚠️ لم يتم اكتشاف إعدادات Daily Notes. يتم استخدام الإعدادات الافتراضية (YYYY-MM-DD). راجع تبويب 'متقدم' في إعدادات الإضافة."
+          : "⚠️ Daily Notes settings not detected. Using defaults (YYYY-MM-DD). Check 'Advanced' tab in plugin settings."
+          , 10000);
+        this._defaultsWarningShown = true;
+      }
+
+      if (this.settings.enableMissedDaysNotice) {
+        setTimeout(async () => {
+          try {
+            const missed = await this.calculateMissedDays();
+            if (missed > 1) {
+              const msg = `⚠️ ${missed - 1} ${this.translationManager.t("missed_days_notice")}`;
+              new Notice(msg, 9000);
+            }
+          } catch (e) {
+            Utils.debugLog(this, "[Missed Days Notice] Failed:", e);
+          }
+        }, 8000);
+      }
     });
 
     // Register Markdown Post Processor
@@ -193,30 +246,6 @@ export default class DailyHabitsPlugin extends Plugin {
         }
       })
     );
-
-    if (this.settings.enableOpenReminder) {
-      this.app.workspace.onLayoutReady(async () => {
-        try {
-          const count = await this.getIncompleteHabitsCountForToday();
-          if (count > 0) {
-            const msg = `📋 ${count} ${this.translationManager.t("open_reminder_notice")}`;
-            new Notice(msg, 7000);
-          }
-        } catch (e) {
-          Utils.debugLog(this, "[Open Reminder] Failed:", e);
-        }
-
-        const dnInfo = getDailyNotesInfo(this.app, this.settings);
-        if (dnInfo.source === "defaults" && !this._defaultsWarningShown) {
-          const isAr = this.settings.language === "ar";
-          new Notice(isAr
-            ? "⚠️ لم يتم اكتشاف إعدادات Daily Notes. يتم استخدام الإعدادات الافتراضية (YYYY-MM-DD). راجع تبويب 'متقدم' في إعدادات الإضافة."
-            : "⚠️ Daily Notes settings not detected. Using defaults (YYYY-MM-DD). Check 'Advanced' tab in plugin settings."
-            , 10000);
-          this._defaultsWarningShown = true;
-        }
-      });
-    }
   }
 
   async onunload() {
@@ -286,12 +315,22 @@ export default class DailyHabitsPlugin extends Plugin {
     if (!this.habitManager || !this.statsService) return 0;
     const today = window.moment();
     const todayNote = await getNoteByDate(this.app, today, false, this.settings);
-    if (!todayNote) return 0;
+    const habits = this.habitManager.getActiveHabits();
+    const dayOfWeek = today.day();
+
+    // Only count active habits that are scheduled for today
+    const scheduledHabits = habits.filter(habit =>
+      this.habitManager.isHabitScheduledForDay(habit, dayOfWeek)
+    );
+
+    if (!todayNote) {
+      // If no daily note exists yet, all scheduled habits are considered incomplete
+      return scheduledHabits.length;
+    }
 
     const content = await this.app.vault.cachedRead(todayNote);
     let count = 0;
-    const habits = this.habitManager.getHabits();
-    for (const habit of habits) {
+    for (const habit of scheduledHabits) {
       const status = await this.statsService.getHabitStatus(habit, today, content);
       if (status === "uncompleted") {
         count++;
@@ -353,6 +392,44 @@ export default class DailyHabitsPlugin extends Plugin {
       this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
         if (leaf.view instanceof WeeklyGridView) leaf.view.refresh();
       });
+    }
+  }
+
+  async calculateMissedDays() {
+    try {
+      const info = getDailyNotesInfo(this.app, this.settings);
+      const format = info.format || "YYYY-MM-DD";
+      const folder = info.folder || "";
+      
+      let files = this.app.vault.getMarkdownFiles();
+      if (folder) {
+        files = files.filter(f => f.path.startsWith(folder));
+      }
+      
+      const dates = [];
+      const today = window.moment().startOf("day");
+      
+      for (const file of files) {
+        const parsed = window.moment(file.basename, format, true);
+        if (parsed.isValid()) {
+          const fileDate = parsed.startOf("day");
+          if (fileDate.isBefore(today)) {
+            dates.push(fileDate);
+          }
+        }
+      }
+      
+      if (dates.length === 0) return 0;
+      
+      // Sort descending (most recent first)
+      dates.sort((a, b) => b.valueOf() - a.valueOf());
+      
+      const mostRecent = dates[0];
+      const diffDays = today.diff(mostRecent, "days");
+      return diffDays;
+    } catch (e) {
+      console.warn("[Core Habits] Failed to calculate missed days:", e);
+      return 0;
     }
   }
 
