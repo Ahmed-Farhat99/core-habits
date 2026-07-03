@@ -1,14 +1,14 @@
-# Core Habits v3.2.2 🚀
+# Core Habits v3.3.0 🚀
 
-This is a maintenance and stability release fixing critical user experience issues in the Daily/Compact View and startup notices, while also cleaning up runtime memory overhead.
+This release introduces major architectural and mobile user experience improvements:
 
-### 🛠️ Fixes & Stability
-- **Daily View Collapse / Expand**: Resolved a CSS specificity issue where `.dh-compact-row` used `!important` display rules, which overrode inline JS toggles and broke the ability to collapse/expand habits in the Daily (Compact) list.
-- **Startup Notification Race Condition**: Fixed a race condition where startup reminder notices ran before the `HabitManager` finished loading files into memory on layout ready, resulting in incorrect count readings. All startup notices now execute in sequential order after full database and translation bootstrapping.
-- **Smart Completion Calculations**: Updated the incomplete habits calculator to target active scheduled habits for the current day. If your Daily Note for today doesn't exist yet, it now correctly assumes all scheduled habits for today are pending (instead of returning 0).
-- **Unused State Cleanups**: Removed obsolete mapping trackers (`previousCellState` and `previousSkipState`) to optimize active memory usage and keep the plugin lightweight.
-- **Refined Assets**: Updated all README.md presentation screenshots to use modern mockup cards with high-readability borders and dark backgrounds.
+### ⚙️ Reactive Stats Indexing
+- **In-Memory Cache Map**: Introduced a non-blocking background index that scans daily note completions asynchronously at startup, eliminating lag.
+- **Event-Driven Rescan**: Registered metadata changes and vault delete listeners to scan individual daily note files dynamically and keep the lifetime stats count 100% accurate, even when editing daily notes manually in the editor or syncing.
+- **Improved Dashboard UI**: Replaced the big "Calculate" button with automatic calculations and a mini `🔄` reload button inside the card subtitle for manual re-indexing.
 
----
-
-*Thank you for trusting Core Habits to build your core path.* 🌟
+### 📱 Specificity-Based Mobile Styling
+- **Compact Modals**: Reduced modal action button heights from `46px` to `38px`, font-size from `1em` to `0.9em`, and padding from `14px 16px` to `10px 12px` for a cleaner look.
+- **Stacked Split Footer**: Stacked the Reflection Modal's voice record button and save/cancel buttons vertically on mobile screens so they don't squish horizontally.
+- **No More Nested Scrollbars**: Set `height: auto` and `overflow: visible` on all inner view content containers so that mobile vertical scrolling is handled natively by the parent leaf.
+- **Clean CSS Override**: Used specific `body.is-mobile` class-prefix selectors instead of `!important` overrides, preserving CSS specificity and clean styling rules.

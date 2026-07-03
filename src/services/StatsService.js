@@ -5,6 +5,7 @@ export class StatsService {
   constructor(plugin) {
     this.plugin = plugin;
     this.app = plugin.app;
+    this.dailyCompletions = new Map();
   }
 
   /**
@@ -300,6 +301,95 @@ export class StatsService {
       console.error("[Core Habits] Failed to sync lifetime stats", e);
       this.plugin.settings.lifetimeCompleted = null;
       throw e;
+    }
+  }
+
+  async initLifetimeIndex() {
+    this.dailyCompletions = new Map();
+    try {
+      const info = getDailyNotesInfo(this.app, this.plugin.settings);
+      let files = this.app.vault.getMarkdownFiles().filter(f => !f.path.startsWith(".obsidian"));
+      if (info.folder) {
+        files = files.filter(f => f.path.startsWith(info.folder));
+      }
+      
+      // Filter only daily notes matching the configuration format
+      files = files.filter(f => {
+        const date = window.moment(f.basename, info.format, true);
+        return date.isValid();
+      });
+
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (file) => {
+          const content = await this.app.vault.cachedRead(file);
+          const dateKey = file.basename;
+          if (!content.includes("- [")) {
+            this.dailyCompletions.set(dateKey, 0);
+            return;
+          }
+          const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
+          const completedCount = habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
+          this.dailyCompletions.set(dateKey, completedCount);
+        }));
+      }
+
+      this.recalculateLifetimeCount();
+    } catch (e) {
+      console.error("[Core Habits] Failed to initialize lifetime index", e);
+    }
+  }
+
+  recalculateLifetimeCount() {
+    let total = 0;
+    for (const count of this.dailyCompletions.values()) {
+      total += count;
+    }
+    this.plugin.settings.lifetimeCompleted = total;
+    this.plugin.saveSettings({ silent: true });
+    
+    // Trigger dashboard UI refresh if active
+    const activeView = this.app.workspace.getLeavesOfType("weekly-habits-view")[0]?.view;
+    if (activeView && activeView.currentViewMode === "dashboard") {
+      activeView.renderWeeklyGrid();
+    }
+  }
+
+  async rescanFile(file) {
+    if (!this.dailyCompletions) {
+      this.dailyCompletions = new Map();
+    }
+    try {
+      const info = getDailyNotesInfo(this.app, this.plugin.settings);
+      const date = window.moment(file.basename, info.format, true);
+      if (!date.isValid()) return;
+
+      const dateKey = file.basename;
+      const content = await this.app.vault.read(file); // read latest content from disk directly
+      if (!content.includes("- [")) {
+        this.dailyCompletions.set(dateKey, 0);
+      } else {
+        const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
+        const completedCount = habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
+        this.dailyCompletions.set(dateKey, completedCount);
+      }
+      this.recalculateLifetimeCount();
+    } catch (e) {
+      console.error("[Core Habits] Failed to rescan file", file.path, e);
+    }
+  }
+
+  handleFileDelete(file) {
+    if (!this.dailyCompletions) return;
+    const info = getDailyNotesInfo(this.app, this.plugin.settings);
+    const date = window.moment(file.basename, info.format, true);
+    if (!date.isValid()) return;
+
+    const dateKey = file.basename;
+    if (this.dailyCompletions.has(dateKey)) {
+      this.dailyCompletions.delete(dateKey);
+      this.recalculateLifetimeCount();
     }
   }
 }
