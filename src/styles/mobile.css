@@ -252,16 +252,35 @@ body.is-mobile .daily-habits-plugin .dh-nav-tab-label {
 }
 /* ---- 13.6 MODALS & FORMS ---- */
 body.is-mobile .daily-habits-plugin .dh-modal-actions {
-  padding: 14px 16px;
-  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+  padding: 10px 12px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
   background: var(--background-primary);
   border-top: 1px solid var(--background-modifier-border);
 }
 body.is-mobile .daily-habits-plugin .dh-modal-actions button {
-  height: 46px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 1em;
+  height: 38px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9em;
+  padding: 6px 12px;
+}
+/* Reflection modal split footer stacking on mobile */
+body.is-mobile .daily-habits-plugin .dh-popup-footer-split {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-left,
+body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-right {
+  width: 100%;
+  justify-content: stretch;
+  gap: 8px;
+}
+body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-left button,
+body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-right button {
+  flex: 1;
+  width: 100%;
+  margin: 0;
 }
 body.is-mobile .daily-habits-plugin .modal {
   max-height: 100dvh;
@@ -496,4 +515,26 @@ body.is-mobile .daily-habits-plugin .dh-parent-select {
 }
 .daily-habits-plugin .dh-log-section-title {
   margin: 0;
+}
+
+/* ---- 13.23 PREVENT NESTED VERTICAL SCROLLBARS ON MOBILE ---- */
+body.is-mobile .daily-habits-plugin.weekly-grid-container {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+body.is-mobile .daily-habits-plugin .dh-view-content {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+body.is-mobile .daily-habits-plugin .decision-dashboard-container {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+body.is-mobile .daily-habits-plugin .dh-diary-view-container {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
 }

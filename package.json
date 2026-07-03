@@ -1,6 +1,6 @@
 {
   "name": "core-habits",
-  "version": "3.2.3",
+  "version": "3.3.0",
   "type": "module",
   "description": "Obsidian plugin to toggle habits in daily notes with archiving, ordering, and batch renaming, building your core identity.",
   "main": "main.js",

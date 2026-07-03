@@ -92,6 +92,7 @@ export default class DailyHabitsPlugin extends Plugin {
       await this.habitManager.initialize();
       
       this.isFullyLoaded = true;
+      this.statsService.initLifetimeIndex();
 
       // Refresh Weekly View if it was opened before habits were loaded
       this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
@@ -235,6 +236,9 @@ export default class DailyHabitsPlugin extends Plugin {
         if (this.habitManager) {
           await this.habitManager.syncFile(file);
         }
+        if (this.statsService) {
+          await this.statsService.rescanFile(file);
+        }
       })
     );
 
@@ -243,6 +247,9 @@ export default class DailyHabitsPlugin extends Plugin {
         if (this.isInternalFileOperation) return;
         if (this.habitManager) {
           await this.habitManager.removeFile(file);
+        }
+        if (this.statsService) {
+          this.statsService.handleFileDelete(file);
         }
       })
     );

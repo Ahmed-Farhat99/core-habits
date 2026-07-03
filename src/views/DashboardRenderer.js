@@ -86,21 +86,21 @@ export class DashboardRenderer {
     const hasLifetime = typeof this.plugin.settings.lifetimeCompleted === "number";
     overviewCard.createDiv({ 
       cls: "pulse-value", 
-      text: hasLifetime ? this.plugin.settings.lifetimeCompleted.toString() : "—" 
+      text: hasLifetime ? this.plugin.settings.lifetimeCompleted.toString() : "0" 
     });
 
-    if (hasLifetime) {
-      overviewCard.createDiv({ cls: "pulse-subtitle", text: t("stats_lifetime_subtitle") });
-    } else {
-      const btn = overviewCard.createEl("button", { 
-        cls: "dh-btn mod-cta dh-calc-btn-mini", 
-        text: t("stats_calculate_btn")
-      });
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        await this.syncLifetimeAchievements(container);
-      };
-    }
+    const subtitleContainer = overviewCard.createDiv({ cls: "pulse-subtitle-wrapper" });
+    subtitleContainer.createSpan({ text: t("stats_lifetime_subtitle") });
+    subtitleContainer.createSpan({ text: " " });
+    const refreshBtn = subtitleContainer.createEl("button", {
+      cls: "dh-btn dh-calc-btn-mini",
+      text: "🔄",
+      title: t("refresh_title") || "Refresh"
+    });
+    refreshBtn.onclick = async (e) => {
+      e.stopPropagation();
+      await this.plugin.statsService.initLifetimeIndex();
+    };
 
     // Compact Identity Mix sub-row inside the main overview card
     const activeHabits = this.plugin.habitManager.getActiveHabits();
