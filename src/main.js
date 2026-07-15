@@ -57,6 +57,17 @@ export default class DailyHabitsPlugin extends Plugin {
     this.lockCount = 0;
     await this.loadSettings();
     this.isFullyLoaded = false;
+    this.startupCooldown = true;
+
+    const delay = (this.settings.syncStartupDelay ?? 15) * 1000;
+    if (delay > 0) {
+      setTimeout(() => {
+        this.startupCooldown = false;
+        Utils.debugLog(this, "Startup cooldown ended. Auto-write is now active.");
+      }, delay);
+    } else {
+      this.startupCooldown = false;
+    }
 
     this._openTimeouts = new Map();
     this.audioEngine = new AudioEngine(this);
@@ -202,6 +213,7 @@ export default class DailyHabitsPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => {
+        if (!this.isFullyLoaded || this.startupCooldown) return;
         if (!this.settings.autoWriteHabits || !file || file.extension !== 'md') return;
         
         if (this._openTimeouts.has(file.path)) {
@@ -408,6 +420,7 @@ export default class DailyHabitsPlugin extends Plugin {
       const format = info.format || "YYYY-MM-DD";
       const folder = info.folder || "";
       
+      // LEGITIMATE USE: Vault scanning is required to locate daily notes in order to calculate missed days and streaks for active habits.
       let files = this.app.vault.getMarkdownFiles();
       if (folder) {
         files = files.filter(f => f.path.startsWith(folder));

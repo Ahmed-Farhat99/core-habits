@@ -1650,3 +1650,165 @@
 .dh-notice-btn:hover {
   background-color: var(--interactive-accent-hover);
 }
+
+/* ═══════════════════════════════════════════════════════════ */
+/* --- COMPACT MOBILE WEEKPICKER STRIP & HEADER ---           */
+/* ═══════════════════════════════════════════════════════════ */
+
+.daily-habits-plugin .dh-compact-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--dh-space-md);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.daily-habits-plugin .dh-compact-title-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.daily-habits-plugin .dh-compact-title-day {
+  font-size: var(--dh-font-lg);
+  font-weight: var(--dh-weight-extrabold);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-compact-title-date {
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.daily-habits-plugin .dh-compact-today-btn-pill {
+  background: rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.08);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: var(--dh-font-xs);
+  font-weight: var(--dh-weight-bold);
+  color: var(--interactive-accent);
+  cursor: pointer;
+  transition: all var(--dh-transition-fast) ease;
+}
+
+.daily-habits-plugin .dh-compact-today-btn-pill:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.daily-habits-plugin .dh-compact-week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: var(--dh-space-md);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.daily-habits-plugin .dh-strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 2px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  cursor: pointer;
+  transition: all var(--dh-transition-fast) cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  position: relative;
+}
+
+.daily-habits-plugin .dh-strip-day:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--text-muted);
+  transform: translateY(-2px);
+}
+
+.daily-habits-plugin .dh-strip-day.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 4px 10px rgba(var(--interactive-accent-rgb, 124, 58, 237), 0.25);
+  transform: scale(1.05);
+}
+
+.daily-habits-plugin .dh-strip-day.is-today::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-strip-day.is-active.is-today::before {
+  background: var(--text-on-accent);
+}
+
+.daily-habits-plugin .dh-strip-day-name {
+  font-size: 0.65rem;
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.daily-habits-plugin .dh-strip-day.is-active .dh-strip-day-name {
+  color: var(--text-on-accent);
+  opacity: 0.85;
+}
+
+.daily-habits-plugin .dh-strip-day-num {
+  font-size: var(--dh-font-sm);
+  font-weight: var(--dh-weight-extrabold);
+  color: var(--text-normal);
+  margin: 2px 0;
+}
+
+.daily-habits-plugin .dh-strip-day.is-active .dh-strip-day-num {
+  color: var(--text-on-accent);
+}
+
+.daily-habits-plugin .dh-strip-day-percentage {
+  font-size: 0.6rem;
+  font-weight: var(--dh-weight-bold);
+  padding: 1px 4px;
+  border-radius: var(--dh-radius-sm);
+  line-height: 1.2;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.daily-habits-plugin .dh-strip-day.is-active .dh-strip-day-percentage {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-on-accent);
+}
+
+.daily-habits-plugin .dh-strip-day-percentage.pct-complete {
+  background: rgba(20, 184, 166, 0.1);
+  color: var(--dh-brand-success, #14b8a6);
+}
+
+.daily-habits-plugin .dh-strip-day-percentage.pct-high {
+  background: rgba(124, 58, 237, 0.1);
+  color: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-strip-day-percentage.pct-medium {
+  background: rgba(234, 179, 8, 0.1);
+  color: #ca8a04;
+}
+
+.daily-habits-plugin .dh-strip-day-percentage.pct-low {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.daily-habits-plugin .dh-strip-day-percentage.pct-none {
+  background: transparent;
+  color: var(--text-faint);
+}
+

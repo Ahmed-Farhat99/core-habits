@@ -59,9 +59,24 @@ export class AdvancedPanel {
         toggle
           .setValue(this.plugin.settings.autoWriteHabits)
           .onChange(async (value) => {
-            await this.saveAndRefresh("autoWriteHabits", value, container, t);
+            await this.saveAndRefresh("autoWriteHabits", value, container, t, true);
           })
       );
+
+    if (this.plugin.settings.autoWriteHabits) {
+      new Setting(container)
+        .setName(t("settings_sync_startup_delay"))
+        .setDesc(t("settings_sync_startup_delay_desc"))
+        .addSlider((slider) =>
+          slider
+            .setLimits(0, 60, 5)
+            .setValue(this.plugin.settings.syncStartupDelay ?? 15)
+            .setDynamicTooltip()
+            .onChange(async (value) => {
+              await this.saveAndRefresh("syncStartupDelay", value, container, t);
+            })
+        );
+    }
 
     container.createDiv({
       cls: "dh-settings-section-header",

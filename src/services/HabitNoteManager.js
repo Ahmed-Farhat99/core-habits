@@ -542,6 +542,7 @@ export class HabitNoteManager {
   _findFileByHabitId(habitId) {
     if (!habitId) return null;
     const root = this.getRootFolder().toLowerCase();
+    // LEGITIMATE USE: Vault scanning is restricted to the habits folder to find a habit note file corresponding to a specific habit ID.
     const files = this.app.vault.getMarkdownFiles();
 
     for (const file of files) {

@@ -23,6 +23,7 @@ export class HabitRepository {
     const activeFolder = this.habitNoteManager.getActiveFolder().toLowerCase();
     const archiveFolder = this.habitNoteManager.getArchiveFolder().toLowerCase();
 
+    // LEGITIMATE USE: Vault scanning is required to list files in order to load habit notes from the designated Active/ and Archive/ folders.
     const files = this.app.vault.getMarkdownFiles();
     for (const file of files) {
       const lowerPath = file.path.toLowerCase();

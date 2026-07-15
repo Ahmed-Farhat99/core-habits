@@ -58,6 +58,7 @@ export class MigrationManager {
 
     const activeFolder = this.plugin.habitNoteManager.getActiveFolder().toLowerCase();
     const archiveFolder = this.plugin.habitNoteManager.getArchiveFolder().toLowerCase();
+    // LEGITIMATE USE: Vault scanning is required to load all active and archived habit notes for the schema migration check.
     const files = this.app.vault.getMarkdownFiles();
 
     for (const file of files) {

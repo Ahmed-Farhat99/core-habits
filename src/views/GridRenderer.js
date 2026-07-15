@@ -1,4 +1,4 @@
-import { setIcon } from 'obsidian';
+import { setIcon, Notice } from 'obsidian';
 import { DAY_KEYS, resolveHabitColorHex } from '../constants.js';
 import { Utils } from '../utils/Utils.js';
 import { DateUtils, buildHierarchyLabels } from '../utils/helpers.js';
@@ -483,6 +483,8 @@ export class GridRenderer {
               await this.context.checkMilestone(dateKey);
               
               this.refreshRowMeta(habit);
+            } else {
+              new Notice(this.plugin.translationManager.t("grid_update_habit_error"));
             }
           };
           cell.onkeydown = (e) => {
@@ -819,61 +821,106 @@ export class GridRenderer {
     // Create wrapper for the compact view
     const compactWrapper = container.createDiv({ cls: "dh-compact-view-wrapper" });
 
-    // 1. Day Navigator Header
-    const navigator = compactWrapper.createDiv({ cls: "dh-compact-navigator" });
-
-    const prevBtn = navigator.createEl("button", {
-      cls: "dh-btn dh-compact-nav-btn mod-icon",
-      title: t("grid_previous_day_tooltip") || "Previous Day"
-    });
-    setIcon(prevBtn, isAr ? "chevron-right" : "chevron-left");
-    prevBtn.onclick = async () => {
-      const nextIdx = (focusedIdx - 1 + 7) % 7;
-      this.context.setFocusedDayIndex(nextIdx);
-      await this.context.renderWeeklyGrid();
+    const getShortDayName = (name, lang = "ar") => {
+      if (lang === "ar") {
+        if (name === "الإثنين") return "إثن";
+        if (name === "الثلاثاء") return "ثلا";
+        if (name === "الأربعاء") return "أرب";
+        if (name === "الخميس") return "خمي";
+        if (name === "الجمعة") return "جمع";
+        if (name === "السبت") return "سبت";
+        if (name === "الأحد") return "أحد";
+        return name.slice(0, 3);
+      }
+      return name.slice(0, 3);
     };
 
-    const titleWrap = navigator.createDiv({ cls: "dh-compact-nav-title-wrap" });
-    titleWrap.createDiv({ cls: "dh-compact-nav-day-name", text: t(DAY_KEYS[dayOfWeek]) });
+    // 1. Day Navigator Header
+    const headerRow = compactWrapper.createDiv({ cls: "dh-compact-header-row" });
     
     const displayDate = dayDate.clone().locale(this.plugin.settings.language || "ar");
+    const dayNameText = t(DAY_KEYS[dayOfWeek]);
     const dateLabelStr = displayDate.format(t("date_format_short"));
     const hijriLabelStr = this.plugin.settings.showHijriDate ? DateUtils.getHijriDate(dayDate, isAr) : "";
-    
     const dateLabelText = this.plugin.settings.showHijriDate 
-      ? `${dateLabelStr} | ${hijriLabelStr.replace(/\s+هـ$/, "")}`
+      ? `${dateLabelStr} — ${hijriLabelStr.replace(/\s+هـ$/, "")}`
       : dateLabelStr;
-      
-    titleWrap.createDiv({ cls: "dh-compact-nav-date", text: dateLabelText });
 
-    const nextBtn = navigator.createEl("button", {
-      cls: "dh-btn dh-compact-nav-btn mod-icon",
-      title: t("grid_next_day_tooltip") || "Next Day"
-    });
-    setIcon(nextBtn, isAr ? "chevron-left" : "chevron-right");
-    nextBtn.onclick = async () => {
-      const nextIdx = (focusedIdx + 1) % 7;
-      this.context.setFocusedDayIndex(nextIdx);
-      await this.context.renderWeeklyGrid();
-    };
+    const titleContainer = headerRow.createDiv({ cls: "dh-compact-title-container" });
+    titleContainer.createDiv({ cls: "dh-compact-title-day", text: dayNameText });
+    titleContainer.createDiv({ cls: "dh-compact-title-date", text: dateLabelText });
 
-    // Quick "Today" jump button inside navigator
-    const todayJumpBtn = navigator.createEl("button", {
-      cls: `dh-btn dh-compact-today-btn ${isToday ? "is-hidden" : ""}`,
-      text: t("today"),
-      title: t("back_to_today")
-    });
-    todayJumpBtn.onclick = async () => {
-      let todayIdx = 0;
-      for (let i = 0; i < 7; i++) {
-        if (weekDayInfos[i].isToday) {
-          todayIdx = i;
-          break;
+    // Quick "Today" jump button
+    if (!isToday) {
+      const todayJumpBtn = headerRow.createEl("button", {
+        cls: "dh-btn dh-compact-today-btn-pill",
+        text: t("today"),
+        title: t("back_to_today")
+      });
+      todayJumpBtn.onclick = async () => {
+        let todayIdx = 0;
+        for (let i = 0; i < 7; i++) {
+          if (weekDayInfos[i].isToday) {
+            todayIdx = i;
+            break;
+          }
         }
+        this.context.setFocusedDayIndex(todayIdx);
+        await this.context.renderWeeklyGrid();
+      };
+    }
+
+    // 2. The 7-Day Week Picker Strip
+    const weekStrip = compactWrapper.createDiv({ cls: "dh-compact-week-strip" });
+    const dailyStats = this.context.getDailyStats ? this.context.getDailyStats() : null;
+
+    for (let i = 0; i < 7; i++) {
+      const dayInfo = weekDayInfos[i];
+      const dayDateKey = DateUtils.formatDateKey(dayInfo.dayDate);
+      const isDayActive = i === focusedIdx;
+      
+      const dayPill = weekStrip.createDiv({
+        cls: `dh-strip-day ${isDayActive ? "is-active" : ""} ${dayInfo.isToday ? "is-today" : ""}`
+      });
+
+      // Day Short Name
+      const rawDayName = t(DAY_KEYS[dayInfo.dayOfWeek]);
+      const shortDayName = getShortDayName(rawDayName, this.plugin.settings.language || "ar");
+      dayPill.createDiv({ cls: "dh-strip-day-name", text: shortDayName });
+
+      // Day Number
+      dayPill.createDiv({ cls: "dh-strip-day-num", text: dayInfo.dayDate.format("D") });
+
+      // Completion Rate Badge
+      const dayStats = dailyStats ? dailyStats[dayDateKey] : null;
+      const pctBadge = dayPill.createDiv({ cls: "dh-strip-day-percentage" });
+      
+      if (dayStats && !dayInfo.dayDate.isAfter(today, "day") && dayStats.total > 0) {
+        const dayPct = Math.min(100, Math.round((dayStats.completed / dayStats.total) * 100));
+        let colorClass = "pct-low";
+        if (dayPct === 100) {
+          colorClass = "pct-complete";
+          pctBadge.textContent = "💯";
+        } else {
+          if (dayPct >= 80) colorClass = "pct-high";
+          else if (dayPct >= 50) colorClass = "pct-medium";
+          pctBadge.textContent = `${dayPct}%`;
+        }
+        pctBadge.addClass(colorClass);
+        dayPill.title = `${dayStats.completed}/${dayStats.total} ${t("completed") || "Completed"}`;
+      } else {
+        pctBadge.textContent = "--";
+        pctBadge.addClass("pct-none");
       }
-      this.context.setFocusedDayIndex(todayIdx);
-      await this.context.renderWeeklyGrid();
-    };
+
+      // Click Action to jump to day
+      dayPill.onclick = async () => {
+        if (!isDayActive) {
+          this.context.setFocusedDayIndex(i);
+          await this.context.renderWeeklyGrid();
+        }
+      };
+    }
 
     // 2. Compact List Body
     const hasParentHabits = habits.some(h => this.plugin.habitManager.isParent(h.id));
@@ -1064,6 +1111,8 @@ export class GridRenderer {
               await this.updateHeaderAndProgress();
               await this.context.checkMilestone(dateKey);
               this.refreshRowMeta(habit);
+            } else {
+              new Notice(this.plugin.translationManager.t("grid_update_habit_error"));
             }
           };
 

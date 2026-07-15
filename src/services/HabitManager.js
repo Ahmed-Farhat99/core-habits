@@ -742,6 +742,7 @@ export class HabitManager {
     }
 
     const oldNamesArr = Array.from(uniqueOldNames);
+    // LEGITIMATE USE: Vault scanning is required to find all markdown files that refer to the old habit name in order to batch rename them safely.
     const markdownFiles = this.plugin.app.vault.getMarkdownFiles();
     const filesToUpdate = [];
 

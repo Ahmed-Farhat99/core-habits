@@ -275,6 +275,7 @@ export class StatsService {
     let totalCompleted = 0;
     try {
       const info = getDailyNotesInfo(this.app, this.plugin.settings);
+      // LEGITIMATE USE: Vault scanning is required to list daily notes to count lifetime habit completions.
       let files = this.app.vault.getMarkdownFiles().filter(f => !f.path.startsWith(".obsidian"));
       if (info.folder) {
         files = files.filter(f => f.path.startsWith(info.folder));
@@ -308,6 +309,7 @@ export class StatsService {
     this.dailyCompletions = new Map();
     try {
       const info = getDailyNotesInfo(this.app, this.plugin.settings);
+      // LEGITIMATE USE: Vault scanning is required to scan daily notes and calculate lifetime statistics upon plugin initialization.
       let files = this.app.vault.getMarkdownFiles().filter(f => !f.path.startsWith(".obsidian"));
       if (info.folder) {
         files = files.filter(f => f.path.startsWith(info.folder));
