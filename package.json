@@ -25,8 +25,9 @@
     "eslint": "^10.4.0",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
+    "launch-editor": "^2.14.1",
     "obsidian": "^1.5.7",
-    "vitest": "^1.6.1",
-    "vite": "^5.4.21"
+    "vite": "^8.1.4",
+    "vitest": "^1.6.1"
   }
 }
