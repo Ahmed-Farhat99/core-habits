@@ -8,6 +8,7 @@ class FileSuggestModal extends FuzzySuggestModal {
 
   getItems() {
     // Return all markdown files in the vault
+    // LEGITIMATE USE: Vault scanning is required to list all markdown files for the file suggest modal, letting users select a specific note path.
     return this.app.vault.getMarkdownFiles();
   }
 
