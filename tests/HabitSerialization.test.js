@@ -109,6 +109,55 @@ describe("Habit Serialization Characterization Tests", () => {
     expect(deletedFrontmatter).toContain(`deleted: true`);
   });
 
+  it("uses localized habit note template text for new French habit files", () => {
+    mockPlugin.settings.language = "fr";
+
+    const template = habitNoteManager.buildHabitTemplate({
+      ...canonicalHabit,
+      notes: "",
+    });
+
+    expect(template).toContain("> **Espace libre pour les notes :**");
+    expect(template).toContain("## 📓 Notes et audios");
+    expect(template).not.toContain("## 📓 سجل التدوينات والصوتيات");
+  });
+
+  it("localizes generated template text in existing habit notes", async () => {
+    mockPlugin.settings.language = "fr";
+    const mockFile = new TFile("Core Habits/Active/Reading Books.md");
+    let processedContent = "";
+
+    mockApp.vault.getMarkdownFiles = () => [mockFile];
+    mockApp.vault.process = async (file, callback) => {
+      processedContent = callback(`---
+habit_id: habit-1234567890
+---
+\`\`\`core-habits
+\`\`\`
+
+> **مساحة حرة للتدوين:**
+> Existing user note
+
+---
+
+## 📓 سجل التدوينات والصوتيات
+
+<!-- تُضاف التدوينات والملاحظات الصوتية تلقائياً أدناه بواسطة الإضافة -->
+**2026-05-18:** Done reading.
+`);
+      return file;
+    };
+
+    const updatedCount = await habitNoteManager.localizeHabitNoteTemplates("fr");
+
+    expect(updatedCount).toBe(1);
+    expect(processedContent).toContain("> **Espace libre pour les notes :**");
+    expect(processedContent).toContain("> Existing user note");
+    expect(processedContent).toContain("## 📓 Notes et audios");
+    expect(processedContent).toContain("**2026-05-18:** Done reading.");
+    expect(processedContent).not.toContain("## 📓 سجل التدوينات والصوتيات");
+  });
+
   it("preserves manual user content and log section on updateHabitNote", async () => {
     const habit = {
       ...canonicalHabit,

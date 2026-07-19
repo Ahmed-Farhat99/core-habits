@@ -124,8 +124,7 @@ export class MigrationManager {
       let body = fmEnd !== -1 ? oldContent.substring(fmEnd + 4) : oldContent;
 
       // Discard the old log section from the file body entirely
-      const logHeading = "## 📓 سجل التدوينات والصوتيات";
-      const logIdx = body.indexOf(logHeading);
+      const { index: logIdx } = this.plugin.habitNoteManager.findKnownHabitNoteTemplateValue(body, "habit_note_log_heading");
       if (logIdx !== -1) {
         body = body.substring(0, logIdx);
       }
@@ -141,8 +140,7 @@ export class MigrationManager {
     if (!file || !(file instanceof TFile)) return entries;
 
     const content = await this.app.vault.read(file);
-    const logHeading = "## 📓 سجل التدوينات والصوتيات";
-    const headingIdx = content.indexOf(logHeading);
+    const { value: logHeading, index: headingIdx } = this.plugin.habitNoteManager.findKnownHabitNoteTemplateValue(content, "habit_note_log_heading");
     if (headingIdx === -1) return entries;
 
     const afterHeading = content.substring(headingIdx + logHeading.length);

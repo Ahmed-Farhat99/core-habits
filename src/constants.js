@@ -1,8 +1,65 @@
 export const DEFAULT_MARKER = "[habit:: true]";
-export const DEFAULT_PARENT_HEADING = "## 🌟 يومياتي";
-export const DEFAULT_REFLECTION_HEADING = "### 📝 تدوينات اليوم";
-export const DEFAULT_HABIT_NOTES_HEADING = "### 💬 ملاحظات العادات";
+export const DEFAULT_PARENT_HEADING = "## Daily Journal";
+export const DEFAULT_HABIT_HEADING = "### Habit Tracker";
+export const DEFAULT_REFLECTION_HEADING = "### Daily Reflections";
+export const DEFAULT_HABIT_NOTES_HEADING = "### Habit Notes";
 export const REFLECTION_ENTRY_TYPES = ["Good", "Bad", "Lesson", "Idea"];
+
+export const DAILY_NOTE_HEADING_DEFAULTS = {
+  en: {
+    dailyParentHeading: DEFAULT_PARENT_HEADING,
+    habitHeading: DEFAULT_HABIT_HEADING,
+    habitLogHeading: DEFAULT_HABIT_NOTES_HEADING,
+    reflectionHeading: DEFAULT_REFLECTION_HEADING,
+  },
+  fr: {
+    dailyParentHeading: "## Journal quotidien",
+    habitHeading: "### Suivi des habitudes",
+    habitLogHeading: "### Notes sur les habitudes",
+    reflectionHeading: "### Réflexions du jour",
+  },
+  ar: {
+    dailyParentHeading: "## 🌟 يومياتي",
+    habitHeading: "### 🔄 تتبع العادات",
+    habitLogHeading: "### 💬 ملاحظات العادات",
+    reflectionHeading: "### 📝 تدوينات اليوم",
+  },
+};
+
+export const LEGACY_ARABIC_DAILY_NOTE_DEFAULTS = DAILY_NOTE_HEADING_DEFAULTS.ar;
+
+export function getDailyNoteHeadingDefaults(language = "en") {
+  return DAILY_NOTE_HEADING_DEFAULTS[language] || DAILY_NOTE_HEADING_DEFAULTS.en;
+}
+
+export function migrateLegacyLocalizedSettings(settings, savedData = {}) {
+  if (!settings) return false;
+
+  const language = settings.language || "en";
+  const localizedDefaults = getDailyNoteHeadingDefaults(language);
+  const legacyDefaults = LEGACY_ARABIC_DAILY_NOTE_DEFAULTS;
+  let changed = false;
+
+  const migrateHeading = (key) => {
+    const value = settings[key];
+    const wasMissingInSavedData = savedData[key] === undefined;
+    const isLegacyArabicValue = value === legacyDefaults[key];
+
+    if (!value || wasMissingInSavedData || (language !== "ar" && isLegacyArabicValue)) {
+      if (settings[key] !== localizedDefaults[key]) {
+        settings[key] = localizedDefaults[key];
+        changed = true;
+      }
+    }
+  };
+
+  migrateHeading("dailyParentHeading");
+  migrateHeading("habitHeading");
+  migrateHeading("habitLogHeading");
+  migrateHeading("reflectionHeading");
+
+  return changed;
+}
 
 export function normalizeReflectionType(type) {
   const cleanType = String(type || "").trim();
@@ -51,17 +108,19 @@ export const DEFAULT_SETTINGS = {
 
   habitNotesFolder: "Core Habits",
   nativeMigrated: false,
+  habitNoteTemplatesLanguage: "",
 
   dailyParentHeading: DEFAULT_PARENT_HEADING,
-  habitHeading: "### 🔄 تتبع العادات",
+  habitHeading: DEFAULT_HABIT_HEADING,
   autoWriteHabits: true,
   syncStartupDelay: 15,
 
   dailyNotesFolder: "",
   dailyNotesSource: "auto",
+  dailyNotesLocale: "obsidian",
   dateFormat: "YYYY-MM-DD",
 
-  language: "ar",
+  language: "en",
 
 
 
@@ -385,6 +444,12 @@ export const TRANSLATIONS = {
     settings_source_manual_opt: "Manual",
     settings_daily_format: "Date format",
     settings_daily_format_desc: "Moment.js format for filename",
+    settings_daily_locale: "Daily Notes locale",
+    settings_daily_locale_desc: "Locale used when formatting Daily Note filenames and template dates.",
+    settings_daily_locale_obsidian: "Follow Obsidian",
+    settings_daily_locale_en: "English",
+    settings_daily_locale_fr: "French",
+    settings_daily_locale_ar: "Arabic",
     settings_habit_context_heading: "💬 Habit Context (Comments)",
     settings_journal_heading: "📝 Daily Journal",
     settings_collapse_expand_tooltip: "Collapse / expand children",
@@ -495,6 +560,7 @@ export const TRANSLATIONS = {
     rename_no_files_notice: "No old files found to update",
     habit_notes_free_space_marker: "> **Free Space for Notes:**",
     habit_notes_placeholder: "> (Write your deep motivations or thoughts about this habit here...)",
+    habit_note_log_heading: "## 📓 Notes and audio",
     habit_template_engineering_title: "> [!info] 🧠 Habit Engineering",
     habit_template_identity_prefix: "> **Desired Identity:**",
     habit_template_cue_prefix: "> **Cue (Time/Location):**",
@@ -804,6 +870,12 @@ export const TRANSLATIONS = {
     settings_source_manual_opt: "يدوي",
     settings_daily_format: "صيغة التاريخ",
     settings_daily_format_desc: "صيغة Moment.js لاسم الملف",
+    settings_daily_locale: "لغة أسماء Daily Notes",
+    settings_daily_locale_desc: "اللغة المستخدمة عند تنسيق أسماء ملفات اليوم وتواريخ القوالب.",
+    settings_daily_locale_obsidian: "اتبع لغة Obsidian",
+    settings_daily_locale_en: "الإنجليزية",
+    settings_daily_locale_fr: "الفرنسية",
+    settings_daily_locale_ar: "العربية",
     settings_habit_context_heading: "💬 سياق العادات (التعليقات)",
     settings_journal_heading: "📝 يومياتي",
     settings_collapse_expand_tooltip: "إخفاء / عرض الفروع",
@@ -920,6 +992,7 @@ export const TRANSLATIONS = {
     rename_no_files_notice: "لم يتم العثور على ملفات قديمة للتحديث",
     habit_notes_free_space_marker: "> **مساحة حرة للتدوين:**",
     habit_notes_placeholder: "> (اكتب هنا دوافعك العميقة أو أفكارك عن بناء هذه العادة...)",
+    habit_note_log_heading: "## 📓 سجل التدوينات والصوتيات",
     habit_template_engineering_title: "> [!info] 🧠 هندسة العادة",
     habit_template_identity_prefix: "> **الهوية التي أريدها:**",
     habit_template_cue_prefix: "> **المحفز (الوقت/المكان):**",
@@ -928,5 +1001,84 @@ export const TRANSLATIONS = {
     habit_template_append_marker_comment: "<!-- تُضاف التدوينات والملاحظات الصوتية تلقائياً أدناه بواسطة الإضافة -->",
     error_modifying_note: "⚠️ حدث خطأ أثناء تعديل الملاحظة.",
   },
+};
+
+TRANSLATIONS.fr = {
+  ...TRANSLATIONS.en,
+  direction: "ltr",
+  language: "Langue",
+  language_desc: "Choisir la langue de l'interface.",
+  sat: "Samedi",
+  sun: "Dimanche",
+  mon: "Lundi",
+  tue: "Mardi",
+  wed: "Mercredi",
+  thu: "Jeudi",
+  fri: "Vendredi",
+  add_habit_btn: "+ Ajouter une habitude",
+  edit_habit_title: "Modifier l'habitude",
+  add_habit_title: "Ajouter une habitude",
+  delete: "Supprimer",
+  cancel: "Annuler",
+  habit_name: "Nom de l'habitude",
+  habit_section_heading: "Titre de la section habitudes",
+  habit_section_heading_desc: "Le titre sous lequel les habitudes seront écrites dans les notes quotidiennes.",
+  reflection_heading: "Titre des réflexions",
+  reflection_heading_desc: "Le titre dans chaque note quotidienne sous lequel les réflexions seront ajoutées.",
+  reflection_good: "Bien",
+  reflection_bad: "Difficile",
+  reflection_lesson: "Leçon",
+  reflection_idea: "Idée",
+  reflection_modal_title: "Comment s'est passée ta journée ?",
+  reflection_notes_placeholder: "Comment s'est passée ta journée ? Notes rapides...",
+  reflection_save: "💾 Enregistrer la réflexion",
+  settings_formatting_heading: "📐 Formatage et structure",
+  settings_daily_parent_heading: "Titre parent des notes quotidiennes",
+  settings_daily_parent_heading_desc: "Section principale où Core Habits écrit son contenu dans chaque Daily Note.",
+  settings_other_heading: "⚙️ Autres réglages",
+  settings_advanced_notes_toggle: "Réglages avancés des Daily Notes",
+  settings_daily_integration: "Intégration Daily Notes",
+  settings_source_label: "Source des réglages",
+  settings_source_desc: "Auto = détecter Daily Notes / Periodic Notes. Manuel = utiliser les champs ci-dessous.",
+  settings_source_auto: "Auto",
+  settings_source_manual_opt: "Manuel",
+  settings_source_daily: "Connecté à Daily Notes (auto)",
+  settings_source_periodic: "Connecté à Periodic Notes (auto)",
+  settings_source_manual: "Configuration manuelle",
+  settings_source_defaults: "Valeurs par défaut (YYYY-MM-DD)",
+  settings_daily_folder: "Dossier des notes quotidiennes",
+  settings_daily_folder_desc: "Dossier où se trouvent les notes quotidiennes.",
+  settings_daily_format: "Format de date",
+  settings_daily_format_desc: "Format Moment.js pour le nom du fichier",
+  settings_daily_locale: "Langue des Daily Notes",
+  settings_daily_locale_desc: "Langue utilisée pour formater les noms des Daily Notes et les dates de modèles.",
+  settings_daily_locale_obsidian: "Suivre Obsidian",
+  settings_daily_locale_en: "Anglais",
+  settings_daily_locale_fr: "Français",
+  settings_daily_locale_ar: "Arabe",
+  settings_journal_heading: "📝 Journal quotidien",
+  settings_habit_context_heading: "Contexte des habitudes",
+  habit_log_heading: "Titre des notes d'habitudes",
+  habit_log_heading_desc: "Le titre sous lequel les notes d'habitudes seront écrites.",
+  habit_notes_free_space_marker: "> **Espace libre pour les notes :**",
+  habit_notes_placeholder: "> (Écris ici tes motivations profondes ou tes idées sur cette habitude...)",
+  habit_note_log_heading: "## 📓 Notes et audios",
+  habit_template_engineering_title: "> [!info] 🧠 Construction de l'habitude",
+  habit_template_identity_prefix: "> **Identité souhaitée :**",
+  habit_template_cue_prefix: "> **Déclencheur (temps/lieu) :**",
+  habit_template_friction_prefix: "> **Réduction de friction :**",
+  habit_template_reward_prefix: "> **Récompense :**",
+  habit_template_append_marker_comment: "<!-- Les notes audio et texte sont ajoutées automatiquement ici par le plugin -->",
+  tab_basics: "⚙️ Général",
+  tab_habits: "🧩 Habitudes",
+  tab_advanced: "🔗 Avancé",
+  tab_guide: "📘 Guide",
+  date_format_short: "D MMM",
+  date_format_medium: "D MMM",
+  date_format_long: "ddd D MMM",
+  date_format_log_day: "DD MMM",
+  date_format_diary_header: "dddd D MMMM",
+  success_updated: "✅ {name} mis à jour",
+  error_modifying_note: "⚠️ Erreur lors de la modification de la note.",
 };
 

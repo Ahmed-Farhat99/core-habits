@@ -20,10 +20,14 @@ export class BasicsPanel {
         dropdown
           .addOption("ar", "العربية")
           .addOption("en", "English")
-          .setValue(this.plugin.settings.language || "ar")
+          .addOption("fr", "Français")
+          .setValue(this.plugin.settings.language || "en")
           .onChange(async (value) => {
             this.plugin.settings.language = value;
             await this.plugin.saveSettings();
+            if (this.plugin.localizeHabitNoteTemplatesForLanguage) {
+              await this.plugin.localizeHabitNoteTemplatesForLanguage(value);
+            }
             this.settingsTab.display(); // Full re-render needed for language change
             this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
               if (leaf.view && typeof leaf.view.refresh === "function") leaf.view.refresh();
