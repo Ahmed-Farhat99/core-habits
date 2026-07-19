@@ -44,7 +44,8 @@ import {
   DEFAULT_REFLECTION_HEADING,
   DEFAULT_HABIT_NOTES_HEADING,
   VIEW_TYPE_WEEKLY,
-  DEFAULT_SETTINGS
+  DEFAULT_SETTINGS,
+  migrateLegacyLocalizedSettings
 } from './constants.js';
 
 import { getNoteByDate, getDailyNotesInfo } from './utils/helpers.js';
@@ -101,6 +102,10 @@ export default class DailyHabitsPlugin extends Plugin {
 
       // 5. Re-initialize HabitManager to load updated schema/properties into memory
       await this.habitManager.initialize();
+
+      if (this.settings.habitNoteTemplatesLanguage !== this.settings.language) {
+        await this.localizeHabitNoteTemplatesForLanguage(this.settings.language);
+      }
       
       this.isFullyLoaded = true;
       this.statsService.initLifetimeIndex();
@@ -299,29 +304,50 @@ export default class DailyHabitsPlugin extends Plugin {
     const savedData = await this.loadData() || {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
     delete this.settings.reflectionJournalPath;
+    let shouldSaveSettings = false;
 
     if (savedData.dailyParentHeading === undefined) {
       if ((this.settings.habitHeading || "").startsWith("## ")) {
         this.settings.habitHeading = this.settings.habitHeading.replace(/^##\s+/, "### ");
+        shouldSaveSettings = true;
       }
       if ((this.settings.reflectionHeading || "").startsWith("## ")) {
         this.settings.reflectionHeading = this.settings.reflectionHeading.replace(/^##\s+/, "### ");
+        shouldSaveSettings = true;
       }
       if ((this.settings.habitLogHeading || "").startsWith("## ")) {
         this.settings.habitLogHeading = this.settings.habitLogHeading.replace(/^##\s+/, "### ");
+        shouldSaveSettings = true;
       }
-      await this.saveSettings();
     }
+
+    shouldSaveSettings = migrateLegacyLocalizedSettings(this.settings, savedData) || shouldSaveSettings;
 
     if (!this.settings.reflectionHeading || this.settings.reflectionHeading.includes("يومياتي")) {
       this.settings.reflectionHeading = DEFAULT_REFLECTION_HEADING;
+      shouldSaveSettings = true;
     }
     if (!this.settings.habitLogHeading || this.settings.habitLogHeading.includes("سجل المتابعة")) {
       this.settings.habitLogHeading = DEFAULT_HABIT_NOTES_HEADING;
+      shouldSaveSettings = true;
     }
     if (!["grouped", "timeline", "types"].includes(this.settings.diaryViewMode)) {
       this.settings.diaryViewMode = "grouped";
+      shouldSaveSettings = true;
     }
+
+    if (shouldSaveSettings) {
+      await this.saveSettings({ silent: true });
+    }
+  }
+
+  async localizeHabitNoteTemplatesForLanguage(language) {
+    if (!this.habitNoteManager?.localizeHabitNoteTemplates) return 0;
+
+    const updatedCount = await this.habitNoteManager.localizeHabitNoteTemplates(language);
+    this.settings.habitNoteTemplatesLanguage = language;
+    await this.saveSettings({ silent: true });
+    return updatedCount;
   }
 
   async handleVaultRename(file, oldPath) {

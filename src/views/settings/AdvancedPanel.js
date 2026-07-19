@@ -154,6 +154,21 @@ export class AdvancedPanel {
         );
     }
 
+    new Setting(dailyNotesContainer)
+      .setName(t("settings_daily_locale"))
+      .setDesc(t("settings_daily_locale_desc"))
+      .addDropdown((dd) =>
+        dd
+          .addOption("obsidian", t("settings_daily_locale_obsidian"))
+          .addOption("en", t("settings_daily_locale_en"))
+          .addOption("fr", t("settings_daily_locale_fr"))
+          .addOption("ar", t("settings_daily_locale_ar"))
+          .setValue(this.plugin.settings.dailyNotesLocale || "obsidian")
+          .onChange(async (value) => {
+            await this.saveAndRefresh("dailyNotesLocale", value, container, t);
+          })
+      );
+
     container.createDiv({
       cls: "dh-settings-section-header",
       text: t("settings_habit_context_heading"),

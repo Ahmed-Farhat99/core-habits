@@ -29,7 +29,20 @@ import { TRANSLATIONS } from "../constants.js";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Heading under which logs (voice/text) are injected inside the habit note */
-const HABIT_NOTE_LOG_HEADING = "## 📓 سجل التدوينات والصوتيات";
+const LEGACY_HABIT_NOTE_LOG_HEADING = "## 📓 سجل التدوينات والصوتيات";
+const HABIT_NOTE_LOG_HEADING = TRANSLATIONS.en.habit_note_log_heading;
+
+const HABIT_NOTE_TEMPLATE_KEYS = [
+  "habit_notes_free_space_marker",
+  "habit_notes_placeholder",
+  "habit_note_log_heading",
+  "habit_template_engineering_title",
+  "habit_template_identity_prefix",
+  "habit_template_cue_prefix",
+  "habit_template_friction_prefix",
+  "habit_template_reward_prefix",
+  "habit_template_append_marker_comment",
+];
 
 /** Default root folder for all habit notes (overridable in settings) */
 const DEFAULT_HABIT_NOTES_FOLDER = "Core Habits";
@@ -59,6 +72,72 @@ export class HabitNoteManager {
       text = text.replace(`{${param}}`, params[param]);
     });
     return text;
+  }
+
+  getHabitNoteLogHeading() {
+    return this.t("habit_note_log_heading");
+  }
+
+  getLocalizedHabitNoteTemplateValue(key, language = null) {
+    const lang = language || this.plugin.settings?.language || "en";
+    return TRANSLATIONS[lang]?.[key] || TRANSLATIONS.en[key] || key;
+  }
+
+  getKnownHabitNoteTemplateValues(key) {
+    const values = Object.values(TRANSLATIONS)
+      .map((dict) => dict?.[key])
+      .filter(Boolean);
+
+    if (key === "habit_note_log_heading") {
+      values.push(LEGACY_HABIT_NOTE_LOG_HEADING);
+    }
+
+    return [...new Set(values)];
+  }
+
+  findKnownHabitNoteTemplateValue(content, key) {
+    let match = { value: "", index: -1 };
+    for (const value of this.getKnownHabitNoteTemplateValues(key)) {
+      const index = content.indexOf(value);
+      if (index !== -1 && (match.index === -1 || index < match.index)) {
+        match = { value, index };
+      }
+    }
+    return match;
+  }
+
+  localizeHabitNoteContent(content, language = null) {
+    let localizedContent = content;
+    for (const key of HABIT_NOTE_TEMPLATE_KEYS) {
+      const targetValue = this.getLocalizedHabitNoteTemplateValue(key, language);
+      for (const knownValue of this.getKnownHabitNoteTemplateValues(key)) {
+        localizedContent = localizedContent.split(knownValue).join(targetValue);
+      }
+    }
+    return localizedContent;
+  }
+
+  async localizeHabitNoteTemplates(language = null) {
+    if (!this.app.vault.getMarkdownFiles || !this.app.vault.process) return 0;
+
+    const root = this.getRootFolder().toLowerCase();
+    const files = this.app.vault.getMarkdownFiles().filter((file) => {
+      const path = file.path.toLowerCase();
+      return path === root || path.startsWith(`${root}/`);
+    });
+
+    let updatedCount = 0;
+    for (const file of files) {
+      await this.app.vault.process(file, (content) => {
+        const localizedContent = this.localizeHabitNoteContent(content, language);
+        if (localizedContent !== content) {
+          updatedCount += 1;
+        }
+        return localizedContent;
+      });
+    }
+
+    return updatedCount;
   }
 
   // ─── Folder Paths ────────────────────────────────────────────────────────
@@ -256,13 +335,15 @@ export class HabitNoteManager {
    * @returns {string}
    */
   extractNotesFromBody(content) {
-    const markerAr = TRANSLATIONS.ar.habit_notes_free_space_marker;
-    const markerEn = TRANSLATIONS.en.habit_notes_free_space_marker;
-    let idx = content.indexOf(markerAr);
-    let marker = markerAr;
-    if (idx === -1) {
-      idx = content.indexOf(markerEn);
-      marker = markerEn;
+    const markers = this.getKnownHabitNoteTemplateValues("habit_notes_free_space_marker");
+    let idx = -1;
+    let marker = "";
+    for (const knownMarker of markers) {
+      idx = content.indexOf(knownMarker);
+      if (idx !== -1) {
+        marker = knownMarker;
+        break;
+      }
     }
     if (idx === -1) return "";
 
@@ -279,10 +360,8 @@ export class HabitNoteManager {
       .trim();
 
     // Check placeholders
-    const placeholders = [
-      TRANSLATIONS.ar.habit_notes_placeholder.replace(/^>\s*/, ""),
-      TRANSLATIONS.en.habit_notes_placeholder.replace(/^>\s*/, "")
-    ];
+    const placeholders = this.getKnownHabitNoteTemplateValues("habit_notes_placeholder")
+      .map((placeholder) => placeholder.replace(/^>\s*/, ""));
     if (placeholders.includes(notesContent)) return "";
 
     return notesContent;
@@ -327,7 +406,7 @@ export class HabitNoteManager {
     const notesBlock = this.formatNotesAsBlockquote(habit.notes);
     const appendComment = t("habit_template_append_marker_comment");
 
-    return `\`\`\`core-habits\n\`\`\`\n\n${engineeringSection}${notesBlock}---\n\n${HABIT_NOTE_LOG_HEADING}\n\n${appendComment}\n`;
+    return `\`\`\`core-habits\n\`\`\`\n\n${engineeringSection}${notesBlock}---\n\n${this.getHabitNoteLogHeading()}\n\n${appendComment}\n`;
   }
 
   // ─── CRUD Operations ──────────────────────────────────────────────────────
@@ -407,9 +486,11 @@ export class HabitNoteManager {
       const t = (k) => this.t(k);
 
       const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const markerArEsc = escapeRegex(TRANSLATIONS.ar.habit_notes_free_space_marker);
-      const markerEnEsc = escapeRegex(TRANSLATIONS.en.habit_notes_free_space_marker);
-      const notesRegex = new RegExp(`(?:${markerArEsc}|${markerEnEsc})(?:\\r?\\n>.*)*`, "gi");
+      const buildKnownTemplateRegex = (key) => {
+        const values = this.getKnownHabitNoteTemplateValues(key).map(escapeRegex);
+        return new RegExp(`(?:${values.join("|")})(?:\\r?\\n>.*)*`, "gi");
+      };
+      const notesRegex = buildKnownTemplateRegex("habit_notes_free_space_marker");
 
       const newNotesBlock = this.formatNotesAsBlockquote(habit.notes).trim();
       
@@ -417,8 +498,7 @@ export class HabitNoteManager {
         body = body.replace(notesRegex, newNotesBlock);
       } else {
         // If not found, we can append it before the log section
-        const logHeading = HABIT_NOTE_LOG_HEADING;
-        const logIdx = body.indexOf(logHeading);
+        const { index: logIdx } = this.findKnownHabitNoteTemplateValue(body, "habit_note_log_heading");
         if (logIdx !== -1) {
           body = body.substring(0, logIdx) + newNotesBlock + "\n\n" + body.substring(logIdx);
         } else {
@@ -427,9 +507,7 @@ export class HabitNoteManager {
       }
 
       // Surgical replacement for engineering blockquote in the body
-      const engArEsc = escapeRegex(TRANSLATIONS.ar.habit_template_engineering_title);
-      const engEnEsc = escapeRegex(TRANSLATIONS.en.habit_template_engineering_title);
-      const engineeringRegex = new RegExp(`(?:${engArEsc}|${engEnEsc})(?:\\r?\\n>.*)*`, "gi");
+      const engineeringRegex = buildKnownTemplateRegex("habit_template_engineering_title");
       const ad = habit.atomicDescription || {};
       let newEngineeringBlock = "";
       if (ad.identity || ad.cue || ad.friction || ad.reward) {
@@ -451,8 +529,7 @@ export class HabitNoteManager {
             const notesIdx = body.indexOf(notesMatch[0]);
             body = body.substring(0, notesIdx) + newEngineeringBlock + "\n\n" + body.substring(notesIdx);
           } else {
-            const logHeading = HABIT_NOTE_LOG_HEADING;
-            const logIdx = body.indexOf(logHeading);
+            const { index: logIdx } = this.findKnownHabitNoteTemplateValue(body, "habit_note_log_heading");
             if (logIdx !== -1) {
               body = body.substring(0, logIdx) + newEngineeringBlock + "\n\n" + body.substring(logIdx);
             } else {

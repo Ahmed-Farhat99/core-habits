@@ -1,14 +1,28 @@
 import { Notice } from 'obsidian';
 
+function resolveDailyNotesLocale(pluginSettings = null, dateMoment = null) {
+  const configuredLocale = pluginSettings?.dailyNotesLocale;
+  if (configuredLocale && configuredLocale !== "obsidian") return configuredLocale;
+
+  if (typeof window !== "undefined" && window.moment && typeof window.moment.locale === "function") {
+    return window.moment.locale();
+  }
+
+  if (dateMoment && typeof dateMoment.locale === "function") {
+    return dateMoment.locale();
+  }
+
+  return "en";
+}
+
 async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSettings = null) {
   const info = getDailyNotesInfo(app, pluginSettings);
   let format = info.format;
   let folder = info.folder;
   let templatePath = info.template;
+  const dailyNotesLocale = resolveDailyNotesLocale(pluginSettings, dateMoment);
 
-  // The previous call to .locale('ar') mutated the shared moment object, causing this to be Arabic.
-  // We clone it and force english for the filename generation.
-  let fileName = dateMoment.clone().locale("en").format(format);
+  let fileName = dateMoment.clone().locale(dailyNotesLocale).format(format);
 
   let normalizedPath = folder ? `${folder}/${fileName}.md` : `${fileName}.md`;
   normalizedPath = normalizedPath.replace(/\/+/g, "/");
@@ -60,7 +74,7 @@ async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSett
               content = content.replace(/\{\{date\}\}/g, fileName);
               content = content.replace(/\{\{title\}\}/g, fileName);
               content = content.replace(/\{\{date:([^}]+)\}\}/g, (match, fmt) => {
-                return dateMoment.clone().locale("en").format(fmt);
+                return dateMoment.clone().locale(dailyNotesLocale).format(fmt);
               });
             } catch (e) {
               console.warn("[Core Habits] Could not read template:", e);
@@ -287,4 +301,4 @@ function autoResizeTextarea(textarea) {
   }
 }
 
-export { getNoteByDate, TextUtils, findHabitEntry, calculateCurrentLevel, buildHierarchyLabels, DateUtils, getDailyNotesInfo, autoResizeTextarea };
+export { getNoteByDate, resolveDailyNotesLocale, TextUtils, findHabitEntry, calculateCurrentLevel, buildHierarchyLabels, DateUtils, getDailyNotesInfo, autoResizeTextarea };

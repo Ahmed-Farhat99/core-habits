@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getNoteByDate, getDailyNotesInfo } from "../src/utils/helpers.js";
+import { getNoteByDate, getDailyNotesInfo, resolveDailyNotesLocale } from "../src/utils/helpers.js";
 import moment from "moment";
+import "moment/locale/fr.js";
 
 describe("Daily Note Helper Tests", () => {
   let mockApp;
@@ -86,6 +87,26 @@ describe("Daily Note Helper Tests", () => {
       const file = await getNoteByDate(mockApp, testDate, false, { dailyNotesFolder: "Daily" });
       expect(file).toBe(mockFile);
       expect(mockApp.vault.getAbstractFileByPath).toHaveBeenCalledWith("Daily/2026-06-27.md");
+    });
+
+    it("should use the configured Daily Notes locale when formatting file paths", async () => {
+      const mockFile = { path: "Daily/2026/06-juin/27-06-2026-samedi.md" };
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(mockFile);
+
+      const file = await getNoteByDate(mockApp, testDate, false, {
+        dailyNotesFolder: "Daily",
+        dateFormat: "YYYY/MM-MMMM/DD-MM-YYYY-dddd",
+        dailyNotesLocale: "fr",
+      });
+
+      expect(file).toBe(mockFile);
+      expect(mockApp.vault.getAbstractFileByPath).toHaveBeenCalledWith("Daily/2026/06-juin/27-06-2026-samedi.md");
+    });
+
+    it("should follow the moment locale when Daily Notes locale follows Obsidian", () => {
+      const frenchDate = testDate.clone().locale("fr");
+
+      expect(resolveDailyNotesLocale({ dailyNotesLocale: "obsidian" }, frenchDate)).toBe("fr");
     });
 
     it("should delegate to internal daily-notes if file is missing and createIfNeeded is true", async () => {
