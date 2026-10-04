@@ -1,8 +1,9 @@
 import { PluginSettingTab } from 'obsidian';
 import { BasicsPanel } from './settings/BasicsPanel.js';
 import { HabitsPanel } from './settings/HabitsPanel.js';
-import { AdvancedPanel } from './settings/AdvancedPanel.js';
+import { DailyNotesPanel } from './settings/DailyNotesPanel.js';
 import { PluginGuideComponent } from './PluginGuideComponent.js';
+import { bindTabKeys, selectTab } from '../components/ui/TabBar.js';
 
 class DailyHabitsSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
@@ -10,10 +11,11 @@ class DailyHabitsSettingTab extends PluginSettingTab {
     this.plugin = plugin;
     this.activeTab = "habits";
     
-    // Instantiate panels
+    // Instantiate panels once
     this.basicsPanelInstance = new BasicsPanel(plugin, this);
     this.habitsPanelInstance = new HabitsPanel(plugin, this);
-    this.advancedPanelInstance = new AdvancedPanel(plugin, this);
+    this.dailyNotesPanelInstance = new DailyNotesPanel(plugin, this);
+    this.guidePanelInstance = new PluginGuideComponent(plugin);
   }
 
   display() {
@@ -23,112 +25,165 @@ class DailyHabitsSettingTab extends PluginSettingTab {
     containerEl.addClass("daily-habits-plugin");
 
     const t = (k, p) => this.plugin.translationManager.t(k, p);
+    const dir = t("direction") || "rtl";
     
-    if (t("direction") === "rtl") containerEl.addClass("is-rtl");
+    if (dir === "rtl") containerEl.addClass("is-rtl");
     else containerEl.removeClass("is-rtl");
-    containerEl.setAttribute("dir", t("direction"));
+    containerEl.setAttribute("dir", dir);
 
-    containerEl.createEl("h1", { text: t("settings_title") });
-
-    // 1. Render Tab Navigation
+    // 1. Render Tab Navigation with Accessibility attributes
     this.renderTabBar(containerEl, t);
 
-    // 2. Create Panel Containers
-    this.basicsPanel = containerEl.createDiv({ cls: "dh-settings-panel", attr: { id: "panel-basics" } });
-    this.habitsPanel = containerEl.createDiv({ cls: "dh-settings-panel", attr: { id: "panel-habits" } });
-    this.advancedPanel = containerEl.createDiv({ cls: "dh-settings-panel", attr: { id: "panel-advanced" } });
-    this.guidePanel = containerEl.createDiv({ cls: "dh-settings-panel", attr: { id: "panel-guide" } });
+    // 2. Create Panel Containers with ARIA attributes
+    this.basicsPanel = containerEl.createDiv({ 
+      cls: "dh-settings-panel", 
+      attr: { 
+        id: "panel-basics", 
+        role: "tabpanel", 
+        "aria-labelledby": "dh-tab-basics" 
+      } 
+    });
+    this.habitsPanel = containerEl.createDiv({ 
+      cls: "dh-settings-panel", 
+      attr: { 
+        id: "panel-habits", 
+        role: "tabpanel", 
+        "aria-labelledby": "dh-tab-habits" 
+      } 
+    });
+    this.dailyNotesPanel = containerEl.createDiv({ 
+      cls: "dh-settings-panel", 
+      attr: { 
+        id: "panel-advanced", 
+        role: "tabpanel", 
+        "aria-labelledby": "dh-tab-advanced" 
+      } 
+    });
+    this.guidePanel = containerEl.createDiv({ 
+      cls: "dh-settings-panel", 
+      attr: { 
+        id: "panel-guide", 
+        role: "tabpanel", 
+        "aria-labelledby": "dh-tab-guide" 
+      } 
+    });
 
     // 3. Render Panel Contents
     this.basicsPanelInstance.render(this.basicsPanel, t);
     this.habitsPanelInstance.render(this.habitsPanel, t);
-    this.advancedPanelInstance.render(this.advancedPanel, t);
-    new PluginGuideComponent(this.plugin).render(this.guidePanel, t);
+    this.dailyNotesPanelInstance.render(this.dailyNotesPanel, t);
+    this.guidePanelInstance.render(this.guidePanel, t);
 
     // 4. Initialize Active Tab
     this.switchTab(this.activeTab);
   }
 
   renderTabBar(containerEl, t) {
-    const tabsContainer = containerEl.createDiv({ cls: "dh-settings-tabs-container" });
+    const tabsContainer = containerEl.createDiv({ 
+      cls: "dh-tabs dh-settings-tabs-container",
+      attr: { role: "tablist", "aria-label": t("settings_title") || "Settings Tabs" }
+    });
 
     this.tabs = {
-      basics: tabsContainer.createEl("button", { cls: "dh-tab-btn", text: t("tab_basics") }),
-      habits: tabsContainer.createEl("button", { cls: "dh-tab-btn", text: t("tab_habits") }),
-      advanced: tabsContainer.createEl("button", { cls: "dh-tab-btn", text: t("tab_advanced") }),
-      guide: tabsContainer.createEl("button", { cls: "dh-tab-btn", text: t("tab_guide") })
+      basics: tabsContainer.createEl("button", { 
+        cls: "dh-tab dh-tab-btn", 
+        text: t("tab_basics"),
+        attr: { id: "dh-tab-basics", role: "tab", "aria-controls": "panel-basics", "aria-selected": "false" }
+      }),
+      habits: tabsContainer.createEl("button", { 
+        cls: "dh-tab dh-tab-btn", 
+        text: t("tab_habits"),
+        attr: { id: "dh-tab-habits", role: "tab", "aria-controls": "panel-habits", "aria-selected": "false" }
+      }),
+      advanced: tabsContainer.createEl("button", { 
+        cls: "dh-tab dh-tab-btn", 
+        text: t("tab_advanced"),
+        attr: { id: "dh-tab-advanced", role: "tab", "aria-controls": "panel-advanced", "aria-selected": "false" }
+      }),
+      guide: tabsContainer.createEl("button", { 
+        cls: "dh-tab dh-tab-btn", 
+        text: t("tab_guide"),
+        attr: { id: "dh-tab-guide", role: "tab", "aria-controls": "panel-guide", "aria-selected": "false" }
+      })
     };
 
-    // Add Habit count badge to Habits tab
-    const activeHabitsCount = this.plugin.habitManager.getActiveHabits().length;
-    if (activeHabitsCount > 0) {
-      this.tabs.habits.textContent += ` (${activeHabitsCount})`;
-    }
+    this.updateHabitCountBadge();
 
     Object.keys(this.tabs).forEach(tabId => {
       this.tabs[tabId].onclick = () => this.switchTab(tabId);
     });
+    bindTabKeys(tabsContainer, this.tabs, (tabId) => this.switchTab(tabId));
+  }
+
+  updateHabitCountBadge() {
+    if (!this.tabs || !this.tabs.habits) return;
+    const t = (k, p) => this.plugin.translationManager.t(k, p);
+    const activeCount = this.plugin.habitManager.getActiveHabits().length;
+    this.tabs.habits.empty();
+    this.tabs.habits.createSpan({ text: t("tab_habits") });
+    if (activeCount > 0) {
+      this.tabs.habits.createSpan({ text: String(activeCount), cls: "dh-tab-count-badge" });
+    }
   }
 
   switchTab(tabId) {
     this.activeTab = tabId;
 
-    // Update button states
-    if (this.tabs) {
-      Object.keys(this.tabs).forEach(id => {
-        this.tabs[id].toggleClass("is-active", id === tabId);
-      });
-    }
-
-    // Update panel visibility
     const panels = {
       basics: this.basicsPanel,
       habits: this.habitsPanel,
-      advanced: this.advancedPanel,
+      advanced: this.dailyNotesPanel,
       guide: this.guidePanel
     };
 
-    Object.keys(panels).forEach(id => {
-      if (panels[id]) {
-        panels[id].toggleClass("is-active", id === tabId);
-      }
-    });
-
-    // Refresh child panels dynamically if needed to fix heights
-    if (tabId === "habits" && this.habitsPanelInstance.habitsContainer) {
-      const searchInput = this.containerEl.querySelector('.dh-search-input');
-      const filter = searchInput ? searchInput.value.trim().toLowerCase() : "";
-      this.habitsPanelInstance.renderHabitsList(this.habitsPanelInstance.habitsContainer, filter);
-    }
+    if (this.tabs) selectTab(this.tabs, tabId, panels);
   }
 
   refreshUI() {
-    const st = this.containerEl.scrollTop;
-    const hasActive = this.plugin.habitManager.getActiveHabits().length > 0;
-    const hasArchived = this.plugin.habitManager.getArchivedHabits().length > 0;
-    const currentlyHasActive = !!this.containerEl.querySelector('.dh-danger-zone');
-    const currentlyHasArchived = !!this.habitsPanelInstance.archivedContainer;
+    const st = this.containerEl ? this.containerEl.scrollTop : 0;
+    this.updateHabitCountBadge();
 
-    if (hasActive !== currentlyHasActive || hasArchived !== currentlyHasArchived) {
-      const searchInput = this.containerEl.querySelector('.dh-search-input');
-      const filter = searchInput ? searchInput.value : "";
-      this.display();
+    // Preserve search filter and focus
+    const searchInput = this.containerEl ? this.containerEl.querySelector('.dh-search-input') : null;
+    const filter = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    const wasFocused = searchInput && document.activeElement === searchInput;
+    const cursorStart = searchInput ? searchInput.selectionStart : null;
+    const cursorEnd = searchInput ? searchInput.selectionEnd : null;
+
+    if (this.habitsPanelInstance && this.habitsPanelInstance.habitsContainer) {
+      this.habitsPanelInstance.renderHabitsList(this.habitsPanelInstance.habitsContainer, filter);
+    }
+    if (this.habitsPanelInstance?.archiveDetails?.open && this.habitsPanelInstance.archivedContainer) {
+      this.habitsPanelInstance.renderArchivedHabitsList(this.habitsPanelInstance.archivedContainer);
+    } else if (this.habitsPanelInstance?.archiveCountBadge) {
+      this.habitsPanelInstance.archiveCountBadge.textContent = String(this.plugin.habitManager.getArchivedHabits().length);
+    }
+    if (this.habitsPanelInstance?.removedSection) {
+      this.habitsPanelInstance.renderRemovedHabits(this.habitsPanelInstance.removedSection, (key, params) => this.plugin.translationManager.t(key, params));
+    }
+    if (this.habitsPanelInstance?.dangerSection) {
+      this.habitsPanelInstance.renderDangerZone(this.habitsPanelInstance.dangerSection, (key, params) => this.plugin.translationManager.t(key, params));
+    }
+
+    if (this.habitsPanelInstance && typeof this.habitsPanelInstance.updateAddBtnState === "function") {
+      this.habitsPanelInstance.updateAddBtnState();
+    }
+
+    if (this.containerEl) {
       this.containerEl.scrollTop = st;
-      if (filter) {
-        const newSearch = this.containerEl.querySelector('.dh-search-input');
-        if (newSearch) {
-          newSearch.value = filter;
-          newSearch.focus();
+    }
+
+    if (wasFocused) {
+      const newSearch = this.containerEl.querySelector('.dh-search-input');
+      if (newSearch) {
+        newSearch.focus();
+        if (cursorStart !== null && cursorEnd !== null) {
+          try {
+            newSearch.setSelectionRange(cursorStart, cursorEnd);
+          } catch {
+            // Ignore cursor set error if not supported
+          }
         }
-      }
-    } else {
-      if (this.habitsPanelInstance.habitsContainer) {
-        const searchInput = this.containerEl.querySelector('.dh-search-input');
-        const filter = searchInput ? searchInput.value.trim().toLowerCase() : "";
-        this.habitsPanelInstance.renderHabitsList(this.habitsPanelInstance.habitsContainer, filter);
-      }
-      if (this.habitsPanelInstance.archivedContainer) {
-        this.habitsPanelInstance.renderArchivedHabitsList(this.habitsPanelInstance.archivedContainer);
       }
     }
   }

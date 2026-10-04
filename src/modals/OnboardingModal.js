@@ -4,7 +4,7 @@ export class OnboardingModal extends BaseHabitModal {
   constructor(app, plugin) {
     super(app, plugin);
     this.currentStep = 1;
-    
+
     // Add custom class for styling
     this.modalEl.addClass("dh-onboarding-modal");
   }
@@ -22,7 +22,8 @@ export class OnboardingModal extends BaseHabitModal {
     const { contentEl } = this;
     contentEl.empty();
 
-    const t = (key) => this.plugin.translationManager.t(key);
+    const t = (key, params = {}) => this.plugin.translationManager.t(key, params);
+    const version = this.plugin.manifest?.version || "3.5.0";
 
     const container = contentEl.createDiv({ cls: "dh-onboarding-container" });
 
@@ -33,9 +34,17 @@ export class OnboardingModal extends BaseHabitModal {
       if (this.currentStep > i) dot.addClass("completed");
     }
 
-    // Header
+    // Header with dynamic version
     const header = container.createDiv({ cls: "dh-onboarding-header" });
     header.createEl("h1", { text: this.getHeaderTitle(t) });
+
+    // Show version badge only on first step
+    if (this.currentStep === 1) {
+      header.createSpan({
+        cls: "dh-onboarding-version-badge",
+        text: `v${version}`
+      });
+    }
 
     // Body
     const body = container.createDiv({ cls: "dh-onboarding-body" });
@@ -43,9 +52,9 @@ export class OnboardingModal extends BaseHabitModal {
 
     // Footer
     const footer = container.createDiv({ cls: "dh-modal-actions" });
-    
+
     if (this.currentStep > 1) {
-      const btnBack = footer.createEl("button", { cls: "dh-btn dh-btn-secondary" });
+      const btnBack = footer.createEl("button", { cls: "dh-btn", type: "button" });
       btnBack.textContent = t("onboarding_back");
       btnBack.onclick = () => {
         this.currentStep--;
@@ -55,7 +64,7 @@ export class OnboardingModal extends BaseHabitModal {
       footer.createDiv(); // Empty spacer
     }
 
-    const btnNext = footer.createEl("button", { cls: "dh-btn mod-cta" });
+    const btnNext = footer.createEl("button", { cls: "dh-btn mod-cta", type: "button" });
     if (this.currentStep < 3) {
       btnNext.textContent = t("onboarding_next");
       btnNext.onclick = () => {
@@ -87,7 +96,7 @@ export class OnboardingModal extends BaseHabitModal {
       this.addFeatureItem(feats, "✨", t("onboarding_feat_1"));
       this.addFeatureItem(feats, "📊", t("onboarding_feat_2"));
       this.addFeatureItem(feats, "🔒", t("onboarding_feat_3"));
-    } 
+    }
     else if (this.currentStep === 2) {
       body.createEl("p", {
         cls: "dh-onboarding-desc",

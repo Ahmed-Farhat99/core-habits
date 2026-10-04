@@ -6,7 +6,8 @@ export class HabitScanner {
   }
 
   scan(content, marker) {
-    if (!content || content.length > 1_000_000) return null;
+    if (typeof content !== "string" || content.length > 1_000_000) return null;
+    if (content.trim().length === 0) return [];
 
     const lines = content.split(/\r?\n/);
     const habits = [];

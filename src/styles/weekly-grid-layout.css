@@ -1,0 +1,855 @@
+/* Weekly grid presentation. Scoped to the weekly tab so diary and statistics keep their own layout. */
+/* Weekly view shell */
+.daily-habits-plugin.weekly-grid-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: visible;
+  /* Restore scrolling */
+  background: var(--background-primary);
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  align-items: stretch;
+  box-sizing: border-box;
+  container-type: inline-size;
+  --dh-grid-index-width: 28px;
+  --dh-grid-name-min-width: 260px;
+  --dh-grid-day-min-width: 40px;
+  padding: clamp(10px, 1.4vw, 20px);
+}
+/* Header row */
+.daily-habits-plugin .weekly-header-controls {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  max-width: none;
+}
+/* Date navigator */
+.daily-habits-plugin .weekly-header-controls .dh-date-navigator-stage, .daily-habits-plugin .dh-date-navigator-stage {
+
+
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  align-items: center;
+  width: 100%;
+  padding: 4px 0;
+  margin-bottom: var(--dh-space-sm);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  gap: var(--dh-space-sm);
+}
+.daily-habits-plugin .dh-date-title-wrap {
+
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dh-space-md);
+  width: 100%;
+}
+.daily-habits-plugin .dh-date-text-wrap {
+
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.daily-habits-plugin .dh-date-text {
+
+
+  font-size: var(--dh-font-base);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+  line-height: 1.2;
+}
+.daily-habits-plugin .dh-date-mode-pill {
+
+
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  padding: 2px 6px;
+  border-radius: var(--dh-radius-sm);
+}
+/* Progress Bar */.daily-habits-plugin .weekly-header-progress-container {
+
+
+  width: 100%;
+}
+.daily-habits-plugin .unified-progress-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: var(--dh-grid-min-width);
+  margin: 0 auto;
+}
+
+.daily-habits-plugin .unified-progress-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "label caption numbers";
+  align-items: baseline;
+  gap: 0 12px;
+  width: 100%;
+}
+
+.daily-habits-plugin .progress-title-col {
+  grid-area: label;
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.daily-habits-plugin .unified-progress-header .progress-label {
+  font-size: var(--dh-font-sm);
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-normal);
+  font-family: inherit;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.daily-habits-plugin .weekly-barrier-caption {
+  grid-area: caption;
+  font-size: 0.73rem;
+  font-family: inherit;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.daily-habits-plugin .progress-numbers-group {
+  grid-area: numbers;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.daily-habits-plugin .unified-percent-text {
+  font-weight: var(--dh-weight-extrabold);
+  font-size: 1.25rem;
+  color: var(--text-normal);
+  line-height: 1;
+}
+
+.daily-habits-plugin .weekly-count-badge {
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-medium);
+  line-height: 1;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.daily-habits-plugin .unified-bar.weekly-progress-bar {
+  width: 100%;
+  height: 5px;
+  background: var(--background-modifier-border);
+  border-radius: var(--dh-radius-full, 999px);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.daily-habits-plugin .weekly-progress-fill {
+  height: 100%;
+  border-radius: var(--dh-radius-full, 999px);
+  transition:
+    width 0.3s ease,
+    background 0.3s ease;
+}
+/* Progress Colors */.daily-habits-plugin .weekly-progress-fill.progress-low {
+
+
+  background-color: var(--dh-progress-low);
+}
+.daily-habits-plugin .weekly-progress-fill.progress-medium {
+
+
+  background-color: var(--dh-progress-medium);
+}
+.daily-habits-plugin .weekly-progress-fill.progress-good {
+
+
+  background-color: var(--dh-progress-good);
+}
+.daily-habits-plugin .weekly-progress-fill.progress-excellent {
+
+
+  background-color: var(--dh-progress-excellent);
+}
+
+/* --- 9. NAVIGATION --- */
+/* Weekly tab layout; appearance and sizing are shared in base.css. */
+.daily-habits-plugin .dh-nav-tab {
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+.dh-weekly-query-host {
+  container-type: inline-size;
+}
+
+
+.daily-habits-plugin.weekly-grid-container .weekly-header-controls {
+  gap: 6px;
+  padding: 0 2px;
+  margin-bottom: 8px;
+}
+
+.daily-habits-plugin.weekly-grid-container.is-dashboard-view,
+.daily-habits-plugin.weekly-grid-container.is-diary-view {
+  padding-inline: 0;
+}
+
+.daily-habits-plugin.weekly-grid-container.is-dashboard-view .weekly-header-controls,
+.daily-habits-plugin.weekly-grid-container.is-diary-view .weekly-header-controls {
+  max-width: var(--dh-view-max-width, 880px);
+  margin-inline: auto;
+  padding-inline: var(--dh-space-md);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-nav-tabs {
+  position: sticky;
+  top: 0;
+  z-index: var(--dh-z-sticky, 10);
+  margin-bottom: var(--dh-space-md);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-nav-tab-label {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-date-navigator-stage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+  margin-bottom: 4px;
+  width: 100%;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-nav-zone {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-nav-zone-start {
+  justify-content: flex-start;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-nav-zone-end {
+  justify-content: flex-end;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-nav-zone-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-date-text-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 2px;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-date-text {
+  font-size: clamp(0.78rem, 2.2vw, 0.92rem);
+  font-weight: var(--dh-weight-semibold);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  max-width: 100%;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-date-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border-radius: var(--dh-radius-full);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  height: 20px;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-mode-btn-mini {
+  min-width: 20px;
+  min-height: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: var(--dh-font-2xs);
+  border-radius: var(--dh-radius-full);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  transition: all var(--dh-transition-fast);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-mode-btn-mini.active {
+  background: var(--background-primary);
+  color: var(--interactive-accent);
+  font-weight: var(--dh-weight-bold);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.daily-habits-plugin.weekly-grid-container .unified-progress-wrapper {
+  max-width: none;
+  gap: 5px;
+}
+
+.daily-habits-plugin.weekly-grid-container .unified-progress-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label numbers" "caption caption";
+  gap: 2px 12px;
+  align-items: center;
+}
+
+.daily-habits-plugin.weekly-grid-container .unified-progress-header .progress-label {
+  color: var(--text-muted);
+  font-size: 0.77rem;
+  font-weight: var(--dh-weight-medium);
+}
+
+.daily-habits-plugin.weekly-grid-container .unified-percent-text {
+  font-size: 1.08rem;
+  font-weight: var(--dh-weight-bold);
+}
+
+.daily-habits-plugin.weekly-grid-container .weekly-count-badge {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.daily-habits-plugin.weekly-grid-container .weekly-barrier-caption {
+  color: var(--text-faint);
+  font-size: 0.73rem;
+  line-height: 1.35;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.daily-habits-plugin.weekly-grid-container .weekly-comparison-status {
+  color: var(--text-normal);
+  font-weight: var(--dh-weight-semibold);
+}
+
+.daily-habits-plugin.weekly-grid-container .weekly-barrier-caption.state-ahead .weekly-comparison-status {
+  color: var(--text-success, var(--interactive-accent));
+}
+
+.daily-habits-plugin.weekly-grid-container .weekly-comparison-baseline {
+  color: var(--text-muted);
+}
+
+.daily-habits-plugin.weekly-grid-container .unified-bar.weekly-progress-bar {
+  height: 3px;
+  box-shadow: none;
+}
+
+.daily-habits-plugin.weekly-grid-container .weekly-progress-fill {
+  background: var(--interactive-accent);
+  box-shadow: none;
+}
+
+.daily-habits-plugin.weekly-grid-container .habits-grid-wrapper {
+  border-radius: var(--dh-radius-md);
+  box-shadow: none;
+  scroll-behavior: auto;
+}
+
+.daily-habits-plugin.weekly-grid-container .habits-grid {
+  grid-template-columns: var(--dh-grid-index-width)
+    minmax(var(--dh-grid-name-min-width), 36%)
+    repeat(7, minmax(var(--dh-grid-day-min-width), 1fr));
+}
+
+.daily-habits-plugin.weekly-grid-container .header-row-date {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+}
+
+.daily-habits-plugin.weekly-grid-container .header-row-date .dh-grid-cell,
+.daily-habits-plugin.weekly-grid-container .header-row-stats .dh-grid-cell {
+  background: var(--background-secondary);
+  border-color: var(--background-modifier-border);
+}
+
+.daily-habits-plugin.weekly-grid-container .header-row-stats .dh-grid-cell {
+  height: 26px;
+  padding: 2px;
+}
+
+.daily-habits-plugin.weekly-grid-container .header-row-date .dh-grid-cell.today,
+.daily-habits-plugin.weekly-grid-container .header-row-stats .dh-grid-cell.today {
+  background: var(--background-secondary);
+  box-shadow: inset 0 -2px var(--interactive-accent);
+}
+
+.daily-habits-plugin.weekly-grid-container .day-header {
+  padding: 5px 2px;
+}
+
+.daily-habits-plugin.weekly-grid-container .day-name {
+  font-size: 0.76rem;
+}
+
+.daily-habits-plugin.weekly-grid-container .day-date {
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  opacity: 1;
+}
+
+.daily-habits-plugin.weekly-grid-container .day-date-hijri {
+  font-size: 0.62rem;
+  opacity: 0.8;
+}
+
+.daily-habits-plugin.weekly-grid-container .day-stat-badge {
+  font-size: 0.67rem;
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-row {
+  min-height: 42px;
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-row.habit-row-child .habit-name-cell {
+  padding-inline-start: var(--dh-child-indent-padding, 16px);
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-row .dh-grid-cell {
+  padding-block: 4px;
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-index-cell {
+  opacity: 0.6;
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-name-cell,
+.daily-habits-plugin.weekly-grid-container .corner-cell {
+  position: sticky;
+  inset-inline-start: var(--dh-grid-index-width);
+  z-index: 4;
+  max-width: none;
+  background: var(--background-primary);
+}
+
+.daily-habits-plugin.weekly-grid-container .header-row-date .corner-cell,
+.daily-habits-plugin.weekly-grid-container .header-row-stats .corner-cell {
+  z-index: 9;
+  background: var(--background-secondary);
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-index-cell,
+.daily-habits-plugin.weekly-grid-container .habit-index-header {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 5;
+  background: var(--background-primary);
+}
+
+.daily-habits-plugin.weekly-grid-container .header-row-date .habit-index-header,
+.daily-habits-plugin.weekly-grid-container .header-row-stats .habit-index-header {
+  z-index: 10;
+  background: var(--background-secondary);
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-row:hover .habit-name-cell {
+  background: var(--background-modifier-hover);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-name-meta {
+  min-width: 0;
+  margin-inline-start: 4px;
+  gap: 4px;
+}
+
+.daily-habits-plugin.weekly-grid-container .habit-name-link.habit-pure-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-child-progress {
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+/* Day cell styles have been unified into day-cell.css */
+
+/* === Compact Week Strip — Single Source of Truth === */
+.daily-habits-plugin.weekly-grid-container .dh-compact-view-wrapper {
+  gap: 2px;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-compact-week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  padding: 2px 0 6px;
+  margin: 0 0 6px;
+  width: 100%;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y pan-x;
+  scroll-snap-type: x proximity;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 1px 3px;
+  min-height: 52px;
+  min-width: 0;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-sm);
+  cursor: pointer;
+  transition: background-color var(--dh-transition-fast), border-color var(--dh-transition-fast), color var(--dh-transition-fast);
+  box-sizing: border-box;
+  position: relative;
+  user-select: none;
+  scroll-snap-align: center;
+  font: inherit;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--text-muted);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day.is-active {
+  background: var(--background-secondary);
+  border-color: var(--interactive-accent);
+  box-shadow: inset 0 -2px var(--interactive-accent);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day.is-active:hover {
+  background: var(--background-modifier-hover);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day.is-today::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-end: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day.is-active.is-today::before {
+  display: none;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day-name {
+  font-size: var(--dh-font-2xs);
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day.is-active .dh-strip-day-name,
+.daily-habits-plugin.weekly-grid-container .dh-strip-day.is-active .dh-strip-day-num {
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day-num {
+  font-size: var(--dh-font-sm);
+  font-weight: var(--dh-weight-extrabold);
+  color: var(--text-normal);
+  margin: 2px 0;
+  line-height: 1.2;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day-percentage {
+  font-size: var(--dh-font-2xs);
+  font-weight: var(--dh-weight-bold);
+  padding: 1px 4px;
+  border-radius: var(--dh-radius-sm);
+  line-height: 1.2;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day.is-active .dh-strip-day-percentage {
+  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  color: var(--interactive-accent);
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-strip-day-percentage.pct-none {
+  visibility: hidden;
+}
+
+
+.daily-habits-plugin.weekly-grid-container .dh-compact-focused-day-bar {
+  padding: 5px 2px 8px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: transparent;
+  gap: 8px;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-focused-day-status-pill {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-focused-day-status[dir="auto"] {
+  direction: inherit;
+  unicode-bidi: plaintext;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-focused-day-status[dir="rtl"] {
+  direction: rtl;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-focused-day-date {
+  white-space: normal;
+}
+
+.daily-habits-plugin.weekly-grid-container .dh-compact-list {
+  gap: 0;
+}
+
+
+@container (max-width: 580px) {
+  .daily-habits-plugin.weekly-grid-container {
+    padding: clamp(6px, 1.2vw, 12px);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .weekly-header-controls {
+    margin-bottom: 4px;
+    gap: 3px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-nav-tabs {
+    margin-bottom: var(--dh-space-xs);
+    padding: var(--dh-space-2xs);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-nav-tab {
+    gap: var(--dh-space-2xs);
+    padding: var(--dh-space-2xs) var(--dh-space-xs);
+    font-size: var(--dh-font-xs);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-nav-tab svg {
+    display: none;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-date-navigator-stage {
+    gap: 4px;
+    margin-bottom: 2px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-nav-zone {
+    gap: 2px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-date-text {
+    font-size: clamp(0.76rem, 2.2vw, 0.88rem);
+    font-weight: var(--dh-weight-semibold);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    max-width: 100%;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-date-mode-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    padding: 1px;
+    border-radius: var(--dh-radius-full);
+    background: var(--background-modifier-form-field);
+    border: 1px solid var(--background-modifier-border);
+    flex-shrink: 0;
+    height: 18px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-mode-btn-mini {
+    min-width: 18px;
+    min-height: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: var(--dh-font-2xs);
+    border-radius: var(--dh-radius-full);
+    border: 0;
+    line-height: 1;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-date-navigator-stage .dh-header-action-label {
+    display: none;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .unified-progress-wrapper {
+    gap: 3px;
+    padding: 2px 0;
+    margin-bottom: 2px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .unified-progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px 8px;
+    flex-wrap: wrap;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .unified-progress-header .progress-title-col {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .unified-progress-header .progress-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.74rem;
+    font-weight: var(--dh-weight-semibold);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .progress-numbers-group {
+    direction: ltr;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .unified-percent-text {
+    font-size: 0.92rem;
+    font-weight: var(--dh-weight-bold);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .weekly-count-badge {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .weekly-barrier-caption {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    gap: 2px 4px;
+    padding: 1px 5px;
+    border-radius: var(--dh-radius-sm, 4px);
+    background: var(--background-secondary-alt, var(--background-modifier-form-field));
+  }
+
+  .daily-habits-plugin.weekly-grid-container .weekly-barrier-caption.state-ahead {
+    background: var(--dh-state-completed-bg);
+    color: var(--dh-state-completed-text);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .weekly-barrier-caption.state-behind {
+    background: var(--dh-state-missed-bg);
+    color: var(--dh-state-missed-text);
+  }
+
+  .daily-habits-plugin.weekly-grid-container .weekly-comparison-baseline {
+    margin-inline-start: 4px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .weekly-progress-bar.unified-bar {
+    height: 4px;
+    border-radius: var(--dh-radius-xs);
+  }
+
+}
+
+@container (max-width: 380px) {
+  .daily-habits-plugin.weekly-grid-container .weekly-comparison-baseline {
+    display: none;
+  }
+
+
+}
+
+@container (max-width: 300px) {
+  .daily-habits-plugin.weekly-grid-container {
+    --dh-status-control-size: 32px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .dh-compact-action-section {
+    --dh-page-control-size: 22px;
+  }
+
+  .daily-habits-plugin.weekly-grid-container .unified-progress-header {
+    gap: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-habits-plugin.weekly-grid-container .dh-strip-day,
+  .daily-habits-plugin.weekly-grid-container .day-cell {
+    transition: none;
+  }
+}
+/* Mobile and touch platform overrides have been centralized in mobile.css */
+
+

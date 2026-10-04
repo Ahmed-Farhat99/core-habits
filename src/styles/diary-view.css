@@ -1,0 +1,714 @@
+/* =============================================================================
+   DIARY VIEW — Single Source of Truth
+   Journal / "يومياتي" tab layout and presentation.
+   Scoped to the Obsidian view; modals and note content are excluded.
+   ============================================================================= */
+
+/* ── Container ──────────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-view-container {
+  width: 100%;
+  max-width: var(--dh-view-max-width, 880px);
+  margin-inline: auto;
+  padding: 14px 20px 48px;
+  box-sizing: border-box;
+  container-type: inline-size;
+}
+
+.daily-habits-plugin .dh-diary-smart-toolbar {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+/* ── Header Strip ───────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-header-strip,
+.daily-habits-plugin .dh-diary-nav-cluster,
+.daily-habits-plugin .dh-diary-actions-cluster {
+  display: flex;
+  align-items: center;
+}
+
+.daily-habits-plugin .dh-diary-header-strip {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-diary-nav-cluster {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+
+.daily-habits-plugin .dh-diary-actions-cluster {
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+/* Period trigger: displays current range as a compact button */
+.daily-habits-plugin .dh-period-menu-trigger {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  height: max(34px, var(--dh-touch-control-min));
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--dh-radius-sm);
+  background: transparent;
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.daily-habits-plugin .dh-period-menu-trigger:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-period-preset {
+  flex-shrink: 0;
+  font-size: 0.94em;
+  font-weight: var(--dh-weight-semibold);
+}
+
+.daily-habits-plugin .dh-period-label-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.82em;
+  font-weight: var(--dh-weight-normal);
+  text-overflow: ellipsis;
+}
+
+.daily-habits-plugin .dh-period-chevron-down {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.daily-habits-plugin .dh-period-chevron-down svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Search toggle button layout overrides (inherits from dh-header-text-btn) */
+.daily-habits-plugin .dh-search-toggle-btn {
+  width: auto;
+  gap: 7px;
+  padding-inline: 8px;
+}
+
+.daily-habits-plugin .dh-diary-search-label {
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+
+.daily-habits-plugin .dh-search-toggle-btn.has-active-filter {
+  color: var(--text-accent);
+}
+
+.daily-habits-plugin .dh-filter-badge-dot {
+  min-width: 16px;
+  height: 16px;
+  padding-inline: var(--dh-space-xs);
+  border-radius: var(--dh-radius-full);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: 0.7em;
+  line-height: 16px;
+}
+
+/* Primary CTA in header: "تدوينة اليوم +" */
+.daily-habits-plugin .dh-diary-add-btn {
+  margin-inline-start: 6px;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
+/* ── Filter Drawer ──────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-filter-drawer {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-filter-tray-top-bar,
+.daily-habits-plugin .dh-filter-tray-top-actions,
+.daily-habits-plugin .dh-diary-chips-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-habits-plugin .dh-filter-tray-top-bar {
+  width: 100%;
+}
+
+.daily-habits-plugin .dh-diary-search-box {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.daily-habits-plugin .dh-diary-search-box .dh-search-icon {
+  position: absolute;
+  inset-inline-start: 10px;
+  top: 6px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.daily-habits-plugin .dh-diary-search-box .dh-search-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.daily-habits-plugin .dh-diary-search-input {
+  width: 100%;
+  height: max(36px, var(--dh-touch-control-min));
+  padding-inline: 32px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-sm);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-diary-search-clear-btn {
+  position: absolute;
+  inset-inline-end: 5px;
+  top: 5px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dh-radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-filter-reset-btn,
+.daily-habits-plugin .dh-tray-close-btn {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--dh-radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-tray-close-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.daily-habits-plugin .dh-diary-chips-wrap {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.daily-habits-plugin .dh-diary-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dh-space-xs);
+  min-height: max(28px, var(--dh-touch-control-min));
+  padding: 3px 9px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-full);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82em;
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-diary-type-chip.is-active {
+  border-color: var(--interactive-accent);
+  color: var(--text-accent);
+}
+
+.daily-habits-plugin .dh-diary-type-chip .chip-count {
+  color: var(--text-faint);
+  font-size: 0.88em;
+}
+
+.daily-habits-plugin .dh-diary-type-chip:hover,
+.daily-habits-plugin .dh-filter-reset-btn:hover,
+.daily-habits-plugin .dh-tray-close-btn:hover,
+.daily-habits-plugin .dh-diary-search-clear-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* ── Month Sections ─────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-month-section,
+.daily-habits-plugin .dh-diary-type-section {
+  margin-top: 20px;
+}
+
+.daily-habits-plugin .dh-diary-month-header,
+.daily-habits-plugin .dh-diary-type-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 2px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.daily-habits-plugin .month-title-wrap,
+.daily-habits-plugin .type-title-wrap,
+.daily-habits-plugin .day-header-start,
+.daily-habits-plugin .day-header-end,
+.daily-habits-plugin .day-title-group,
+.daily-habits-plugin .day-primary-date,
+.daily-habits-plugin .category-header-start {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.daily-habits-plugin .month-title {
+  font-size: 1.02em;
+  font-weight: var(--dh-weight-bold);
+}
+
+.daily-habits-plugin .type-title {
+  font-weight: var(--dh-weight-semibold);
+}
+
+/* ── Day Sections ───────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-day-section {
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-diary-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 46px;
+  gap: 12px;
+  padding: 7px 2px;
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-diary-day-section.is-today .day-name-text {
+  color: var(--text-accent);
+}
+
+.daily-habits-plugin .day-name-text {
+  font-weight: var(--dh-weight-semibold);
+}
+
+.daily-habits-plugin .day-date-text {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.daily-habits-plugin .day-hijri-subtext,
+.daily-habits-plugin .day-date-sep {
+  color: var(--text-faint);
+  font-size: 0.78em;
+}
+
+.daily-habits-plugin .dh-today-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--dh-radius-full);
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  color: var(--text-accent);
+  font-size: var(--dh-font-2xs);
+  font-weight: var(--dh-weight-semibold);
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+/* Micro Count Pill (Neutral numeric indicator) */
+.daily-habits-plugin .dh-diary-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--dh-radius-full);
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: var(--dh-font-2xs);
+  font-weight: var(--dh-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Day add buttons — layout-only; paint comes from mod-ghost in button.css */
+.daily-habits-plugin .dh-day-add-btn,
+.daily-habits-plugin .dh-empty-add-btn {
+  flex-shrink: 0;
+  padding: 4px 7px;
+}
+
+/* ── Chevrons (Collapsible Sections) ────────────────────────────────────────── */
+.daily-habits-plugin .dh-day-chevron,
+.daily-habits-plugin .dh-month-chevron,
+.daily-habits-plugin .dh-category-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+
+.daily-habits-plugin details[open] > summary .dh-day-chevron,
+.daily-habits-plugin details[open] > summary .dh-month-chevron,
+.daily-habits-plugin details[open] > summary .dh-category-chevron {
+  transform: rotate(90deg);
+}
+
+[dir="rtl"] .daily-habits-plugin details[open] > summary .dh-day-chevron,
+[dir="rtl"] .daily-habits-plugin details[open] > summary .dh-month-chevron,
+[dir="rtl"] .daily-habits-plugin details[open] > summary .dh-category-chevron {
+  transform: rotate(-90deg);
+}
+
+.daily-habits-plugin .dh-diary-view-container summary {
+  list-style: none;
+}
+
+.daily-habits-plugin .dh-diary-view-container summary::-webkit-details-marker {
+  display: none;
+}
+
+/* ── Day Body ───────────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-day-body {
+  padding-block: 0 8px;
+  padding-inline-start: 24px;
+}
+
+.daily-habits-plugin .dh-diary-category-header {
+  padding: 12px 0 2px;
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
+
+.daily-habits-plugin .dh-category-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.daily-habits-plugin .type-good .dh-category-dot,
+.daily-habits-plugin .dh-category-dot.type-good { background: var(--color-green); }
+.daily-habits-plugin .type-bad .dh-category-dot,
+.daily-habits-plugin .dh-category-dot.type-bad { background: var(--color-red); }
+.daily-habits-plugin .type-lesson .dh-category-dot,
+.daily-habits-plugin .dh-category-dot.type-lesson { background: var(--color-blue); }
+.daily-habits-plugin .type-idea .dh-category-dot,
+.daily-habits-plugin .dh-category-dot.type-notes { background: var(--color-orange); }
+
+/* ── Entry Cards ────────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-entry-card {
+  position: relative;
+  min-width: 0;
+  padding: 10px 0;
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-diary-entry-card + .dh-diary-entry-card {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 2px;
+}
+
+.daily-habits-plugin .dh-diary-entry-card:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.daily-habits-plugin .dh-diary-entry-card .entry-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: var(--dh-font-xs);
+  line-height: 1.2;
+}
+
+.daily-habits-plugin .entry-badge-part,
+.daily-habits-plugin .entry-date-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Category Pill (Subtle soft pill using design tokens) */
+.daily-habits-plugin .entry-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: var(--dh-radius-full);
+  font-size: var(--dh-font-xs);
+  font-weight: var(--dh-weight-medium);
+  line-height: 1.3;
+  color: var(--text-muted);
+  background: var(--background-modifier-border);
+}
+
+.daily-habits-plugin .entry-type-badge.type-good {
+  color: var(--color-green);
+  background: color-mix(in srgb, var(--color-green) 12%, transparent);
+}
+
+.daily-habits-plugin .entry-type-badge.type-bad {
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 12%, transparent);
+}
+
+.daily-habits-plugin .entry-type-badge.type-lesson {
+  color: var(--color-blue);
+  background: color-mix(in srgb, var(--color-blue) 12%, transparent);
+}
+
+.daily-habits-plugin .entry-type-badge.type-idea,
+.daily-habits-plugin .entry-type-badge.type-notes {
+  color: var(--color-orange);
+  background: color-mix(in srgb, var(--color-orange) 12%, transparent);
+}
+
+.daily-habits-plugin .entry-time-badge {
+  color: var(--text-faint);
+  font-size: var(--dh-font-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.daily-habits-plugin .entry-card-body {
+  min-width: 0;
+  color: var(--text-normal);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.daily-habits-plugin .dh-diary-entry-text > :first-child {
+  margin-block-start: 0;
+}
+
+.daily-habits-plugin .dh-diary-entry-text > :last-child {
+  margin-block-end: 0;
+}
+
+.daily-habits-plugin .dh-diary-entry-text img {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+.daily-habits-plugin .dh-diary-entry-text.is-collapsed {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.daily-habits-plugin .dh-diary-expand-btn {
+  margin-top: 4px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-accent);
+  font-size: 0.82em;
+  cursor: pointer;
+}
+
+/* ── Audio Player (Single Owner) ────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-audio {
+  display: block;
+  width: min(100%, 360px);
+  max-width: 100%;
+  height: 34px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+  border-radius: var(--dh-radius-md, 8px);
+  background: var(--background-secondary);
+  accent-color: var(--interactive-accent);
+  outline: 1px solid var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-diary-audio-missing {
+  color: var(--text-muted);
+  font-size: 0.82em;
+}
+
+/* ── Empty Day Rows ─────────────────────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-empty-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 0.82em;
+}
+
+.daily-habits-plugin .empty-day-start,
+.daily-habits-plugin .empty-day-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.daily-habits-plugin .empty-day-date {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.daily-habits-plugin .empty-day-notice {
+  color: var(--text-faint);
+}
+
+/* ── Empty / Loading / Error States ─────────────────────────────────────────── */
+.daily-habits-plugin .dh-diary-empty-state,
+.daily-habits-plugin .dh-diary-empty-filter-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 440px;
+  margin: 48px auto;
+  padding: 12px;
+  text-align: center;
+}
+
+.daily-habits-plugin .dh-diary-empty-state .dh-empty-icon,
+.daily-habits-plugin .dh-diary-empty-filter-state .dh-empty-icon {
+  color: var(--text-faint);
+}
+
+.daily-habits-plugin .dh-diary-empty-state .dh-empty-icon svg,
+.daily-habits-plugin .dh-diary-empty-filter-state .dh-empty-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.daily-habits-plugin :where(.dh-diary-empty-state, .dh-diary-empty-filter-state) .dh-empty-title {
+  margin: 12px 0 4px;
+  font-size: 1.05em;
+  font-weight: var(--dh-weight-semibold);
+}
+
+.daily-habits-plugin :where(.dh-diary-empty-state, .dh-diary-empty-filter-state) .dh-empty-desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.88em;
+  line-height: 1.5;
+}
+
+.daily-habits-plugin .dh-empty-filter-btn {
+  margin-top: 14px;
+}
+
+.daily-habits-plugin .dh-diary-load-more-btn {
+  display: block;
+  margin: 18px auto;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-accent);
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-diary-retry-btn {
+  display: block;
+  margin: 12px auto;
+}
+
+.daily-habits-plugin .dh-diary-view-container .dh-loading-spinner,
+.daily-habits-plugin .dh-diary-view-container .error-state {
+  max-width: 440px;
+  margin: 48px auto;
+  padding: 16px;
+}
+
+/* ── Responsive: Narrow ─────────────────────────────────────────────────────── */
+@container (max-width: 580px) {
+  .daily-habits-plugin .dh-diary-view-container {
+    padding-inline: 12px;
+  }
+
+  .daily-habits-plugin .dh-diary-nav-cluster {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .daily-habits-plugin .dh-period-menu-trigger {
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+
+  .daily-habits-plugin .dh-diary-actions-cluster {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .daily-habits-plugin .dh-diary-add-btn {
+    order: -1;
+    margin-inline-start: 0;
+    margin-inline-end: auto;
+  }
+
+  .daily-habits-plugin .dh-diary-search-label {
+    display: none;
+  }
+}
+
+@container (max-width: 440px) {
+  .daily-habits-plugin .dh-diary-day-header {
+    align-items: flex-start;
+  }
+
+  .daily-habits-plugin .day-title-group {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .daily-habits-plugin .day-header-end {
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
+  .daily-habits-plugin .day-date-sep,
+  .daily-habits-plugin .empty-day-notice {
+    display: none;
+  }
+
+  .daily-habits-plugin .day-hijri-subtext {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .daily-habits-plugin .dh-diary-day-body {
+    padding-inline-start: 12px;
+  }
+}

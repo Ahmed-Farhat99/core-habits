@@ -39,6 +39,7 @@ export default defineConfig(({ mode }) => {
         // Don't bundle obsidian API
         external: ['obsidian'],
         output: {
+          codeSplitting: false,
           // Output CSS as styles.css for Obsidian
           assetFileNames: (assetInfo) => {
             if (assetInfo.name === 'style.css' || assetInfo.name?.endsWith('.css')) {

@@ -1,0 +1,1149 @@
+/* ==========================================================================
+   STATISTICS VIEW — CORE HABITS
+   Uses Obsidian theme variables and scoped plugin tokens.
+   ==========================================================================
+   Structure:
+   1. VIEW CONTAINER
+   2. HEADER & PERIOD NAVIGATION
+   3. PERIOD OUTCOME
+   4. CORE METRICS STRIP
+   5. COMMITMENT TRAJECTORY (Horizontal Milestone Flow Cards)
+   6. WEEKDAY RHYTHM (Heatmap)
+   7. HABITS BREAKDOWN (Collapsible Accordion & Cards)
+   8. LIFETIME FOOTER
+   9. RESPONSIVE CONTAINER QUERIES (<= 440px, <= 380px, <= 320px)
+   10. LIGHT THEME CONTRAST & ACCESSIBILITY
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. VIEW CONTAINER
+   ========================================================================== */
+.daily-habits-plugin .dh-statistics-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-xl);
+  padding: var(--dh-space-lg) var(--dh-space-md);
+  max-width: var(--dh-view-max-width, 880px);
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  container-type: inline-size;
+  animation: dh-stats-fade-in 0.25s ease-out forwards;
+}
+
+@keyframes dh-stats-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ==========================================================================
+   2. HEADER & PERIOD NAVIGATION
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-minimal-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-2xs);
+  padding: 0 0 var(--dh-space-xs) 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-stats-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dh-space-xs);
+  width: 100%;
+}
+
+.daily-habits-plugin .dh-stats-nav-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.daily-habits-plugin .dh-stats-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.daily-habits-plugin .dh-stats-period-select-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--dh-radius-md);
+  color: var(--text-normal);
+  font-size: var(--dh-font-md);
+  font-weight: var(--dh-weight-semibold);
+  padding: 2px var(--dh-space-xs);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+  transition: all var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-stats-period-select-btn:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+}
+
+.daily-habits-plugin .period-btn-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: var(--dh-font-sm);
+}
+
+.daily-habits-plugin .dh-stats-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-stats-header-dates-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 var(--dh-space-xs);
+  font-size: var(--dh-font-xs);
+  line-height: 1.35;
+  flex-wrap: wrap;
+}
+
+.daily-habits-plugin .dh-stats-greg-text {
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-medium);
+}
+
+.daily-habits-plugin .dh-stats-hijri-text {
+  color: var(--text-faint);
+  font-weight: var(--dh-weight-normal);
+  display: inline-flex;
+  align-items: center;
+}
+
+.daily-habits-plugin .dh-stats-hijri-text::before {
+  content: "·";
+  margin-inline-end: 5px;
+  color: var(--text-faint);
+  opacity: 0.6;
+}
+
+
+/* ==========================================================================
+   3. PERIOD OUTCOME
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-score-section {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dh-space-md);
+  padding: var(--dh-space-sm) var(--dh-space-xs);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-score-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  text-align: start;
+}
+
+.daily-habits-plugin .dh-score-ring-wrap {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-score-ring-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.daily-habits-plugin .dh-score-ring-track {
+  fill: none;
+  stroke: var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-score-ring-fill {
+  fill: none;
+  stroke: var(--interactive-accent);
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.daily-habits-plugin .dh-score-ring-fill.is-excellent {
+  stroke: var(--dh-progress-excellent, var(--dh-brand-success));
+}
+
+.daily-habits-plugin .dh-score-ring-fill.is-good {
+  stroke: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-score-ring-fill.is-fair {
+  stroke: var(--dh-progress-medium, var(--dh-brand-warning));
+}
+
+.daily-habits-plugin .dh-score-ring-fill.is-low {
+  stroke: var(--dh-progress-low, var(--dh-brand-danger));
+}
+
+.daily-habits-plugin .dh-score-center-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.daily-habits-plugin .dh-score-value {
+  font-size: var(--dh-font-xl);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.daily-habits-plugin .dh-score-hero-label {
+  font-size: var(--dh-font-base);
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-normal);
+  text-align: start;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.daily-habits-plugin .dh-score-context {
+  font-size: var(--dh-font-xs);
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.daily-habits-plugin .dh-score-delta-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 2px;
+}
+
+.daily-habits-plugin .dh-score-delta {
+  font-size: var(--dh-font-xs);
+  font-weight: var(--dh-weight-medium);
+  line-height: 1.3;
+  padding: 2px 8px;
+  border-radius: var(--dh-radius-full);
+}
+
+.daily-habits-plugin .dh-score-delta.is-positive {
+  color: var(--color-green, var(--dh-brand-success));
+  background: color-mix(in srgb, var(--dh-brand-success) 12%, transparent);
+}
+
+.daily-habits-plugin .dh-score-delta.is-negative {
+  color: var(--color-orange, var(--dh-brand-warning));
+  background: color-mix(in srgb, var(--dh-brand-warning) 12%, transparent);
+}
+
+.daily-habits-plugin .dh-score-delta.is-neutral {
+  color: var(--text-muted);
+  background: var(--background-secondary);
+}
+
+/* ==========================================================================
+   4. CORE METRICS STRIP
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-summary-strip {
+  display: flex;
+  align-items: stretch;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-lg);
+  margin-top: var(--dh-space-xs);
+}
+
+.daily-habits-plugin .dh-summary-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--dh-space-md) var(--dh-space-xs);
+  min-height: 72px;
+  box-sizing: border-box;
+  gap: 3px;
+  position: relative;
+  transition: background var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-summary-item:not(:last-child) {
+  border-inline-end: 1px solid var(--background-modifier-border);
+}
+
+.daily-habits-plugin .dh-summary-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.daily-habits-plugin .dh-summary-value {
+  font-size: var(--dh-font-2xl);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 0;
+  padding: 0;
+}
+
+.daily-habits-plugin .dh-summary-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-medium);
+  line-height: 1.3;
+}
+
+.daily-habits-plugin .dh-summary-unit {
+  font-size: var(--dh-font-xs);
+  color: var(--text-faint);
+  font-weight: var(--dh-weight-normal);
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+
+/* ==========================================================================
+   5. COMMITMENT TRAJECTORY (Horizontal Milestone Flow Cards)
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-trend-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-sm);
+}
+
+.daily-habits-plugin .dh-trend-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 var(--dh-space-xs);
+}
+
+.daily-habits-plugin .dh-trend-title {
+  font-size: var(--dh-font-base);
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-trend-subtitle {
+  font-size: var(--dh-font-xs);
+  color: var(--text-faint);
+  font-weight: var(--dh-weight-normal);
+}
+
+.daily-habits-plugin .dh-trend-flow-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daily-habits-plugin .dh-trend-flow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px var(--dh-space-xs);
+  border-radius: var(--dh-radius-md);
+  border-bottom: 1px solid var(--background-modifier-border);
+  transition: background var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-trend-flow-card:last-child {
+  border-bottom: none;
+}
+
+.daily-habits-plugin .dh-trend-flow-card:hover {
+  background: var(--background-modifier-hover);
+}
+
+.daily-habits-plugin .dh-trend-flow-card.is-today {
+  border-inline-start: 2px solid var(--interactive-accent);
+  padding-inline-start: 8px;
+  background: color-mix(in srgb, var(--interactive-accent) 4%, transparent);
+}
+
+.daily-habits-plugin .dh-trend-flow-card.is-future {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+.daily-habits-plugin .dh-flow-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dh-space-sm);
+}
+
+.daily-habits-plugin .dh-flow-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.daily-habits-plugin .dh-flow-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.daily-habits-plugin .dh-flow-title {
+  font-size: var(--dh-font-base);
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-flow-active-badge {
+  font-size: var(--dh-font-2xs);
+  font-weight: var(--dh-weight-bold);
+  padding: 1px var(--dh-space-sm);
+  border-radius: var(--dh-radius-full);
+  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  color: var(--interactive-accent);
+  line-height: 1.3;
+}
+
+.daily-habits-plugin .dh-flow-dates {
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  font-weight: var(--dh-weight-normal);
+}
+
+.daily-habits-plugin .dh-flow-card-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: end;
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-flow-rate {
+  font-size: var(--dh-font-base);
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.daily-habits-plugin .dh-flow-rate.is-high {
+  color: var(--dh-progress-excellent, var(--dh-brand-success));
+}
+
+.daily-habits-plugin .dh-flow-rate.is-mid {
+  color: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-flow-rate.is-low {
+  color: var(--dh-progress-low, var(--dh-brand-warning));
+}
+
+.daily-habits-plugin .dh-flow-rate.is-empty {
+  color: var(--text-faint);
+}
+
+.daily-habits-plugin .dh-flow-count {
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  max-width: 17rem;
+}
+
+.daily-habits-plugin .dh-flow-count.is-empty {
+  color: var(--text-faint);
+}
+
+/* ==========================================================================
+   UNIFIED PROGRESS BAR TRACK & FILL (Shared between Trends and Habit Cards)
+   ========================================================================== */
+.daily-habits-plugin :is(.dh-flow-bar-wrap, .dh-habit-card-progress-row) {
+  width: 100%;
+}
+
+.daily-habits-plugin :is(.dh-flow-bar-track, .dh-habit-track) {
+  width: 100%;
+  height: 6px;
+  background: var(--background-modifier-border);
+  border-radius: var(--dh-radius-full);
+  overflow: hidden;
+  position: relative;
+}
+
+.daily-habits-plugin .dh-trend-flow-card.is-future .dh-flow-bar-track {
+  opacity: 0.3;
+}
+
+.daily-habits-plugin :is(.dh-flow-bar-fill, .dh-habit-fill) {
+  height: 100%;
+  border-radius: var(--dh-radius-full);
+  transition: width var(--dh-transition-fast);
+  background: var(--interactive-accent);
+}
+
+.daily-habits-plugin :is(.dh-flow-bar-fill, .dh-habit-fill):is(.is-high, .is-green) {
+  background: var(--dh-progress-excellent, var(--dh-brand-success));
+}
+
+.daily-habits-plugin :is(.dh-flow-bar-fill, .dh-habit-fill).is-mid {
+  background: var(--interactive-accent);
+}
+
+.daily-habits-plugin :is(.dh-flow-bar-fill, .dh-habit-fill):is(.is-low, .is-orange) {
+  background: var(--dh-progress-low, var(--dh-brand-warning));
+}
+
+
+/* ==========================================================================
+   6. WEEKDAY RHYTHM (Heatmap)
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-rhythm-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-sm);
+}
+
+.daily-habits-plugin .dh-rhythm-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.daily-habits-plugin .dh-rhythm-title {
+  font-size: 0.82rem;
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-muted);
+}
+
+.daily-habits-plugin .dh-rhythm-desc {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+.daily-habits-plugin .dh-rhythm-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.daily-habits-plugin .dh-rhythm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 0.74rem;
+  font-weight: var(--dh-weight-medium);
+}
+
+.daily-habits-plugin .dh-rhythm-pill.is-peak {
+  background: color-mix(in srgb, var(--dh-brand-success) 12%, transparent);
+  color: var(--color-green, var(--dh-brand-success));
+  border: 1px solid color-mix(in srgb, var(--dh-brand-success) 25%, transparent);
+}
+
+.daily-habits-plugin .dh-rhythm-pill.is-low {
+  background: color-mix(in srgb, var(--dh-brand-danger) 10%, transparent);
+  color: var(--color-orange, var(--dh-brand-danger));
+  border: 1px solid color-mix(in srgb, var(--dh-brand-danger) 20%, transparent);
+}
+
+.daily-habits-plugin .dh-pill-rate {
+  font-weight: var(--dh-weight-bold);
+}
+
+.daily-habits-plugin .dh-rhythm-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--dh-space-xs);
+}
+
+.daily-habits-plugin .dh-rhythm-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: var(--dh-radius-md);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  cursor: default;
+  transition: transform var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-rhythm-cell:hover {
+  transform: translateY(-1px);
+}
+
+.daily-habits-plugin .dh-rhythm-day-name {
+  font-size: 0.74rem;
+  font-weight: var(--dh-weight-medium);
+  color: var(--text-normal);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.daily-habits-plugin .dh-rhythm-rate {
+  font-size: 0.82rem;
+  font-weight: var(--dh-weight-bold);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-rhythm-rate.is-empty {
+  color: var(--text-faint);
+  font-weight: var(--dh-weight-normal);
+}
+
+/* Heatmap intensity classes */
+.daily-habits-plugin .dh-rhythm-cell.is-peak {
+  background: color-mix(in srgb, var(--dh-brand-success) 18%, transparent);
+  border-color: color-mix(in srgb, var(--dh-brand-success) 35%, transparent);
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-peak .dh-rhythm-rate {
+  color: var(--color-green, var(--dh-brand-success));
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-high {
+  background: color-mix(in srgb, var(--dh-brand-success) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dh-brand-success) 20%, transparent);
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-mid {
+  background: var(--background-secondary);
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-fair {
+  background: color-mix(in srgb, var(--dh-brand-warning) 6%, transparent);
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-weak {
+  background: color-mix(in srgb, var(--dh-brand-warning) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dh-brand-warning) 20%, transparent);
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-low-day {
+  background: color-mix(in srgb, var(--dh-brand-danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dh-brand-danger) 25%, transparent);
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-low-day .dh-rhythm-rate {
+  color: var(--color-orange, var(--dh-brand-danger));
+}
+
+.daily-habits-plugin .dh-rhythm-cell.is-empty {
+  opacity: 0.5;
+}
+
+
+/* ==========================================================================
+   7. HABITS BREAKDOWN (Collapsible Accordion & Cards)
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-habits-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-sm);
+}
+
+.daily-habits-plugin .dh-habits-collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--dh-radius-md);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  transition: background var(--dh-transition-fast), border-color var(--dh-transition-fast);
+  box-sizing: border-box;
+}
+
+.daily-habits-plugin .dh-habits-collapsible-header:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-habits-header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+
+.daily-habits-plugin .dh-habits-header-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  order: 0;
+}
+
+[dir="rtl"] .daily-habits-plugin .dh-habits-header-chevron {
+  order: 0;
+}
+
+.daily-habits-plugin .dh-habits-header-title {
+  font-size: 0.9rem;
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.daily-habits-plugin .dh-habits-count-badge {
+  font-size: 0.72rem;
+  font-weight: var(--dh-weight-bold);
+  padding: 1px 7px;
+  border-radius: var(--dh-radius-full);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  margin-inline-start: 4px;
+}
+
+.daily-habits-plugin .dh-habits-collapsible-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dh-space-sm);
+  animation: dh-stats-fade-in 0.2s ease-out;
+}
+
+.daily-habits-plugin .dh-habit-card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.daily-habits-plugin .dh-habit-card-row:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-habit-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.daily-habits-plugin .dh-habit-card-name-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.daily-habits-plugin .dh-habit-card-name {
+  font-size: 0.84rem;
+  font-weight: var(--dh-weight-semibold);
+  color: var(--text-normal);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.daily-habits-plugin .dh-habit-card-name.clickable {
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-habit-card-name.clickable:hover {
+  color: var(--interactive-accent);
+  text-decoration: underline;
+}
+
+.daily-habits-plugin .dh-habit-type-badge {
+  font-size: var(--dh-font-2xs);
+  padding: 1px 5px;
+  border-radius: var(--dh-radius-xs);
+  flex-shrink: 0;
+  font-weight: var(--dh-weight-medium);
+}
+
+.daily-habits-plugin .dh-habit-type-badge.is-build {
+  background: color-mix(in srgb, var(--dh-brand-success) 10%, transparent);
+  color: var(--color-green, var(--dh-brand-success));
+}
+
+.daily-habits-plugin .dh-habit-type-badge.is-break {
+  background: color-mix(in srgb, var(--dh-brand-danger) 10%, transparent);
+  color: var(--color-red, var(--dh-brand-danger));
+}
+
+.daily-habits-plugin .dh-habit-rate-pill {
+  font-size: 0.76rem;
+  font-weight: var(--dh-weight-bold);
+  padding: 2px 7px;
+  border-radius: var(--dh-radius-full);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-habit-rate-pill.is-green {
+  background: color-mix(in srgb, var(--dh-brand-success) 15%, transparent);
+  color: var(--color-green, var(--dh-brand-success));
+}
+
+.daily-habits-plugin .dh-habit-rate-pill.is-mid {
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  color: var(--interactive-accent);
+}
+
+.daily-habits-plugin .dh-habit-rate-pill.is-orange {
+  background: color-mix(in srgb, var(--dh-brand-danger) 12%, transparent);
+  color: var(--color-orange, var(--dh-brand-danger));
+}
+
+.daily-habits-plugin .dh-habit-rate-pill.is-empty {
+  color: var(--text-faint);
+}
+
+.daily-habits-plugin .dh-habit-card-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.daily-habits-plugin .dh-habit-card-counts {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.daily-habits-plugin .dh-habits-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--dh-space-xs);
+  flex-wrap: wrap;
+}
+
+.daily-habits-plugin .dh-sort-pill {
+  padding: 3px 10px;
+  font-size: 0.74rem;
+  border-radius: var(--dh-radius-full);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-sort-pill:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-sort-pill.is-active {
+  background: var(--background-secondary);
+  color: var(--interactive-accent);
+  border-color: var(--background-modifier-border);
+  font-weight: var(--dh-weight-semibold);
+}
+
+.daily-habits-plugin .dh-habits-list-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+/* ==========================================================================
+   8. LIFETIME FOOTER
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-lifetime-footer {
+  margin-top: var(--dh-space-sm);
+  padding: var(--dh-space-sm) 0;
+  border-top: 1px dashed var(--background-modifier-border);
+  font-size: 0.76rem;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+
+/* ==========================================================================
+   9. RESPONSIVE CONTAINER QUERIES (Narrow Sidebars & Mobile)
+   ========================================================================== */
+
+/* Container query rules for narrow widths (Sidebar & Mobile <= 440px) */
+@container (max-width: 440px) {
+  /* Outer view container padding on small screen/sidebar */
+  .daily-habits-plugin.weekly-grid-container .dh-statistics-view-container {
+    padding: var(--dh-space-sm) var(--dh-space-xs);
+    gap: var(--dh-space-lg);
+  }
+
+  /* 1. Compact outcome */
+  .daily-habits-plugin .dh-stats-score-section {
+    padding: var(--dh-space-xs) 0;
+    gap: var(--dh-space-sm);
+  }
+
+  .daily-habits-plugin .dh-score-ring-wrap {
+    width: 66px;
+    height: 66px;
+    flex-shrink: 0;
+  }
+
+  .daily-habits-plugin .dh-score-value {
+    font-size: var(--dh-font-lg);
+  }
+
+  .daily-habits-plugin .dh-score-hero-label {
+    font-size: var(--dh-font-sm);
+    margin-top: 0;
+  }
+
+  .daily-habits-plugin .dh-score-delta {
+    font-size: var(--dh-font-2xs);
+    padding: 2px 6px;
+    line-height: 1.3;
+  }
+
+  .daily-habits-plugin .dh-score-context {
+    font-size: var(--dh-font-2xs);
+    line-height: 1.25;
+  }
+
+  /* 2. Summary Strip: Subordinate compact micro-strip */
+  .daily-habits-plugin .dh-stats-summary-strip {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--dh-radius-md);
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .daily-habits-plugin .dh-summary-item {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 3px;
+    min-height: auto;
+    gap: 2px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  .daily-habits-plugin .dh-summary-item:not(:last-child) {
+    border-inline-end: 1px solid var(--background-modifier-border);
+  }
+
+  .daily-habits-plugin .dh-summary-value {
+    font-size: var(--dh-font-lg);
+    font-weight: var(--dh-weight-bold);
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .daily-habits-plugin .dh-summary-label {
+    font-size: var(--dh-font-2xs);
+    font-weight: var(--dh-weight-medium);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    line-height: 1.2;
+  }
+
+  .daily-habits-plugin .dh-summary-unit {
+    font-size: var(--dh-font-2xs);
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    line-height: 1.1;
+  }
+
+  /* 3. Milestone Flow Cards */
+  .daily-habits-plugin .dh-trend-flow-card {
+    padding: 7px var(--dh-space-xs);
+    gap: 5px;
+  }
+
+  .daily-habits-plugin .dh-flow-title {
+    font-size: var(--dh-font-sm);
+  }
+
+  .daily-habits-plugin .dh-flow-dates {
+    font-size: var(--dh-font-2xs);
+  }
+
+  .daily-habits-plugin .dh-flow-rate {
+    font-size: var(--dh-font-sm);
+  }
+
+  .daily-habits-plugin .dh-flow-count {
+    font-size: var(--dh-font-2xs);
+  }
+
+  /* 4. Weekday Rhythm */
+  .daily-habits-plugin .dh-rhythm-grid {
+    grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+    gap: 4px;
+  }
+
+  /* 5. Habits Collapsible Accordion Header */
+  .daily-habits-plugin .dh-habits-collapsible-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .daily-habits-plugin .dh-habits-header-title-group {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* 6. Sort Bar */
+  .daily-habits-plugin .dh-habits-sort-bar {
+    display: flex;
+    width: 100%;
+    gap: 4px;
+  }
+
+  .daily-habits-plugin .dh-sort-pill {
+    flex: 1 1 0;
+    text-align: center;
+    padding: 4px 4px;
+    font-size: var(--dh-font-2xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Extreme narrow view adjustments (<= 320px) */
+@container (max-width: 320px) {
+  .daily-habits-plugin .dh-score-ring-wrap {
+    width: 60px;
+    height: 60px;
+  }
+
+  .daily-habits-plugin .dh-score-value {
+    font-size: 1.1rem;
+  }
+
+  .daily-habits-plugin .dh-summary-item {
+    padding: 4px 2px;
+  }
+
+  .daily-habits-plugin .dh-summary-value {
+    font-size: var(--dh-font-md);
+  }
+
+  .daily-habits-plugin .dh-habit-card-progress-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+  }
+
+  .daily-habits-plugin .dh-habit-card-counts {
+    align-self: flex-start;
+  }
+}
+
+
+/* ==========================================================================
+   10. LIGHT THEME CONTRAST & ACCESSIBILITY (WCAG AA Compliance)
+   ========================================================================== */
+.theme-light .daily-habits-plugin .dh-stats-hijri-text::before {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.theme-light .daily-habits-plugin .dh-stats-hijri-text {
+  color: var(--text-muted);
+}
+
+.theme-light .daily-habits-plugin .dh-score-delta.is-positive {
+  color: var(--dh-brand-success-dark, #059669);
+  background: color-mix(in srgb, var(--dh-brand-success) 16%, transparent);
+}
+
+.theme-light .daily-habits-plugin .dh-score-delta.is-negative {
+  color: var(--dh-brand-warning-dark, #c2600a);
+  background: color-mix(in srgb, var(--dh-brand-warning) 16%, transparent);
+}
+
+.theme-light .daily-habits-plugin .dh-rhythm-pill.is-peak,
+.theme-light .daily-habits-plugin .dh-rhythm-cell.is-peak .dh-rhythm-rate {
+  color: var(--dh-brand-success-dark, #059669);
+}
+
+.theme-light .daily-habits-plugin .dh-rhythm-pill.is-low,
+.theme-light .daily-habits-plugin .dh-rhythm-cell.is-low-day .dh-rhythm-rate {
+  color: var(--dh-brand-danger-dark, #c2410c);
+}
+
+.theme-light .daily-habits-plugin .dh-habit-type-badge.is-build {
+  color: var(--dh-brand-success-dark, #059669);
+  background: color-mix(in srgb, var(--dh-brand-success) 14%, transparent);
+}
+
+.theme-light .daily-habits-plugin .dh-habit-type-badge.is-break {
+  color: var(--color-red, #dc2626);
+  background: color-mix(in srgb, var(--dh-brand-danger) 14%, transparent);
+}
+
+.theme-light .daily-habits-plugin .dh-habit-rate-pill.is-green {
+  color: var(--dh-brand-success-dark, #059669);
+  background: color-mix(in srgb, var(--dh-brand-success) 16%, transparent);
+}
+
+.theme-light .daily-habits-plugin .dh-habit-rate-pill.is-orange {
+  color: var(--dh-brand-warning-dark, #c2600a);
+  background: color-mix(in srgb, var(--dh-brand-danger) 14%, transparent);
+}

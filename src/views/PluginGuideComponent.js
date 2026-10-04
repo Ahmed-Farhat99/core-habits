@@ -1,6 +1,4 @@
-import { setIcon } from 'obsidian';
-
-class PluginGuideComponent {
+export class PluginGuideComponent {
   constructor(plugin) {
     this.plugin = plugin;
   }
@@ -9,72 +7,88 @@ class PluginGuideComponent {
     panel.empty();
     panel.addClass("dh-guide-panel");
 
-    panel.createEl("h2", { text: t("tab_guide"), cls: "dh-guide-main-title" });
+    // 1. Hero Header (Clean, spacious, dignified)
+    const hero = panel.createDiv({ cls: "dh-guide-hero" });
+    hero.createEl("h3", { text: t("guide_hero_title"), cls: "dh-guide-hero-title" });
+    hero.createEl("p", { text: t("guide_hero_subtitle"), cls: "dh-guide-hero-subtitle" });
 
-    // Helper for sections
-    const createSection = (icon, titleKey) => {
-      const section = panel.createDiv({ cls: "dh-guide-section" });
-      const header = section.createDiv({ cls: "dh-guide-header" });
-      const iconWrap = header.createDiv({ cls: "dh-guide-icon" });
-      setIcon(iconWrap, icon);
-      header.createEl("h3", { text: t(titleKey) });
-      return section.createDiv({ cls: "dh-guide-content" });
-    };
+    // Detect RTL
+    const isRtl = (document.documentElement.dir === "rtl" || this.plugin?.translationManager?.getLanguage?.() === "ar");
 
-    // 1. How to Start
-    const start = createSection("rocket", "guide_start_title");
-    const startList = start.createEl("ol", { cls: "dh-guide-steps" });
-    [
-      t("guide_start_step1"),
-      t("guide_start_step2"),
-      t("guide_start_step3"),
-      t("guide_start_step4")
-    ].forEach(text => startList.createEl("li", { text }));
+    // 2. Practical Quick Start (All vertical, one below the other)
+    const qsSection = panel.createDiv({ cls: "dh-guide-section" });
+    const qsHeader = qsSection.createDiv({ cls: "dh-guide-section-header" });
+    qsHeader.createEl("h4", { text: t("guide_quickstart_title"), cls: "dh-guide-section-title" });
+    if (t("guide_quickstart_subtitle")) {
+      qsHeader.createEl("p", { text: t("guide_quickstart_subtitle"), cls: "dh-guide-section-subtitle" });
+    }
 
-    // 2. Meaning of Symbols
-    const symbols = createSection("info", "guide_symbols_title");
-    const symbolsGrid = symbols.createDiv({ cls: "dh-guide-symbols-grid" });
-    const createSymbol = (s, cls, descKey) => {
-      const row = symbolsGrid.createDiv({ cls: "dh-guide-symbol-row" });
-      row.createDiv({ cls: `day-cell dh-grid-cell ${cls}`, text: s });
-      row.createDiv({ cls: "dh-guide-symbol-text", text: t(descKey) });
-    };
-    createSymbol("✓", "completed", "guide_symbols_completed");
-    createSymbol("x", "missed", "guide_symbols_missed");
-    createSymbol("⊘", "skipped", "guide_symbols_skipped");
-    createSymbol("☐", "pending", "guide_symbols_pending");
-    createSymbol("--", "not-scheduled", "guide_symbols_not_scheduled");
+    const qsList = qsSection.createDiv({ cls: "dh-guide-card-stack" });
+    const quickSteps = [
+      { num: "١", enNum: "1", titleKey: "guide_qs_step1_title", descKey: "guide_qs_step1_desc" },
+      { num: "٢", enNum: "2", titleKey: "guide_qs_step2_title", descKey: "guide_qs_step2_desc" },
+      { num: "٣", enNum: "3", titleKey: "guide_qs_step3_title", descKey: "guide_qs_step3_desc" },
+      { num: "٤", enNum: "4", titleKey: "guide_qs_step4_title", descKey: "guide_qs_step4_desc" }
+    ];
 
-    // 3. Folders and Files
-    const folders = createSection("folder-closed", "guide_folders_title");
-    const foldersList = folders.createEl("ul", { cls: "dh-guide-steps" });
-    [
-      t("guide_folders_step1"),
-      t("guide_folders_step2"),
-      t("guide_folders_step3")
-    ].forEach(text => foldersList.createEl("li", { text }));
+    quickSteps.forEach(stepItem => {
+      const card = qsList.createDiv({ cls: "dh-card dh-guide-card dh-guide-qs-item" });
+      card.createDiv({ cls: "dh-guide-step-badge", text: isRtl ? stepItem.num : stepItem.enNum });
+      const body = card.createDiv({ cls: "dh-guide-card-body" });
+      body.createEl("h5", { cls: "dh-guide-card-title", text: t(stepItem.titleKey) });
+      body.createEl("p", { cls: "dh-guide-card-desc", text: t(stepItem.descKey) });
+    });
 
-    // 4. Gradation and Levels
-    const levels = createSection("bar-chart", "guide_levels_title");
-    const levelsList = levels.createEl("p", { cls: "dh-guide-text" });
-    levelsList.textContent = t("guide_levels_desc");
+    // 3. Status Marks & Meaning (All vertical, one below the other)
+    const statusSection = panel.createDiv({ cls: "dh-guide-section" });
+    const statusHeader = statusSection.createDiv({ cls: "dh-guide-section-header" });
+    statusHeader.createEl("h4", { text: t("guide_step3_title"), cls: "dh-guide-section-title" });
+    if (t("guide_step3_desc")) {
+      statusHeader.createEl("p", { text: t("guide_step3_desc"), cls: "dh-guide-section-subtitle" });
+    }
 
-    // 5. Parent and Child Habits
-    const parentChild = createSection("network", "guide_parent_title");
-    const parentList = parentChild.createEl("p", { cls: "dh-guide-text" });
-    parentList.textContent = t("guide_parent_desc");
+    const statusList = statusSection.createDiv({ cls: "dh-guide-card-stack" });
+    const statusItems = [
+      { cls: "completed", mark: "✓", titleKey: "guide_symbol_completed_title", descKey: "guide_symbol_completed_desc" },
+      { cls: "skipped", mark: "⊘", titleKey: "guide_symbol_skipped_title", descKey: "guide_symbol_skipped_desc" },
+      { cls: "pending", mark: "☐", titleKey: "guide_symbol_pending_title", descKey: "guide_symbol_pending_desc" },
+      { cls: "missed", mark: "✕", titleKey: "guide_symbol_missed_title", descKey: "guide_symbol_missed_desc" },
+      { cls: "not-scheduled", mark: "—", titleKey: "guide_symbol_not_scheduled_title", descKey: "guide_symbol_not_scheduled_desc" }
+    ];
 
-    // 6. Voice and Text Comments
-    const comments = createSection("mic", "guide_comments_title");
-    const commentsList = comments.createEl("p", { cls: "dh-guide-text" });
-    commentsList.textContent = t("guide_comments_desc");
+    statusItems.forEach(item => {
+      const card = statusList.createDiv({ cls: `dh-card dh-guide-card dh-guide-status-item ${item.cls}` });
+      card.createDiv({ cls: `dh-guide-status-badge ${item.cls}`, text: item.mark });
+      const body = card.createDiv({ cls: "dh-guide-card-body" });
+      body.createEl("h5", { cls: "dh-guide-card-title", text: t(item.titleKey) });
+      body.createEl("p", { cls: "dh-guide-card-desc", text: t(item.descKey) });
+    });
 
-    // Footer Tip
-    panel.createDiv({
-      cls: "dh-guide-tip",
-      text: t("guide_footer_tip")
+    // 4. Key Features (All vertical, one below the other)
+    const featSection = panel.createDiv({ cls: "dh-guide-section" });
+    const featHeader = featSection.createDiv({ cls: "dh-guide-section-header" });
+    featHeader.createEl("h4", { text: t("guide_features_title"), cls: "dh-guide-section-title" });
+
+    const featList = featSection.createDiv({ cls: "dh-guide-card-stack" });
+    const features = [
+      { titleKey: "guide_levels_title", descKey: "guide_levels_desc" },
+      { titleKey: "guide_parent_title", descKey: "guide_parent_desc" },
+      { titleKey: "guide_folders_title", descKey: "guide_folders_desc" }
+    ];
+
+    features.forEach(feat => {
+      const card = featList.createDiv({ cls: "dh-card dh-guide-card dh-guide-feature-item" });
+      const body = card.createDiv({ cls: "dh-guide-card-body" });
+      body.createEl("h5", { cls: "dh-guide-card-title", text: t(feat.titleKey) });
+      body.createEl("p", { cls: "dh-guide-card-desc", text: t(feat.descKey) });
+    });
+
+    // 5. Prophetic Wisdom Footer
+    const footerQuote = panel.createDiv({ cls: "dh-guide-footer-quote" });
+    const quoteBox = footerQuote.createDiv({ cls: "dh-guide-quote-box" });
+    quoteBox.createEl("blockquote", {
+      text: t("guide_footer_quote"),
+      cls: "dh-guide-quote-text"
     });
   }
 }
-
-export { PluginGuideComponent };

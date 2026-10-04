@@ -1,7 +1,8 @@
-import { Setting, Notice } from 'obsidian';
-import { VIEW_TYPE_WEEKLY } from '../../constants.js';
+import { Setting } from 'obsidian';
+import { NoticeService } from '../../services/NoticeService.js';
 import { StreakCalculator } from '../../services/StreakCalculator.js';
 import { Utils } from '../../utils/Utils.js';
+import { persistSetting } from './persistSetting.js';
 
 export class BasicsPanel {
   constructor(plugin, settingsTab) {
@@ -10,9 +11,28 @@ export class BasicsPanel {
     this.app = plugin.app;
   }
 
+  async saveSetting(key, value, { rerender = false, refresh = true } = {}) {
+    try { await persistSetting(this.plugin, key, value); }
+    catch (error) {
+      this.settingsTab.display();
+      NoticeService.error(this.plugin.translationManager.t("notice_error_prefix", { message: error.message }), this.plugin);
+      return false;
+    }
+    if (rerender) this.settingsTab.display();
+    if (refresh) this.plugin.refreshWeeklyViews();
+    return true;
+  }
+
   render(container, t) {
     container.empty();
-    
+
+    // ─── Group 1: Display & Interface ───
+    container.createDiv({
+      cls: "dh-settings-section-header",
+      text: t("settings_group_display")
+    });
+
+    // Language
     new Setting(container)
       .setName(t("language"))
       .setDesc(t("language_desc"))
@@ -22,15 +42,53 @@ export class BasicsPanel {
           .addOption("en", "English")
           .setValue(this.plugin.settings.language || "ar")
           .onChange(async (value) => {
-            this.plugin.settings.language = value;
-            await this.plugin.saveSettings();
-            this.settingsTab.display(); // Full re-render needed for language change
-            this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
-              if (leaf.view && typeof leaf.view.refresh === "function") leaf.view.refresh();
-            });
+            await this.saveSetting("language", value, { rerender: true });
           })
       );
 
+    // Show count
+    new Setting(container)
+      .setName(t("show_count"))
+      .setDesc(t("show_count_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showCount)
+          .onChange(async (value) => {
+            await this.saveSetting("showCount", value);
+          })
+      );
+
+    // Hide year
+    new Setting(container)
+      .setName(t("hide_year"))
+      .setDesc(t("settings_hide_year_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.hideYear)
+          .onChange(async (value) => {
+            await this.saveSetting("hideYear", value);
+          })
+      );
+
+    // Show Hijri date
+    new Setting(container)
+      .setName(t("show_hijri_date"))
+      .setDesc(t("show_hijri_date_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showHijriDate ?? true)
+          .onChange(async (value) => {
+            await this.saveSetting("showHijriDate", value);
+          })
+      );
+
+    // ─── Group 2: Storage & Files ───
+    container.createDiv({
+      cls: "dh-settings-section-header",
+      text: t("settings_group_storage")
+    });
+
+    // Habit Notes Folder
     new Setting(container)
       .setName(t("settings_habits_folder"))
       .setDesc(t("settings_habits_folder_desc"))
@@ -53,25 +111,14 @@ export class BasicsPanel {
               cancelText: t("cancel"),
               onConfirm: async () => {
                 try {
-                  const oldFolder = this.app.vault.getAbstractFileByPath(oldRoot);
-                  if (oldFolder) {
-                    await this.app.fileManager.renameFile(oldFolder, newRoot);
-                    new Notice(t("settings_folder_moved_success"));
-                  } else {
-                    await this.plugin.habitNoteManager.ensureFolders();
-                  }
-
-                  this.plugin.settings.habitNotesFolder = newRoot;
-                  await this.plugin.saveSettings();
-
-                  await this.plugin.habitManager.initialize();
+                  await this.plugin.habitNoteManager.moveRootFolder(newRoot);
+                  this.plugin.habitManager.invalidateCaches();
                   this.settingsTab.refreshUI();
-                  this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
-                    if (leaf.view && typeof leaf.view.refresh === "function") leaf.view.refresh();
-                  });
+                  this.plugin.refreshWeeklyViews();
+                  NoticeService.success(t("settings_folder_moved_success"), this.plugin);
                 } catch (e) {
                   console.error("Folder move error:", e);
-                  new Notice(t("settings_folder_move_error"));
+                  NoticeService.error(t("settings_folder_move_error"), this.plugin);
                   text.setValue(oldRoot);
                 }
               },
@@ -83,50 +130,13 @@ export class BasicsPanel {
         });
       });
 
-    new Setting(container)
-      .setName(t("show_count"))
-      .setDesc(t("show_count_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.showCount)
-          .onChange(async (value) => {
-            this.plugin.settings.showCount = value;
-            await this.plugin.saveSettings();
-          })
-      );
+    // ─── Group 3: Schedule & Notifications ───
+    container.createDiv({
+      cls: "dh-settings-section-header",
+      text: t("settings_group_schedule")
+    });
 
-    new Setting(container)
-      .setName(t("hide_year"))
-      .setDesc(t("settings_hide_year_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.hideYear)
-          .onChange(async (value) => {
-            this.plugin.settings.hideYear = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(container)
-      .setName(t("streak_break_on_missing"))
-      .setDesc(t("streak_break_on_missing_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.streakBreakOnMissing)
-          .onChange(async (value) => {
-            this.plugin.settings.streakBreakOnMissing = value;
-            await this.plugin.saveSettings();
-            StreakCalculator.invalidateAll();
-            this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
-              if (leaf.view) {
-                leaf.view._lastFourWeeksCache = null;
-                leaf.view.lastWeekRatesCache = null;
-                if (typeof leaf.view.refresh === "function") leaf.view.refresh();
-              }
-            });
-          })
-      );
-
+    // Week start day
     new Setting(container)
       .setName(t("week_start"))
       .setDesc(t("week_start_desc"))
@@ -141,11 +151,23 @@ export class BasicsPanel {
           .addOption("5", t("fri"))
           .setValue(String(this.plugin.settings.weekStartDay))
           .onChange(async (value) => {
-            this.plugin.settings.weekStartDay = Number(value);
-            await this.plugin.saveSettings();
+            await this.saveSetting("weekStartDay", Number(value));
           })
       );
 
+    // Streak break on missing note
+    new Setting(container)
+      .setName(t("streak_break_on_missing"))
+      .setDesc(t("streak_break_on_missing_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.streakBreakOnMissing)
+          .onChange(async (value) => {
+            if (await this.saveSetting("streakBreakOnMissing", value)) StreakCalculator.invalidateAll();
+          })
+      );
+
+    // Reminder on open
     new Setting(container)
       .setName(t("open_reminder"))
       .setDesc(t("open_reminder_desc"))
@@ -153,11 +175,11 @@ export class BasicsPanel {
         toggle
           .setValue(this.plugin.settings.enableOpenReminder ?? true)
           .onChange(async (value) => {
-            this.plugin.settings.enableOpenReminder = value;
-            await this.plugin.saveSettings();
+            await this.saveSetting("enableOpenReminder", value, { refresh: false });
           })
       );
 
+    // Missed days notice
     new Setting(container)
       .setName(t("settings_missed_days_notice"))
       .setDesc(t("settings_missed_days_notice_desc"))
@@ -165,11 +187,11 @@ export class BasicsPanel {
         toggle
           .setValue(this.plugin.settings.enableMissedDaysNotice ?? true)
           .onChange(async (value) => {
-            this.plugin.settings.enableMissedDaysNotice = value;
-            await this.plugin.saveSettings();
+            await this.saveSetting("enableMissedDaysNotice", value, { refresh: false });
           })
       );
 
+    // Enable sound
     new Setting(container)
       .setName(t("enable_sound"))
       .setDesc(t("enable_sound_desc"))
@@ -177,20 +199,7 @@ export class BasicsPanel {
         toggle
           .setValue(this.plugin.settings.enableSound ?? true)
           .onChange(async (value) => {
-            this.plugin.settings.enableSound = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(container)
-      .setName(t("show_hijri_date"))
-      .setDesc(t("show_hijri_date_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.showHijriDate ?? true)
-          .onChange(async (value) => {
-            this.plugin.settings.showHijriDate = value;
-            await this.plugin.saveSettings();
+            await this.saveSetting("enableSound", value, { refresh: false });
           })
       );
   }

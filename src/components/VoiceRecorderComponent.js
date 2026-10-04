@@ -1,5 +1,6 @@
-import { Notice } from 'obsidian';
+import { setIcon } from 'obsidian';
 import { VoiceRecorderUtility } from '../services/VoiceRecorderUtility.js';
+import { NoticeService } from '../services/NoticeService.js';
 
 export class VoiceRecorderComponent {
   constructor(parentEl, options = {}) {
@@ -14,6 +15,8 @@ export class VoiceRecorderComponent {
     this.recordTimer = null;
     this.seconds = 0;
     this.micBtn = null;
+    this.micIconEl = null;
+    this.micTextEl = null;
 
     this.render();
   }
@@ -23,8 +26,17 @@ export class VoiceRecorderComponent {
 
     this.micBtn = this.parentEl.createEl("button", {
       cls: "dh-btn dh-popup-mic-btn",
-      text: t("reflection_record_hold"),
-      title: t("reflection_record_title")
+      type: "button"
+    });
+
+    this.micIconEl = this.micBtn.createSpan({ cls: "dh-popup-mic-icon" });
+    if (typeof setIcon === "function") {
+      setIcon(this.micIconEl, "mic");
+    }
+
+    this.micTextEl = this.micBtn.createSpan({
+      cls: "dh-popup-mic-label",
+      text: t("reflection_mic_btn_voice")
     });
 
     this.micBtn.onclick = async (e) => {
@@ -44,7 +56,11 @@ export class VoiceRecorderComponent {
     if (started) {
       this.isRecording = true;
       this.micBtn.addClass("is-recording");
-      this.micBtn.textContent = t("reflection_mic_stop");
+      if (typeof setIcon === "function") {
+        setIcon(this.micIconEl, "square");
+      }
+      this.micTextEl.textContent = t("reflection_mic_stop");
+
       if (this.inputEl) {
         this.inputEl.disabled = true;
         this.inputEl.placeholder = t("reflection_mic_recording", { time: "00:00" });
@@ -59,7 +75,7 @@ export class VoiceRecorderComponent {
         }
       }, 1000);
     } else {
-      new Notice(t("reflection_mic_failed"));
+      NoticeService.error(t("reflection_mic_failed"), { plugin: this.plugin });
     }
   }
 
@@ -78,7 +94,10 @@ export class VoiceRecorderComponent {
     const fileName = await VoiceRecorderUtility.stopAndSaveRecording(this.app);
     this.isRecording = false;
     this.micBtn.removeClass("is-recording");
-    this.micBtn.textContent = t("reflection_mic_btn_voice");
+    if (typeof setIcon === "function") {
+      setIcon(this.micIconEl, "mic");
+    }
+    this.micTextEl.textContent = t("reflection_mic_btn_voice");
 
     if (this.inputEl) {
       this.inputEl.disabled = false;
@@ -96,7 +115,20 @@ export class VoiceRecorderComponent {
         this.onSaveSuccess(fileName);
       }
     } else {
-      new Notice(t("reflection_mic_save_failed"));
+      NoticeService.error(t("reflection_mic_save_failed"), { plugin: this.plugin });
+    }
+  }
+
+  pulseAttention() {
+    if (this.micBtn) {
+      this.micBtn.classList.remove("dh-pulse-attention");
+      void this.micBtn.offsetWidth;
+      this.micBtn.classList.add("dh-pulse-attention");
+      setTimeout(() => {
+        if (this.micBtn) {
+          this.micBtn.classList.remove("dh-pulse-attention");
+        }
+      }, 1000);
     }
   }
 

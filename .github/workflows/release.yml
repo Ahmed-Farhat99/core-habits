@@ -14,46 +14,52 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Check UI CSS
+        run: npm run ui:check
+
+      - name: Run test suite
+        run: npm run test:run
+
+      - name: Run type check
+        run: npm run typecheck
 
       - name: Build plugin
         run: npm run build
 
-      - name: Read manifest.json version
-        id: manifest
-        run: |
-          VERSION=$(jq -r .version manifest.json)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Validate release metadata and assets
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: npm run release:check -- "$RELEASE_TAG"
 
-      - name: Validate Tag matches Manifest
-        run: |
-          if [ "${{ github.ref_name }}" != "${{ steps.manifest.outputs.version }}" ]; then
-            echo "::error::Tag name '${{ github.ref_name }}' MUST exactly match manifest version '${{ steps.manifest.outputs.version }}'."
-            exit 1
-          fi
-
-      - name: Generate Attestations for built assets
-        uses: actions/attest-build-provenance@v1
+      - name: Attest release assets
+        uses: actions/attest@v4
         with:
           subject-path: |
             main.js
+            manifest.json
             styles.css
 
-      - name: Create Release
+      - name: Create draft release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create ${{ github.ref_name }} \
-            --title "${{ github.ref_name }}" \
+          gh release create "$RELEASE_TAG" \
+            --draft \
+            --title "$RELEASE_TAG" \
             --notes-file RELEASE_NOTES.md \
-            main.js \
-            manifest.json \
-            styles.css
+            main.js manifest.json styles.css

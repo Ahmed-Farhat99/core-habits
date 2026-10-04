@@ -1,124 +1,79 @@
-import { Notice, Platform } from 'obsidian';
-import { BaseHabitModal } from './BaseHabitModal.js';
+import { Platform } from 'obsidian';
+import { BaseNoteEntryModal } from './BaseNoteEntryModal.js';
 import { autoResizeTextarea } from '../utils/helpers.js';
-import { VoiceRecorderComponent } from '../components/VoiceRecorderComponent.js';
+import { NoticeService } from '../services/NoticeService.js';
 
-class HabitCommentPopup extends BaseHabitModal {
+class HabitCommentPopup extends BaseNoteEntryModal {
   constructor(app, plugin, habit, date, onSave) {
-    super(app, plugin);
+    super(app, plugin, { date, onSave });
     this.habit = habit;
-    this.date = date;
-    this.onSave = onSave;
+    this.initialComment = "";
+  }
+
+  isDirty() {
+    if (!this.inputEl) return false;
+    const current = (this.inputEl.value || "").trim();
+    const initial = (this.initialComment || "").trim();
+    return current !== initial;
   }
 
   onOpen() {
     super.onOpen();
-    const { contentEl, modalEl } = this;
-    const t = (k, params = {}) => this.plugin.translationManager.t(k, params);
-    contentEl.addClass("daily-habits-modal");
-    contentEl.addClass("dh-popup-compact");
-    modalEl.addClass("dh-popup-modal-parent");
+    const { contentEl } = this;
+    const t = (k, params = {}) => this.t(k, params);
 
-    const lang = this.plugin.settings.language || "ar";
-    const dateStr = this.date.clone().locale(lang).format(t("date_format_medium"));
+    const dateStr = this.getFormattedDate("date_format_medium");
+    const momentFn = typeof window !== "undefined" && window.moment ? window.moment : (typeof globalThis !== "undefined" && globalThis.moment ? globalThis.moment : null);
+    const timeStr = momentFn ? momentFn().format("HH:mm") : "";
+    const metaHtml = timeStr ? `${dateStr} • <bdi>${timeStr}</bdi>` : dateStr;
 
-    // Compact header row: icon + title + meta inline
-    const header = contentEl.createDiv({ cls: "dh-popup-header" });
-    header.createSpan({ cls: "dh-popup-header-icon", text: "💬" });
-    const headerText = header.createDiv({ cls: "dh-popup-header-text" });
-    headerText.createDiv({ cls: "dh-popup-title", text: this.habit.name });
-    headerText.createDiv({ cls: "dh-popup-meta", text: `${dateStr} • ${window.moment().format("HH:mm")}` });
-
-    const inputWrapper = contentEl.createDiv({ cls: "dh-popup-input-wrapper" });
-    const input = inputWrapper.createEl("textarea", {
-      cls: "dh-popup-input dh-popup-input-standalone dh-auto-textarea",
-      attr: {
-        placeholder: t("comment_placeholder"),
-        rows: 3
-      }
+    // Compact header row with Lucide icon and BiDi-isolated time
+    this.createPopupHeader(contentEl, {
+      iconName: "message-square",
+      titleText: this.habit?.name || "",
+      metaHtml
     });
 
-    const autoResize = () => autoResizeTextarea(input);
-    input.oninput = autoResize;
+    const input = this.createNoteInput(contentEl, {
+      placeholder: t("comment_placeholder"),
+      rows: 3
+    });
 
     // Load existing comment text
     input.disabled = true;
     input.placeholder = t("comment_loading");
-    
-    this.plugin.habitCommentRepository.getCommentForHabitDate(this.habit, this.date).then(existingComment => {
+
+    this.plugin?.habitCommentRepository?.getCommentForHabitDate(this.habit, this.date).then((existingComment) => {
       input.disabled = false;
       input.placeholder = t("comment_placeholder");
       input.value = existingComment || "";
+      this.initialComment = input.value;
+      this.initialValue = input.value;
       input.focus();
-      autoResize();
+      autoResizeTextarea(input);
       if (Platform.isMobile) {
         setTimeout(() => input.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
       }
-    }).catch(err => {
+    }).catch((err) => {
       console.warn("[Core Habits] Failed to load existing comment:", err);
       input.disabled = false;
       input.placeholder = t("comment_placeholder");
+      this.initialComment = "";
+      this.initialValue = "";
       input.focus();
-      autoResize();
+      autoResizeTextarea(input);
     });
 
-    const footer = contentEl.createDiv({ cls: "dh-modal-actions dh-popup-footer-split" });
-
-    const actionsLeft = footer.createDiv({ cls: "dh-popup-actions-left" });
-    this.voiceRecorder = new VoiceRecorderComponent(actionsLeft, {
-      app: this.app,
-      plugin: this.plugin,
-      inputEl: input,
-      placeholderDefault: t("comment_placeholder")
-    });
-
-    const actionsRight = footer.createDiv({ cls: "dh-popup-actions-right" });
-
-    const saveBtn = actionsRight.createEl("button", {
-      text: t("comment_save"),
-      cls: "dh-btn mod-cta"
-    });
-
-    const cancelBtn = actionsRight.createEl("button", { text: t("cancel"), cls: "dh-btn" });
-    cancelBtn.onclick = () => this.close();
-
-    const submit = () => {
-      if (this.voiceRecorder && this.voiceRecorder.isRecording) {
-        new Notice(t("reflection_mic_stop_first"));
-        return;
-      }
-      const sanitized = input.value
-        .replace(/[\r\n]+/g, ' ')
-        .replace(/^#+\s/gm, '')
-        .substring(0, 2000)
-        .trim();
-      if (sanitized) {
-        saveBtn.disabled = true;
-        saveBtn.textContent = t("reflection_saving");
-        this.onSave(sanitized).then((savedFile) => {
-          new Notice(t("reflection_save_success_comment", { file: savedFile || this.habit.name }));
-          this.close();
-        }).catch(e => {
-          new Notice(`❌ ${e.message}`);
-          saveBtn.disabled = false;
-          saveBtn.textContent = t("comment_save");
-        });
-      } else {
-        this.close();
-      }
-    };
-
-    saveBtn.onclick = submit;
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+    this.createPopupFooter(contentEl, {
+      placeholderDefault: t("comment_placeholder"),
+      cancelText: t("cancel"),
+      saveText: t("comment_save")
     });
   }
 
-  onClose() {
-    if (this.voiceRecorder) {
-      this.voiceRecorder.cleanup();
-    }
-    super.onClose();
+  async handleSave(sanitized) {
+    const savedFile = await this.onSave(sanitized);
+    NoticeService.success(this.t("reflection_save_success_comment", { file: savedFile || this.habit?.name || "" }), { plugin: this.plugin });
   }
 }
 

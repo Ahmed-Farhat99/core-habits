@@ -96,6 +96,7 @@ export class AudioEngine {
       try {
         await this.sharedAudioContext.close();
       } catch { /* ignore */ }
+      this.sharedAudioContext = null;
     }
   }
 }

@@ -5,15 +5,24 @@ export class TranslationManager {
     this.plugin = plugin;
   }
 
-  t(key, params = {}) {
-    const lang = this.plugin.settings.language || "ar";
-    const dict = TRANSLATIONS[lang] || TRANSLATIONS["en"];
-    let text = dict[key] || TRANSLATIONS["en"][key] || key;
+  t(key, params = {}, fallback = "") {
+    const lang = this.plugin?.settings?.language || "ar";
+    const dict = TRANSLATIONS[lang] || TRANSLATIONS["en"] || {};
+    let text = dict[key] ?? TRANSLATIONS["en"]?.[key];
 
-    Object.keys(params).forEach((param) => {
-      text = text.replace(`{${param}}`, params[param]);
-    });
+    if (text === undefined || text === null) {
+      if (typeof params === "string") return params;
+      if (typeof fallback === "string" && fallback) return fallback;
+      return "";
+    }
+
+    if (typeof text === "string" && params && typeof params === "object") {
+      Object.keys(params).forEach((param) => {
+        text = text.replace(new RegExp(`\\{${param}\\}`, "g"), params[param]);
+      });
+    }
 
     return text;
   }
 }
+

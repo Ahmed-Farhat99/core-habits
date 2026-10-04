@@ -1,11 +1,110 @@
-const moment = window.moment;
-import { getNoteByDate, findHabitEntry, DateUtils, getDailyNotesInfo } from '../utils/helpers.js';
+const moment = window.moment || globalThis.moment;
+import { getNoteByDate, DateUtils, getDailyNoteDate } from '../utils/helpers.js';
+import { StreakCalculator } from './StreakCalculator.js';
+import { HabitAggregator } from '../domain/stats/HabitAggregator.js';
+import { MetricsCalculator } from '../domain/stats/MetricsCalculator.js';
+import { InsightsEngine } from '../domain/stats/InsightsEngine.js';
 
 export class StatsService {
   constructor(plugin) {
     this.plugin = plugin;
     this.app = plugin.app;
     this.dailyCompletions = new Map();
+    this.aggregator = new HabitAggregator();
+    this._periodStatsCache = new Map();
+    this._indexPromise = null;
+    this._destroyed = false;
+    this._cacheGeneration = 0;
+  }
+
+  /**
+   * Clears in-memory statistics cache.
+   * @param {string} [dateKey]
+   */
+  invalidateCache(dateKey = null) {
+    if (this._destroyed) return;
+    this._cacheGeneration++;
+    if (this.aggregator) {
+      this.aggregator.invalidateCache(dateKey);
+    }
+    if (this._periodStatsCache) {
+      this._periodStatsCache.clear();
+    }
+    if (dateKey) StreakCalculator.invalidateDailyNote(dateKey);
+    else StreakCalculator.invalidateAll();
+    this.app?.workspace?.trigger?.("core-habits:cache-invalidated", dateKey ? { dateKey } : undefined);
+  }
+
+  /**
+   * Retrieves comprehensive, fully aggregated period statistics.
+   * Strictly READ-ONLY. Never writes to disk or settings.
+   */
+  async getPeriodStatistics(period) {
+    if (!period || this._destroyed) return null;
+    const generation = this._cacheGeneration;
+
+    const cacheKey = `${period.type}_${period.startDate.format("YYYY-MM-DD")}_${period.endDate.format("YYYY-MM-DD")}`;
+    if (this._periodStatsCache && this._periodStatsCache.has(cacheKey)) {
+      return this._periodStatsCache.get(cacheKey);
+    }
+
+    const noteContentProvider = async (dateKey, dateMoment) => {
+      const dailyNote = await getNoteByDate(this.app, dateMoment, false, this.plugin.settings);
+      if (!dailyNote) {
+        return { hasNote: false, scanned: [] };
+      }
+      const content = await this.app.vault.cachedRead(dailyNote);
+      const scanned = this.plugin.habitScanner.scan(content, this.plugin.settings?.marker) || [];
+      return { hasNote: true, scanned };
+    };
+
+    const startMs = period.startDate.valueOf();
+    const endMs = period.endDate.valueOf();
+    const habits = this.plugin.habitManager.getHabitsForTimeRange(startMs, endMs);
+
+    const currentAgg = await this.aggregator.aggregate({
+      habits,
+      startDate: period.startDate,
+      endDate: period.endDate,
+      noteContentProvider,
+      settings: this.plugin.settings,
+      habitManager: this.plugin.habitManager,
+      todayAnchor: moment().startOf("day"),
+    });
+
+    const compPeriod = period.getComparisonPeriod();
+    const prevAgg = await this.aggregator.aggregate({
+      habits,
+      startDate: compPeriod.startDate,
+      endDate: compPeriod.endDate,
+      noteContentProvider,
+      settings: this.plugin.settings,
+      habitManager: this.plugin.habitManager,
+      todayAnchor: moment().startOf("day"),
+    });
+
+    const weekStartDay = typeof this.plugin.settings?.weekStartDay === "number"
+      ? this.plugin.settings.weekStartDay
+      : 6;
+
+    const metrics = MetricsCalculator.compute(currentAgg, prevAgg, weekStartDay, period);
+
+    const isAr = this.plugin.settings?.language === "ar";
+    const insights = InsightsEngine.generate(metrics, {
+      isAr,
+      t: (k, p) => this.plugin.translationManager.t(k, p),
+    });
+
+    const result = {
+      period,
+      metrics,
+      insights,
+      currentAgg,
+      prevAgg,
+    };
+
+    if (!this._destroyed && generation === this._cacheGeneration) this._periodStatsCache.set(cacheKey, result);
+    return result;
   }
 
   /**
@@ -18,68 +117,35 @@ export class StatsService {
    * - "ignored": Habit should not count (either missing daily note when streakBreakOnMissing=false, or day is after archive/before restore/not scheduled)
    */
   async getHabitStatus(habit, date, preloadedContent = null) {
-    const dayOfWeek = date.day();
+    let scanned = null;
+    let hasNote = false;
 
-    // 1. Check if scheduled for this day
-    if (!this.plugin.habitManager.isHabitScheduledForDay(habit, dayOfWeek)) {
-      return "ignored";
-    }
-
-    // 2. Check if date falls in an archived period (between archivedDate and restoredDate)
-    if (habit.archivedDate && habit.restoredDate) {
-      const archMoment = moment(habit.archivedDate).startOf("day");
-      const restMoment = moment(habit.restoredDate).startOf("day");
-      const dateMoment = date.clone().startOf("day");
-      if (dateMoment.isSameOrAfter(archMoment) && dateMoment.isSameOrBefore(restMoment)) {
-        return "ignored";
-      }
-    } else if (habit.restoredDate && date.isBefore(moment(habit.restoredDate), "day")) {
-      return "ignored";
-    }
-
-    // 3. Check if after archivedDate
-    const isAfterArchive = habit.archived && habit.archivedDate && 
-      date.clone().startOf("day").isAfter(moment(habit.archivedDate).startOf("day"));
-    if (isAfterArchive) {
-      return "ignored";
-    }
-
-    // 4. Resolve content or scanned entries
-    let scanned;
     if (Array.isArray(preloadedContent)) {
       scanned = preloadedContent;
+      hasNote = true;
+    } else if (preloadedContent && typeof preloadedContent.hasNote === "boolean") {
+      scanned = preloadedContent.scanned;
+      hasNote = preloadedContent.hasNote;
+    } else if (typeof preloadedContent === "string") {
+      scanned = this.plugin.habitScanner.scan(preloadedContent, this.plugin.settings?.marker);
+      hasNote = true;
     } else {
-      let content = preloadedContent;
-      if (content === null || content === undefined) {
-        const dailyNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
-        if (!dailyNote) {
-          // Daily note is missing
-          if (this.plugin.settings.streakBreakOnMissing) {
-            return "uncompleted"; // counts as scheduled but missed
-          } else {
-            return "ignored"; // skipped/ignored
-          }
-        }
-        content = await this.app.vault.cachedRead(dailyNote);
+      const dailyNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
+      if (dailyNote) {
+        hasNote = true;
+        const content = await this.app.vault.cachedRead(dailyNote);
+        scanned = this.plugin.habitScanner.scan(content, this.plugin.settings?.marker);
       }
-      scanned = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
     }
 
-    const entry = findHabitEntry(scanned, habit.linkText, habit.nameHistory, habit.id);
-
-    if (!entry) {
-      if (habit.createdAt && date.clone().startOf("day").isBefore(window.moment(habit.createdAt).startOf("day"))) {
-        return "ignored";
-      }
-      return "uncompleted"; // missing entry
-    }
-    if (entry.skipped) {
-      return "skipped";
-    }
-    if (entry.completed) {
-      return "completed";
-    }
-    return "uncompleted";
+    return this.aggregator.resolveHabitStatus(
+      habit,
+      date,
+      scanned,
+      hasNote,
+      this.plugin.settings,
+      this.plugin.habitManager
+    );
   }
 
   /**
@@ -93,11 +159,11 @@ export class StatsService {
     // Optimisation: Pre-parse raw string content into scanned entries map once to avoid duplicate scanning in the loop
     const parsedWeekContent = new Map();
     for (const [dateKey, content] of preloadedWeekContent.entries()) {
-      if (typeof content === "string") {
-        parsedWeekContent.set(dateKey, this.plugin.habitScanner.scan(content, this.plugin.settings.marker));
-      } else {
-        parsedWeekContent.set(dateKey, content);
-      }
+      parsedWeekContent.set(dateKey, typeof content === "string"
+        ? { hasNote: true, scanned: this.plugin.habitScanner.scan(content, this.plugin.settings.marker) }
+        : content === null
+          ? { hasNote: false, scanned: [] }
+          : content);
     }
 
     for (let i = 0; i < 7; i++) {
@@ -110,7 +176,7 @@ export class StatsService {
         continue;
       }
 
-      const content = parsedWeekContent.get(dateKey) ?? null;
+      const content = parsedWeekContent.has(dateKey) ? parsedWeekContent.get(dateKey) : null;
 
       for (const habit of habits) {
         const status = await this.getHabitStatus(habit, dayDate, content);
@@ -134,23 +200,27 @@ export class StatsService {
   /**
    * Calculates last week's completion rate percentage.
    */
-  async calculateLastWeekRate(currentWeekStart) {
+  async calculateLastWeekRate(currentWeekStart, dayCount = 7) {
+    const comparableDays = Math.max(0, Math.min(7, Math.trunc(dayCount)));
+    if (comparableDays === 0) return null;
     const prevWeekStart = currentWeekStart.clone().subtract(7, "days");
     const prevWeekStartMs = prevWeekStart.clone().startOf("day").valueOf();
     const prevWeekEndMs = prevWeekStart.clone().add(6, "days").endOf("day").valueOf();
     const habits = this.plugin.habitManager.getHabitsForTimeRange(prevWeekStartMs, prevWeekEndMs);
 
-    if (habits.length === 0) return 0;
+    if (habits.length === 0) return null;
 
     // Load and scan content for previous week (once per day)
     const prevWeekContent = new Map();
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < comparableDays; i++) {
       const dayDate = prevWeekStart.clone().add(i, "days");
       const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
       if (dailyNote) {
         const content = await this.app.vault.cachedRead(dailyNote);
         const scanned = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
         prevWeekContent.set(DateUtils.formatDateKey(dayDate), scanned);
+      } else {
+        prevWeekContent.set(DateUtils.formatDateKey(dayDate), null);
       }
     }
 
@@ -158,240 +228,182 @@ export class StatsService {
 
     let total = 0;
     let completed = 0;
-    for (const dateKey in dailyStats) {
-      total += dailyStats[dateKey].total;
-      completed += dailyStats[dateKey].completed;
+    for (let i = 0; i < comparableDays; i++) {
+      const stats = dailyStats[DateUtils.formatDateKey(prevWeekStart.clone().add(i, "days"))];
+      total += stats.total;
+      completed += stats.completed;
     }
 
-    return total > 0 ? Math.round((completed / total) * 100) : 0;
+    return total > 0 ? Math.round((completed / total) * 100) : null;
+  }
+
+
+
+  /**
+   * Discovers and returns daily note files matching the configured folder and date format.
+   * @private
+   * @returns {Array<import('obsidian').TFile>}
+   */
+  _getDailyNoteFiles() {
+    // LEGITIMATE USE: Vault scanning is required to scan daily notes and calculate lifetime statistics upon plugin initialization or manual recalculation.
+    return this.app.vault.getMarkdownFiles().filter(file => getDailyNoteDate(file, this.app, this.plugin.settings));
   }
 
   /**
-   * Analyzes the last 4 weeks leading up to currentWeekStart.
+   * Synchronizes lifetime habit achievements across the vault.
+   * Delegates to initLifetimeIndex to ensure consistent date filtering and index population.
+   * @param {Function} [onProgress]
+   * @returns {Promise<number>}
    */
-  async analyzeLastFourWeeks(currentWeekStart) {
-    const today = moment();
-    const weeksData = [];
-    const dayStats = {};
-    const habitStats = {};
-
-    const startOfAnalysisMs = currentWeekStart.clone().subtract(3, "weeks").startOf("day").valueOf();
-    const endOfAnalysisMs = currentWeekStart.clone().add(6, "days").endOf("day").valueOf();
-    const habits = this.plugin.habitManager.getHabitsForTimeRange(startOfAnalysisMs, endOfAnalysisMs);
-
-    if (habits.length === 0) {
-      return { weeksData: [], dayStats: {}, bestHabit: null, worstHabit: null };
+  async syncLifetimeAchievements(onProgress) {
+    const result = await this.initLifetimeIndex(true, onProgress);
+    if (result === null) {
+      throw new Error("Failed to sync lifetime stats");
     }
-
-    for (const habit of habits) {
-      habitStats[habit.id] = {
-        id: habit.id,
-        name: (habit.name || habit.linkText || "Unknown").replace(/\[\[|\]\]/g, ""),
-        completed: 0,
-        total: 0
-      };
-    }
-
-    for (let i = 0; i < 7; i++) {
-      dayStats[i] = { completed: 0, total: 0 };
-    }
-
-    for (let w = 0; w < 4; w++) {
-      const weekStart = currentWeekStart.clone().subtract(w * 7, "days");
-      let weekCompleted = 0;
-      let weekTotal = 0;
-
-      // Preload and scan the week's contents once per day
-      const weekContent = new Map();
-      for (let i = 0; i < 7; i++) {
-        const dayDate = weekStart.clone().add(i, "days");
-        if (dayDate.isAfter(today, "day")) continue;
-
-        const dailyNote = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
-        if (dailyNote) {
-          const content = await this.app.vault.cachedRead(dailyNote);
-          const scanned = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-          weekContent.set(DateUtils.formatDateKey(dayDate), scanned);
-        }
-      }
-
-      for (let i = 0; i < 7; i++) {
-        const dayDate = weekStart.clone().add(i, "days");
-        if (dayDate.isAfter(today, "day")) continue;
-
-        const dayOfWeek = dayDate.day();
-        const dateKey = DateUtils.formatDateKey(dayDate);
-        const content = weekContent.get(dateKey) ?? null;
-
-        for (const habit of habits) {
-          const status = await this.getHabitStatus(habit, dayDate, content);
-          if (status === "ignored" || status === "skipped") {
-            continue;
-          }
-
-          weekTotal++;
-          dayStats[dayOfWeek].total++;
-          habitStats[habit.id].total++;
-
-          if (status === "completed") {
-            weekCompleted++;
-            dayStats[dayOfWeek].completed++;
-            habitStats[habit.id].completed++;
-          }
-        }
-      }
-
-      weeksData.push({
-        weekStart,
-        rate: weekTotal > 0 ? Math.round((weekCompleted / weekTotal) * 100) : 0
-      });
-    }
-
-    let bestHabit = null;
-    let worstHabit = null;
-    let maxHabitPct = -1;
-    let minHabitPct = 101;
-
-    for (const hId in habitStats) {
-      const st = habitStats[hId];
-      if (st.total > 0) {
-        const pct = Math.round((st.completed / st.total) * 100);
-        st.pct = pct;
-        if (pct > maxHabitPct) {
-          maxHabitPct = pct;
-          bestHabit = { ...st };
-        }
-        if (pct < minHabitPct) {
-          minHabitPct = pct;
-          worstHabit = { ...st };
-        }
-      }
-    }
-
-    return { weeksData, dayStats, bestHabit, worstHabit };
+    return result;
   }
 
-  async syncLifetimeAchievements(onProgress) {
-    let totalCompleted = 0;
+  async initLifetimeIndex(force = false, onProgress = null) {
+    void force;
+    if (this._destroyed) return null;
+    if (this._indexPromise) return this._indexPromise;
+    this._indexPromise = this._buildLifetimeIndex(onProgress);
     try {
-      const info = getDailyNotesInfo(this.app, this.plugin.settings);
-      // LEGITIMATE USE: Vault scanning is required to list daily notes to count lifetime habit completions.
-      let files = this.app.vault.getMarkdownFiles().filter(f => !f.path.startsWith(".obsidian"));
-      if (info.folder) {
-        files = files.filter(f => f.path.startsWith(info.folder));
-      }
-      
+      return await this._indexPromise;
+    } finally {
+      this._indexPromise = null;
+    }
+  }
+
+  async _buildLifetimeIndex(onProgress) {
+    const previousCompletions = this.dailyCompletions;
+    const previousTotal = this.plugin.settings.lifetimeCompleted;
+    const wasLoaded = this.isLifetimeIndexFullyLoaded;
+    try {
+      const files = this._getDailyNoteFiles();
+      const nextCompletions = new Map();
+
       const BATCH_SIZE = 20;
       for (let i = 0; i < files.length; i += BATCH_SIZE) {
         if (typeof onProgress === "function") {
           onProgress(Math.min(i + BATCH_SIZE, files.length), files.length);
         }
         const batch = files.slice(i, i + BATCH_SIZE);
-        const batchResults = await Promise.all(batch.map(async (file) => {
-          const content = await this.app.vault.cachedRead(file);
-          if (!content.includes("- [")) return 0;
-          const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-          return habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
-        }));
-        totalCompleted += batchResults.reduce((sum, n) => sum + n, 0);
-      }
-      this.plugin.settings.lifetimeCompleted = totalCompleted;
-      await this.plugin.saveSettings();
-      return totalCompleted;
-    } catch (e) {
-      console.error("[Core Habits] Failed to sync lifetime stats", e);
-      this.plugin.settings.lifetimeCompleted = null;
-      throw e;
-    }
-  }
-
-  async initLifetimeIndex() {
-    this.dailyCompletions = new Map();
-    try {
-      const info = getDailyNotesInfo(this.app, this.plugin.settings);
-      // LEGITIMATE USE: Vault scanning is required to scan daily notes and calculate lifetime statistics upon plugin initialization.
-      let files = this.app.vault.getMarkdownFiles().filter(f => !f.path.startsWith(".obsidian"));
-      if (info.folder) {
-        files = files.filter(f => f.path.startsWith(info.folder));
-      }
-      
-      // Filter only daily notes matching the configuration format
-      files = files.filter(f => {
-        const date = window.moment(f.basename, info.format, true);
-        return date.isValid();
-      });
-
-      const BATCH_SIZE = 20;
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        const batch = files.slice(i, i + BATCH_SIZE);
         await Promise.all(batch.map(async (file) => {
           const content = await this.app.vault.cachedRead(file);
-          const dateKey = file.basename;
+          const dateKey = getDailyNoteDate(file, this.app, this.plugin.settings).locale("en").format("YYYY-MM-DD");
           if (!content.includes("- [")) {
-            this.dailyCompletions.set(dateKey, 0);
+            nextCompletions.set(dateKey, 0);
             return;
           }
           const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
+          if (!habits) throw new Error(`Cannot safely scan daily note: ${file.path}`);
           const completedCount = habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
-          this.dailyCompletions.set(dateKey, completedCount);
+          nextCompletions.set(dateKey, completedCount);
         }));
       }
-
-      this.recalculateLifetimeCount();
+      if (this._destroyed) return null;
+      this.dailyCompletions = nextCompletions;
+      this.isLifetimeIndexFullyLoaded = true;
+      await this.recalculateLifetimeCount();
+      return this.plugin.settings.lifetimeCompleted;
     } catch (e) {
+      this.dailyCompletions = previousCompletions;
+      this.plugin.settings.lifetimeCompleted = previousTotal;
+      this.isLifetimeIndexFullyLoaded = wasLoaded;
       console.error("[Core Habits] Failed to initialize lifetime index", e);
+      return null;
     }
   }
 
-  recalculateLifetimeCount() {
+  async recalculateLifetimeCount() {
+    if (this._destroyed) return;
     let total = 0;
     for (const count of this.dailyCompletions.values()) {
       total += count;
     }
+    const previousTotal = this.plugin.settings.lifetimeCompleted;
     this.plugin.settings.lifetimeCompleted = total;
-    this.plugin.saveSettings({ silent: true });
+    try {
+      await this.plugin.saveSettings({ silent: true });
+    } catch (error) {
+      this.plugin.settings.lifetimeCompleted = previousTotal;
+      throw error;
+    }
+    if (this._destroyed) return;
     
     // Trigger dashboard UI refresh if active
-    const activeView = this.app.workspace.getLeavesOfType("weekly-habits-view")[0]?.view;
-    if (activeView && activeView.currentViewMode === "dashboard") {
-      activeView.renderWeeklyGrid();
-    }
+    this.app?.workspace?.trigger?.("core-habits:stats-updated");
   }
 
   async rescanFile(file) {
-    if (!this.dailyCompletions) {
-      this.dailyCompletions = new Map();
-    }
+    if (this._destroyed) return;
+    if (this._indexPromise) await this._indexPromise;
     try {
-      const info = getDailyNotesInfo(this.app, this.plugin.settings);
-      const date = window.moment(file.basename, info.format, true);
-      if (!date.isValid()) return;
+      const date = getDailyNoteDate(file, this.app, this.plugin.settings);
+      if (!date || this._destroyed) return;
 
-      const dateKey = file.basename;
+      const dateKey = date.locale("en").format("YYYY-MM-DD");
+      this.invalidateCache(dateKey);
       const content = await this.app.vault.read(file); // read latest content from disk directly
-      if (!content.includes("- [")) {
-        this.dailyCompletions.set(dateKey, 0);
-      } else {
+      let completedCount = 0;
+      if (content.includes("- [")) {
         const habits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-        const completedCount = habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
-        this.dailyCompletions.set(dateKey, completedCount);
+        if (!habits) throw new Error(`Cannot safely scan daily note: ${file.path}`);
+        completedCount = habits.reduce((sum, h) => sum + (h.completed ? 1 : 0), 0);
       }
-      this.recalculateLifetimeCount();
+      if (this._destroyed) return;
+      const prevCount = this.dailyCompletions.get(dateKey);
+      this.dailyCompletions.set(dateKey, completedCount);
+      if (this.isLifetimeIndexFullyLoaded && prevCount !== completedCount) {
+        try {
+          await this.recalculateLifetimeCount();
+        } catch (error) {
+          if (prevCount === undefined) this.dailyCompletions.delete(dateKey);
+          else this.dailyCompletions.set(dateKey, prevCount);
+          throw error;
+        }
+      }
     } catch (e) {
       console.error("[Core Habits] Failed to rescan file", file.path, e);
     }
   }
 
-  handleFileDelete(file) {
-    if (!this.dailyCompletions) return;
-    const info = getDailyNotesInfo(this.app, this.plugin.settings);
-    const date = window.moment(file.basename, info.format, true);
-    if (!date.isValid()) return;
+  async handleFileDelete(file) {
+    if (this._destroyed) return;
+    if (this._indexPromise) await this._indexPromise;
+    const date = getDailyNoteDate(file, this.app, this.plugin.settings);
+    if (!date || this._destroyed) return;
 
-    const dateKey = file.basename;
+    const dateKey = date.locale("en").format("YYYY-MM-DD");
+    this.invalidateCache(dateKey);
     if (this.dailyCompletions.has(dateKey)) {
+      const previousCount = this.dailyCompletions.get(dateKey);
       this.dailyCompletions.delete(dateKey);
-      this.recalculateLifetimeCount();
+      if (this.isLifetimeIndexFullyLoaded) {
+        try {
+          await this.recalculateLifetimeCount();
+        } catch (error) {
+          this.dailyCompletions.set(dateKey, previousCount);
+          throw error;
+        }
+      }
+    }
+  }
+
+  async handleFileRename(file, oldPath) {
+    if (this._destroyed) return;
+    await this.handleFileDelete({ path: oldPath });
+    if (this._destroyed) return;
+    await this.rescanFile(file);
+  }
+
+  destroy() {
+    this._destroyed = true;
+    this.aggregator?.invalidateCache();
+    this._periodStatsCache.clear();
+    if (this.dailyCompletions) {
+      this.dailyCompletions.clear();
     }
   }
 }

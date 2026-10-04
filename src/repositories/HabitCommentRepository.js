@@ -1,7 +1,11 @@
-import { getNoteByDate, TextUtils } from "../utils/helpers.js";
+import { getNoteByDate, TextUtils, getDailyNotesInfo, getDailyNotePath } from "../utils/helpers.js";
 import { 
   DEFAULT_HABIT_NOTES_HEADING,
   DEFAULT_REFLECTION_HEADING,
+  DEFAULT_PARENT_HEADING_AR,
+  DEFAULT_PARENT_HEADING_EN,
+  KNOWN_HABIT_LOG_HEADINGS,
+  KNOWN_REFLECTION_HEADINGS,
   normalizeReflectionType
 } from "../constants.js";
 import { Utils } from "../utils/Utils.js";
@@ -9,6 +13,7 @@ import { Utils } from "../utils/Utils.js";
 export class HabitCommentRepository {
   static isCommentLineForHabit(line, habit) {
     if (!line || !habit) return false;
+    if (!/^\s*-\s/.test(line)) return false;
 
     const idMatch = line.match(/\[habit-id::\s*(.*?)\s*\]/i);
     if (idMatch) {
@@ -24,16 +29,8 @@ export class HabitCommentRepository {
       return commentNameFolded === targetNameFolded || targetHistoryFolded.includes(commentNameFolded);
     }
 
-    // Legacy name check fallback
-    const cleanName = TextUtils.clean(habit.linkText || habit.name);
-    const lineFolded = TextUtils.foldArabic(line);
-    return (
-      (habit.linkText && line.includes(habit.linkText)) ||
-      line.includes(`[habit-note:: ${cleanName}]`) ||
-      line.includes(`habit:: ${cleanName}`) ||
-      lineFolded.includes(targetNameFolded) ||
-      targetHistoryFolded.some(hist => lineFolded.includes(hist))
-    );
+    // A bare name in user prose is never proof that this line belongs to us.
+    return false;
   }
 
   /**
@@ -45,9 +42,9 @@ export class HabitCommentRepository {
     this.plugin = plugin;
   }
 
-  async runWithLock(callback) {
+  async runWithLock(callback, targetPaths = []) {
     if (this.plugin && typeof this.plugin.runWithLock === 'function') {
-      return await this.plugin.runWithLock(callback);
+      return await this.plugin.runWithLock(callback, targetPaths);
     }
     return await callback();
   }
@@ -61,13 +58,16 @@ export class HabitCommentRepository {
    * @returns {Promise<string>} Daily Note basename
    */
   async upsertCommentForHabitDate(habit, date, comment) {
+    const info = getDailyNotesInfo(this.app, this.plugin.settings);
+    const targetPath = getDailyNotePath(date, info);
     return await this.runWithLock(async () => {
       const file = await getNoteByDate(this.app, date, true, this.plugin.settings);
       if (!file) {
         throw new Error(
-          this.plugin.settings.language === "ar"
-            ? "تعذر فتح أو إنشاء ملف اليوم."
-            : "Could not open or create the daily note."
+          this.plugin?.translationManager?.t("notice_could_not_open_daily_note")
+            || (this.plugin.settings.language === "ar"
+              ? "تعذر فتح أو إنشاء ملف اليوم."
+              : "Could not open or create the daily note.")
         );
       }
 
@@ -77,13 +77,43 @@ export class HabitCommentRepository {
 
       // Schema: - HH:mm [habit-id:: habit_id] [habit-note:: display_name] linkText - comment
       const commentLine = `- ${timeStr} [habit-id:: ${habit.id}] [habit-note:: ${cleanName}] ${habitLabel} - ${comment}`;
-      const parentHeading = this.plugin.settings.dailyParentHeading;
-      const subHeading = this.plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
+      const currentParentHeading = this.plugin.settings.dailyParentHeading || "";
+      const currentSubHeading = this.plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
+
+      const candidateSubHeadings = [
+        currentSubHeading,
+        ...(this.plugin.settings?.habitLogHeadingHistory || []),
+        ...KNOWN_HABIT_LOG_HEADINGS
+      ].filter(Boolean);
+
+      const candidateParentHeadings = [
+        currentParentHeading,
+        ...(this.plugin.settings?.dailyParentHeadingHistory || []),
+        DEFAULT_PARENT_HEADING_AR,
+        DEFAULT_PARENT_HEADING_EN,
+        ""
+      ];
 
       await this.app.vault.process(file, (content) => {
+        let matchedParent = currentParentHeading;
+        let matchedSub = currentSubHeading;
+        let sectionFound = false;
+
+        for (const parentH of candidateParentHeadings) {
+          for (const subH of candidateSubHeadings) {
+            if (Utils.getSectionContent(content, parentH, subH) !== null) {
+              matchedParent = parentH;
+              matchedSub = subH;
+              sectionFound = true;
+              break;
+            }
+          }
+          if (sectionFound) break;
+        }
+
         const lines = content.split(/\r?\n/);
-        const cleanParent = parentHeading ? parentHeading.trim() : null;
-        const cleanSub = subHeading.trim();
+        const cleanParent = matchedParent ? matchedParent.trim() : null;
+        const cleanSub = matchedSub.trim();
 
         let inParent = !cleanParent;
         let inSub = false;
@@ -130,12 +160,12 @@ export class HabitCommentRepository {
           return lines.join(content.includes("\r\n") ? "\r\n" : "\n");
         } else {
           // Insert new line under section
-          return Utils.insertNestedContent(content, parentHeading, subHeading, commentLine);
+          return Utils.insertNestedContent(content, matchedParent, matchedSub, commentLine);
         }
       });
 
       return file.basename;
-    });
+    }, targetPath);
   }
 
   /**
@@ -206,7 +236,18 @@ export class HabitCommentRepository {
     const targetNameFolded = TextUtils.foldArabic(cleanName);
     let resolvedHabit = null;
 
-    if (this.plugin.habitManager && this.plugin.habitManager.habitsMap) {
+    if (this.plugin?.habitManager?.findHabitByNameOrAlias) {
+      resolvedHabit = this.plugin.habitManager.findHabitByNameOrAlias(habitName);
+    } else if (this.plugin?.habitManager?.getHabits) {
+      resolvedHabit = this.plugin.habitManager.getHabits().find(
+        (h) =>
+          TextUtils.foldArabic(h.name) === targetNameFolded ||
+          TextUtils.foldArabic(h.linkText || "") === targetNameFolded ||
+          (h.nameHistory || []).some(
+            (n) => TextUtils.foldArabic(n.replace(/\[\[|\]\]/g, "")) === targetNameFolded
+          )
+      ) || null;
+    } else if (this.plugin?.habitManager?.habitsMap) {
       for (const h of this.plugin.habitManager.habitsMap.values()) {
         if (
           TextUtils.foldArabic(h.name) === targetNameFolded ||
@@ -241,33 +282,81 @@ export class HabitCommentRepository {
    * @returns {Promise<string>} Daily Note basename
    */
   async injectReflection(targetDate, text, type = "Idea") {
+    const info = getDailyNotesInfo(this.app, this.plugin.settings);
+    const targetPath = getDailyNotePath(targetDate, info);
     return await this.runWithLock(async () => {
       const file = await getNoteByDate(this.app, targetDate, true, this.plugin.settings);
       if (!file) {
         throw new Error(
-          this.plugin.settings.language === "ar"
-            ? "تعذر فتح ملف اليوم."
-            : "Could not open the daily note."
+          this.plugin?.translationManager?.t("notice_could_not_open_daily_note")
+            || (this.plugin.settings.language === "ar"
+              ? "تعذر فتح ملف اليوم."
+              : "Could not open the daily note.")
         );
       }
 
       const timeStr = window.moment().format("HH:mm");
       const reflectionType = normalizeReflectionType(type);
       const reflectionLine = `- ${timeStr} [type:: ${reflectionType}] ${text}`;
-      const heading = this.plugin.settings.reflectionHeading || DEFAULT_REFLECTION_HEADING;
+      const currentParentHeading = this.plugin.settings.dailyParentHeading || "";
+      const currentHeading = this.plugin.settings.reflectionHeading || DEFAULT_REFLECTION_HEADING;
+
+      const candidateHeadings = [
+        currentHeading,
+        ...(this.plugin.settings?.reflectionHeadingHistory || []),
+        ...KNOWN_REFLECTION_HEADINGS
+      ].filter(Boolean);
+
+      const candidateParentHeadings = [
+        currentParentHeading,
+        ...(this.plugin.settings?.dailyParentHeadingHistory || []),
+        DEFAULT_PARENT_HEADING_AR,
+        DEFAULT_PARENT_HEADING_EN,
+        ""
+      ];
 
       await this.app.vault.process(file, (content) => {
-        return Utils.insertNestedContent(content, this.plugin.settings.dailyParentHeading, heading, reflectionLine);
+        let matchedParent = currentParentHeading;
+        let matchedHeading = currentHeading;
+        let sectionFound = false;
+
+        for (const parentH of candidateParentHeadings) {
+          for (const subH of candidateHeadings) {
+            if (Utils.getSectionContent(content, parentH, subH) !== null) {
+              matchedParent = parentH;
+              matchedHeading = subH;
+              sectionFound = true;
+              break;
+            }
+          }
+          if (sectionFound) break;
+        }
+
+        return Utils.insertNestedContent(content, matchedParent, matchedHeading, reflectionLine);
       });
 
       return file.basename;
-    });
+    }, targetPath);
   }
 
   // ─── Private Helpers ──────────────────────────────────────────────────────
 
   _extractSectionLines(content, heading) {
-    return Utils.extractSectionLines(content, heading);
+    const lines = Utils.extractSectionLines(content, heading);
+    if (lines.length === 0) {
+      const candidates = [
+        ...(this.plugin.settings?.habitLogHeadingHistory || []),
+        ...KNOWN_HABIT_LOG_HEADINGS
+      ];
+      for (const candidate of candidates) {
+        if (candidate === heading) continue;
+        const candidateLines = Utils.extractSectionLines(content, candidate);
+        if (candidateLines.length > 0) {
+          return candidateLines;
+        }
+      }
+    }
+    return lines;
   }
 
   _cleanCommentText(line, habitName, nameHistory = []) {

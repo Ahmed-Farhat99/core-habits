@@ -1,15 +1,18 @@
 {
   "name": "core-habits",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "type": "module",
-  "description": "Obsidian plugin to toggle habits in daily notes with archiving, ordering, and batch renaming, building your core identity.",
+  "description": "Track habits visually in a weekly grid, reflect in daily notes, and build your core identity.",
   "main": "main.js",
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build",
     "lint": "eslint src tests vitest.config.js",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "typecheck": "tsc --project tsconfig.check.json",
+    "ui:check": "node scripts/check-ui-css.mjs",
+    "release:check": "node scripts/check-release.mjs"
   },
   "keywords": [
     "obsidian",
@@ -25,8 +28,10 @@
     "eslint": "^10.4.0",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
-    "launch-editor": "^2.14.1",
+    "moment": "^2.30.1",
     "obsidian": "^1.5.7",
+    "postcss": "^8.5.28",
+    "typescript": "^7.0.2",
     "vite": "^8.1.4",
     "vitest": "^4.1.10"
   }

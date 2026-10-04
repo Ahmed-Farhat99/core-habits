@@ -9,51 +9,67 @@ import { HabitRepository } from './repositories/HabitRepository.js';
 import { HabitCommentRepository } from './repositories/HabitCommentRepository.js';
 import { MigrationManager } from './services/MigrationManager.js';
 import { StatsService } from './services/StatsService.js';
+import { DiaryService } from './services/DiaryService.js';
+import { HabitJournalService } from './services/HabitJournalService.js';
+import { StreakCalculator } from './services/StreakCalculator.js';
+import { VoiceRecorderUtility } from './services/VoiceRecorderUtility.js';
+import { NoticeService } from './services/NoticeService.js';
 
 // CSS Styling Modules
+import './styles/tokens.css';
 import './styles/base.css';
+import './styles/animations.css';
+import './styles/button.css';
+import './styles/habit-row.css';
+import './styles/day-cell.css';
 import './styles/grid.css';
 import './styles/modal.css';
+import './styles/notice.css';
 import './styles/settings.css';
-import './styles/diary.css';
-import './styles/dashboard.css';
+import './styles/statistics.css';
+import './styles/diary-view.css';
+import './styles/weekly-grid-layout.css';
 import './styles/mobile.css';
 
-/*
-  FILE STRUCTURE INDEX
-  1. Core Initialization — Constants, Imports, Utils, AudioEngine
-  2. Plugin Class        — DailyHabitsPlugin (onload, onunload, file locking)
-  3. State Management    — DEFAULT_SETTINGS, TRANSLATIONS, TranslationManager, HabitManager
-  4. Habit Logic Engine  — getNoteByDate, HabitScanner, toggleHabit, StreakCalculator
-  5. UI: Modals          — FileSuggest, AddHabit, RenameProgress, Comment, Reflection
-  6. UI: Views           — WeeklyGridView, PluginGuideComponent, DailyHabitsSettingTab
-  7. Utilities           — Mutex, TextUtils, DateUtils, helpers
-*/
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 1. Core Initialization — Constants, Imports, Utils, AudioEngine
-// ═══════════════════════════════════════════════════════════════════════════════
 
 import {
   Plugin,
-  Notice,
   TFile,
+  Platform,
+  normalizePath,
 } from "obsidian";
 
 import {
-  DEFAULT_REFLECTION_HEADING,
-  DEFAULT_HABIT_NOTES_HEADING,
+  DEFAULT_PARENT_HEADING_AR,
+  DEFAULT_HABIT_HEADING_AR,
+  DEFAULT_REFLECTION_HEADING_AR,
+  DEFAULT_HABIT_NOTES_HEADING_AR,
+  DEFAULT_PARENT_HEADING_EN,
+  DEFAULT_HABIT_HEADING_EN,
+  DEFAULT_REFLECTION_HEADING_EN,
+  DEFAULT_HABIT_NOTES_HEADING_EN,
+  getDefaultHeadings,
+  detectInitialLanguage,
   VIEW_TYPE_WEEKLY,
+  VIEW_TYPE_HABIT_EDIT,
   DEFAULT_SETTINGS
 } from './constants.js';
 
-import { getNoteByDate, getDailyNotesInfo } from './utils/helpers.js';
+import { getNoteByDate, getDailyNotesInfo, getDailyNoteDate } from './utils/helpers.js';
 import { WeeklyGridView } from './views/WeeklyGridView.js';
+import { HabitEditView } from './views/HabitEditView.js';
 import { DailyHabitsSettingTab } from './views/DailyHabitsSettingTab.js';
 import { OnboardingModal } from './modals/OnboardingModal.js';
+import { EditHabitModal } from './modals/EditHabitModal.js';
+import './modals/ConfirmModal.js'; // Registers the discard confirmation used by BaseHabitModal.
 
-export default class DailyHabitsPlugin extends Plugin {
+export default class CoreHabitsPlugin extends Plugin {
   async onload() {
+    this._isUnloading = false;
+    this.startupError = null;
+    this._globalLockCount = 0;
+    this._lockedPaths = new Map();
     this.lockCount = 0;
     await this.loadSettings();
     this.isFullyLoaded = false;
@@ -61,7 +77,8 @@ export default class DailyHabitsPlugin extends Plugin {
 
     const delay = (this.settings.syncStartupDelay ?? 15) * 1000;
     if (delay > 0) {
-      setTimeout(() => {
+      this._cooldownTimer = setTimeout(() => {
+        if (this._isUnloading) return;
         this.startupCooldown = false;
         Utils.debugLog(this, "Startup cooldown ended. Auto-write is now active.");
       }, delay);
@@ -77,42 +94,63 @@ export default class DailyHabitsPlugin extends Plugin {
     this.habitNoteManager = new HabitNoteManager(this.app, this);
     this.habitRepository = new HabitRepository(this.app, this);
     this.habitCommentRepository = new HabitCommentRepository(this.app, this);
+    this.habitJournalService = new HabitJournalService(this);
     this.habitManager = new HabitManager(this);
     this.migrationManager = new MigrationManager(this.app, this);
     this.habitScanner = new HabitScanner();
     this.statsService = new StatsService(this);
+    this.streakCalculator = new StreakCalculator(this);
+    this.diaryService = new DiaryService(this.app, this);
+    this.registerDiaryCacheInvalidation();
 
     // === DATA MIGRATION v3.0 & startup initialization ===
     // Will run after layout ready to ensure vault files are accessible
     this.app.workspace.onLayoutReady(async () => {
-      // 1. Initialize HabitManager first (reads existing files) to prevent erasing collapsedGroups
-      await this.habitManager.initialize();
-
-      // 2. Run v3 JSON-to-file migration if needed
-      await this.migrateV3Data();
-
-      // 3. Re-initialize if migration actually wrote new files (so they are loaded into memory)
-      if (this.settings.habitsBackup && this.settings.habitsBackup.length > 0) {
+      try {
+        // Load persisted state before migrations that depend on it.
         await this.habitManager.initialize();
+        if (this._isUnloading) return;
+        const didMigrateV3 = await this.migrationManager.migrateV3Data();
+        if (this._isUnloading) return;
+        const didMigrateSchema = await this.migrationManager.runMigrations();
+        if (this._isUnloading) return;
+        const didMigrateSchemaV3 = await this.migrationManager.runSchemaV3Migration();
+        if (this._isUnloading) return;
+        if (didMigrateV3 || didMigrateSchema || didMigrateSchemaV3) {
+          await this.habitManager.initialize();
+        }
+        if (this._isUnloading) return;
+        const lifetimeTotal = await this.statsService.initLifetimeIndex();
+        if (lifetimeTotal === null) throw new Error("Lifetime statistics index failed to initialize");
+        if (this._isUnloading) return;
+      } catch (error) {
+        if (this._isUnloading) return;
+        this.startupError = error;
+        console.error("[Core Habits] Startup or migration failed; automatic writes remain disabled:", error);
+        NoticeService.error("Core Habits could not load its data safely. Check the console and backup before retrying.", 15000, this);
+        this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
+          if (leaf.view?.refresh) void leaf.view.refresh();
+        });
+        return;
       }
-
-      // 4. Run our schema version 1 / comments migration
-      await this.migrationManager.runMigrations();
-
-      // 5. Re-initialize HabitManager to load updated schema/properties into memory
-      await this.habitManager.initialize();
       
       this.isFullyLoaded = true;
-      this.statsService.initLifetimeIndex();
 
       // Refresh Weekly View if it was opened before habits were loaded
       this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
         if (leaf.view && leaf.view.refresh) leaf.view.refresh();
       });
 
-      // Show Onboarding if newly updated or installed (fully initialized now)
-      if (this.settings.lastSeenVersion !== this.manifest.version) {
+      // Show Onboarding only on fresh install; show subtle notice on version upgrade
+      if (!this.settings.lastSeenVersion) {
         new OnboardingModal(this.app, this).open();
+        this.settings.lastSeenVersion = this.manifest.version;
+        this.saveSettings();
+      } else if (this.settings.lastSeenVersion !== this.manifest.version) {
+        const updateMsg = this.translationManager.t("notice_plugin_updated", { version: this.manifest.version });
+        if (updateMsg) {
+          NoticeService.info(updateMsg, 5000, this);
+        }
         this.settings.lastSeenVersion = this.manifest.version;
         this.saveSettings();
       }
@@ -122,24 +160,15 @@ export default class DailyHabitsPlugin extends Plugin {
         try {
           const count = await this.getIncompleteHabitsCountForToday();
           if (count > 0) {
-            const notice = new Notice("", 12000);
-            const container = notice.noticeEl;
-            container.empty();
-
-            const wrapper = container.createDiv({ cls: "dh-notice-wrapper" });
-            wrapper.createSpan({
-              text: `📋 ${count} ${this.translationManager.t("open_reminder_notice")}`
+            NoticeService.action({
+              icon: "📋",
+              count,
+              message: this.translationManager.t("open_reminder_notice"),
+              actionText: this.translationManager.t("notice_action_open"),
+              onAction: () => this.activateWeeklyView(),
+              duration: 12000,
+              plugin: this
             });
-
-            const btn = wrapper.createEl("button", {
-              cls: "dh-notice-btn",
-              text: this.translationManager.t("notice_action_open")
-            });
-
-            btn.onclick = () => {
-              this.activateWeeklyView();
-              notice.hide();
-            };
           }
         } catch (e) {
           Utils.debugLog(this, "[Open Reminder] Failed:", e);
@@ -149,20 +178,23 @@ export default class DailyHabitsPlugin extends Plugin {
       const dnInfo = getDailyNotesInfo(this.app, this.settings);
       if (dnInfo.source === "defaults" && !this._defaultsWarningShown) {
         const isAr = this.settings.language === "ar";
-        new Notice(isAr
-          ? "⚠️ لم يتم اكتشاف إعدادات Daily Notes. يتم استخدام الإعدادات الافتراضية (YYYY-MM-DD). راجع تبويب 'متقدم' في إعدادات الإضافة."
-          : "⚠️ Daily Notes settings not detected. Using defaults (YYYY-MM-DD). Check 'Advanced' tab in plugin settings."
-          , 10000);
+        const noticeMsg = this.translationManager?.t("notice_daily_notes_missing")
+          || (isAr
+            ? "لم يتم اكتشاف إعدادات Daily Notes. يتم استخدام الإعدادات الافتراضية (YYYY-MM-DD)."
+            : "Daily Notes settings not detected. Using defaults (YYYY-MM-DD).");
+        NoticeService.warning(noticeMsg, 10000, this);
         this._defaultsWarningShown = true;
       }
 
       if (this.settings.enableMissedDaysNotice) {
-        setTimeout(async () => {
+        this._missedDaysTimer = setTimeout(async () => {
+          if (this._isUnloading) return;
           try {
             const missed = await this.calculateMissedDays();
+            if (this._isUnloading) return;
             if (missed > 1) {
-              const msg = `⚠️ ${missed - 1} ${this.translationManager.t("missed_days_notice")}`;
-              new Notice(msg, 9000);
+              const msg = `${missed - 1} ${this.translationManager.t("missed_days_notice")}`;
+              NoticeService.warning(msg, 9000, this);
             }
           } catch (e) {
             Utils.debugLog(this, "[Missed Days Notice] Failed:", e);
@@ -181,6 +213,12 @@ export default class DailyHabitsPlugin extends Plugin {
     this.registerView(
       VIEW_TYPE_WEEKLY,
       (leaf) => new WeeklyGridView(leaf, this),
+    );
+
+    // Register Habit Edit Popout View
+    this.registerView(
+      VIEW_TYPE_HABIT_EDIT,
+      (leaf) => new HabitEditView(leaf, this),
     );
 
     // Ribbon Icon - opens Weekly View
@@ -204,36 +242,58 @@ export default class DailyHabitsPlugin extends Plugin {
     this.addSettingTab(new DailyHabitsSettingTab(this.app, this));
 
     this.registerEvent(
-      this.app.vault.on('rename', (file, oldPath) => {
-        if (this.isInternalFileOperation) return;
+      this.app.vault.on('create', async (file) => {
+        if (this._isUnloading || this.isFilePathLocked(file?.path)) return;
         if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
-        this.handleVaultRename(file, oldPath);
+        if (this.habitManager) {
+          await this.habitManager.syncFile(file);
+        }
+        if (this._isUnloading) return;
+        if (this.statsService) {
+          await this.statsService.rescanFile(file);
+        }
+      })
+    );
+
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        if (this._isUnloading) return;
+        if (this.isFilePathLocked(file?.path) || this.isFilePathLocked(oldPath)) return;
+        if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
+        void this.statsService.handleFileRename(file, oldPath);
+        void this.handleVaultRename(file, oldPath).catch((error) => {
+          console.error("[Core Habits] Failed to sync renamed habit note:", error);
+        });
       })
     );
 
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => {
-        if (!this.isFullyLoaded || this.startupCooldown) return;
+        if (this._isUnloading || !this.isFullyLoaded || this.startupCooldown) return;
         if (!this.settings.autoWriteHabits || !file || file.extension !== 'md') return;
+        if (!getDailyNoteDate(file, this.app, this.settings)) return;
         
         if (this._openTimeouts.has(file.path)) {
           clearTimeout(this._openTimeouts.get(file.path));
         }
         
         const timeoutId = setTimeout(async () => {
+          if (this._isUnloading) return;
           this._openTimeouts.delete(file.path);
-          const info = getDailyNotesInfo(this.app, this.settings);
-          const format = info.format || "YYYY-MM-DD";
-          
-          // Strict parsing to detect if the opened file is a daily note
-          const parsedDate = window.moment(file.basename, format, true);
-          if (parsedDate.isValid()) {
+          const parsedDate = getDailyNoteDate(file, this.app, this.settings);
+          if (parsedDate) {
               // Only auto-write to the daily note if it is today or in the future
               const today = window.moment();
               if (parsedDate.isBefore(today, 'day')) {
                   return;
               }
-              await this.habitManager.ensureHabitsInNote(parsedDate);
+              try {
+                if (this._isUnloading) return;
+                await this.habitManager.ensureHabitsInNote(parsedDate);
+              } catch (error) {
+                console.error("[Core Habits] Failed to update daily note habits:", error);
+                NoticeService.error(this.translationManager.t("error_modifying_note"), this);
+              }
           }
         }, 1500);
         
@@ -243,11 +303,12 @@ export default class DailyHabitsPlugin extends Plugin {
 
     this.registerEvent(
       this.app.metadataCache.on('changed', async (file) => {
-        if (this.isInternalFileOperation) return;
+        if (this._isUnloading || this.isFilePathLocked(file?.path)) return;
         if (!file || file.extension !== 'md') return;
         if (this.habitManager) {
           await this.habitManager.syncFile(file);
         }
+        if (this._isUnloading) return;
         if (this.statsService) {
           await this.statsService.rescanFile(file);
         }
@@ -256,18 +317,51 @@ export default class DailyHabitsPlugin extends Plugin {
 
     this.registerEvent(
       this.app.vault.on('delete', async (file) => {
-        if (this.isInternalFileOperation) return;
+        if (this._isUnloading || this.isFilePathLocked(file?.path)) return;
         if (this.habitManager) {
           await this.habitManager.removeFile(file);
         }
+        if (this._isUnloading) return;
         if (this.statsService) {
-          this.statsService.handleFileDelete(file);
+          await this.statsService.handleFileDelete(file);
         }
       })
     );
   }
 
+  registerDiaryCacheInvalidation() {
+    const invalidateDailyNote = (file) => {
+      if (this._isUnloading || !file || file.extension !== 'md') return;
+      if (getDailyNoteDate(file, this.app, this.settings)) {
+        this.diaryService.invalidateFile(file.path);
+      }
+    };
+    this.registerEvent(this.app.vault.on('create', invalidateDailyNote));
+    this.registerEvent(this.app.vault.on('modify', invalidateDailyNote));
+    // A rename or deletion can leave entries cached under the former date key.
+    const clearRenamedOrDeleted = (file) => {
+      if (!this._isUnloading && file?.extension === 'md') this.diaryService.clearCache();
+    };
+    this.registerEvent(this.app.vault.on('rename', clearRenamedOrDeleted));
+    this.registerEvent(this.app.vault.on('delete', clearRenamedOrDeleted));
+  }
+
   async onunload() {
+    this._isUnloading = true;
+    this.isFullyLoaded = false;
+    if (this._lockedPaths) {
+      this._lockedPaths.clear();
+      this._lockedPaths = null;
+    }
+    this._globalLockCount = 0;
+    if (this._cooldownTimer) {
+      clearTimeout(this._cooldownTimer);
+      this._cooldownTimer = null;
+    }
+    if (this._missedDaysTimer) {
+      clearTimeout(this._missedDaysTimer);
+      this._missedDaysTimer = null;
+    }
     if (this._openTimeouts) {
       for (const timeoutId of this._openTimeouts.values()) {
         clearTimeout(timeoutId);
@@ -275,10 +369,25 @@ export default class DailyHabitsPlugin extends Plugin {
       this._openTimeouts.clear();
       this._openTimeouts = null;
     }
+    if (this.habitManager) {
+      try {
+        await this.habitManager.flushMilestoneCheckpoints?.();
+      } catch (err) {
+        console.warn("[Core Habits] Error flushing checkpoints on unload:", err);
+      }
+      this.habitManager.destroy();
+    }
     if (this.audioEngine) {
       await this.audioEngine.close();
     }
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_WEEKLY);
+    if (this.statsService) {
+      this.statsService.destroy();
+    }
+    if (this.diaryService) {
+      this.diaryService.clearCache();
+    }
+    StreakCalculator.invalidateAll();
+    VoiceRecorderUtility.cancelRecording();
   }
 
   async activateWeeklyView() {
@@ -295,29 +404,49 @@ export default class DailyHabitsPlugin extends Plugin {
     workspace.revealLeaf(leaf);
   }
 
+  refreshWeeklyViews() {
+    this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
+      if (leaf.view && typeof leaf.view.refresh === "function") {
+        leaf.view.refresh();
+      }
+    });
+  }
+
   async loadSettings() {
     const savedData = await this.loadData() || {};
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
+    const isNewInstall = !savedData || Object.keys(savedData).length === 0 || savedData.language === undefined;
+
+    let initialDefaults = DEFAULT_SETTINGS;
+    if (isNewInstall) {
+      const detectedLang = detectInitialLanguage();
+      const defaultHeadings = getDefaultHeadings(detectedLang);
+      initialDefaults = Object.assign({}, DEFAULT_SETTINGS, {
+        language: detectedLang,
+        showHijriDate: detectedLang === "ar",
+        weekStartDay: detectedLang === "ar" ? 6 : 0,
+        ...defaultHeadings
+      });
+    }
+
+    this.settings = Object.assign({}, initialDefaults, savedData);
     delete this.settings.reflectionJournalPath;
 
-    if (savedData.dailyParentHeading === undefined) {
-      if ((this.settings.habitHeading || "").startsWith("## ")) {
-        this.settings.habitHeading = this.settings.habitHeading.replace(/^##\s+/, "### ");
-      }
-      if ((this.settings.reflectionHeading || "").startsWith("## ")) {
-        this.settings.reflectionHeading = this.settings.reflectionHeading.replace(/^##\s+/, "### ");
-      }
-      if ((this.settings.habitLogHeading || "").startsWith("## ")) {
-        this.settings.habitLogHeading = this.settings.habitLogHeading.replace(/^##\s+/, "### ");
-      }
+    if (MigrationManager.upgradeLegacyHeadings(this.settings, savedData)) {
       await this.saveSettings();
     }
 
-    if (!this.settings.reflectionHeading || this.settings.reflectionHeading.includes("يومياتي")) {
-      this.settings.reflectionHeading = DEFAULT_REFLECTION_HEADING;
+    const isAr = this.settings.language === "ar";
+    if (!this.settings.reflectionHeading) {
+      this.settings.reflectionHeading = isAr ? DEFAULT_REFLECTION_HEADING_AR : DEFAULT_REFLECTION_HEADING_EN;
     }
-    if (!this.settings.habitLogHeading || this.settings.habitLogHeading.includes("سجل المتابعة")) {
-      this.settings.habitLogHeading = DEFAULT_HABIT_NOTES_HEADING;
+    if (!this.settings.habitLogHeading) {
+      this.settings.habitLogHeading = isAr ? DEFAULT_HABIT_NOTES_HEADING_AR : DEFAULT_HABIT_NOTES_HEADING_EN;
+    }
+    if (!this.settings.dailyParentHeading) {
+      this.settings.dailyParentHeading = isAr ? DEFAULT_PARENT_HEADING_AR : DEFAULT_PARENT_HEADING_EN;
+    }
+    if (!this.settings.habitHeading) {
+      this.settings.habitHeading = isAr ? DEFAULT_HABIT_HEADING_AR : DEFAULT_HABIT_HEADING_EN;
     }
     if (!["grouped", "timeline", "types"].includes(this.settings.diaryViewMode)) {
       this.settings.diaryViewMode = "grouped";
@@ -359,48 +488,11 @@ export default class DailyHabitsPlugin extends Plugin {
   }
 
   /**
-   * Migrate old habits data to v3.0 format (Files as Source of Truth)
+   * Migrate old habits data to v3.0 format (Files as Source of Truth).
+   * Kept as delegator for backward compatibility.
    */
   async migrateV3Data() {
-    if (this.settings.v3Migrated) return;
-
-    if (this.settings.habits && Array.isArray(this.settings.habits) && this.settings.habits.length > 0) {
-      Utils.debugLog(this, `Migrating ${this.settings.habits.length} habits to v3 (Files-based)`);
-      
-      for (const habit of this.settings.habits) {
-        let file = this.habitNoteManager._findFileByHabitId(habit.id);
-        if (!file) {
-          const expectedPath = this.habitNoteManager.getHabitFilePath(habit.name, habit.archived);
-          file = this.app.vault.getAbstractFileByPath(expectedPath);
-        }
-
-        if (file) {
-          const props = this.habitNoteManager._habitToProps(habit);
-          await this.habitNoteManager.updateHabitNoteProps(file.path, props);
-        } else {
-          await this.habitNoteManager.createHabitNote(habit);
-        }
-      }
-
-      this.settings.habitsBackup = this.settings.habits;
-      this.settings.habits = [];
-    }
-    
-    // تنظيف collapsedGroups من IDs غير موجودة
-    if (Array.isArray(this.settings.collapsedGroups) && this.habitManager) {
-      const habitIds = new Set(this.habitManager.getHabits().map(h => h.id));
-      const cleaned = this.settings.collapsedGroups.filter(key => {
-        const id = key.split(":")[0];
-        return habitIds.has(id);
-      });
-      if (cleaned.length !== this.settings.collapsedGroups.length) {
-        this.settings.collapsedGroups = cleaned;
-      }
-    }
-
-    this.settings.v3Migrated = true;
-    await this.saveSettings();
-    Utils.debugLog(this, `V3 Migration complete!`);
+    return await this.migrationManager.migrateV3Data();
   }
 
   async saveSettings(options = {}) {
@@ -416,55 +508,153 @@ export default class DailyHabitsPlugin extends Plugin {
 
   async calculateMissedDays() {
     try {
-      const info = getDailyNotesInfo(this.app, this.settings);
-      const format = info.format || "YYYY-MM-DD";
-      const folder = info.folder || "";
-      
-      // LEGITIMATE USE: Vault scanning is required to locate daily notes in order to calculate missed days and streaks for active habits.
-      let files = this.app.vault.getMarkdownFiles();
-      if (folder) {
-        files = files.filter(f => f.path.startsWith(folder));
-      }
-      
-      const dates = [];
       const today = window.moment().startOf("day");
-      
-      for (const file of files) {
-        const parsed = window.moment(file.basename, format, true);
-        if (parsed.isValid()) {
-          const fileDate = parsed.startOf("day");
-          if (fileDate.isBefore(today)) {
-            dates.push(fileDate);
-          }
+      // Check backwards up to 60 days for the most recent daily note without scanning the entire vault
+      for (let diff = 1; diff <= 60; diff++) {
+        const pastDay = today.clone().subtract(diff, "days");
+        const file = await getNoteByDate(this.app, pastDay, false, this.settings);
+        if (file) {
+          return diff;
         }
       }
-      
-      if (dates.length === 0) return 0;
-      
-      // Sort descending (most recent first)
-      dates.sort((a, b) => b.valueOf() - a.valueOf());
-      
-      const mostRecent = dates[0];
-      const diffDays = today.diff(mostRecent, "days");
-      return diffDays;
+      return 0;
     } catch (e) {
       console.warn("[Core Habits] Failed to calculate missed days:", e);
       return 0;
     }
   }
 
-  get isInternalFileOperation() {
-    return (this.lockCount || 0) > 0;
+  isFilePathLocked(filePath) {
+    if ((this._globalLockCount || 0) > 0) return true;
+    if (!filePath || !this._lockedPaths || this._lockedPaths.size === 0) return false;
+    const normalized = normalizePath(filePath.replace(/\\/g, "/"));
+    if (this._lockedPaths.has(normalized)) return true;
+    for (const locked of this._lockedPaths.keys()) {
+      if (normalized === locked || normalized.startsWith(locked + "/")) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  async runWithLock(callback) {
-    if (this.lockCount === undefined) this.lockCount = 0;
-    this.lockCount++;
+  get isInternalFileOperation() {
+    return (this._globalLockCount || 0) > 0 || (this._lockedPaths?.size || 0) > 0;
+  }
+
+  get lockCount() {
+    return (this._globalLockCount || 0) + (this._lockedPaths?.size || 0);
+  }
+
+  set lockCount(val) {
+    this._globalLockCount = Math.max(0, val || 0);
+  }
+
+  async runWithLock(callback, targetPaths = []) {
+    let fn = callback;
+    let paths = targetPaths;
+    if (typeof callback !== 'function' && typeof targetPaths === 'function') {
+      fn = targetPaths;
+      paths = callback;
+    }
+    if (typeof fn !== 'function') {
+      throw new Error('runWithLock requires a callable function');
+    }
+
+    const rawPaths = Array.isArray(paths) ? paths : (paths ? [paths] : []);
+    const normalizedPaths = rawPaths
+      .map(p => (typeof p === 'string' ? p : p?.path))
+      .filter(Boolean)
+      .map(p => normalizePath(p.replace(/\\/g, "/")));
+
+    const isGlobal = normalizedPaths.length === 0;
+    if (isGlobal) {
+      this._globalLockCount = (this._globalLockCount || 0) + 1;
+    } else {
+      if (!this._lockedPaths) this._lockedPaths = new Map();
+      for (const p of normalizedPaths) {
+        this._lockedPaths.set(p, (this._lockedPaths.get(p) || 0) + 1);
+      }
+    }
+
     try {
-      return await callback();
+      return await fn();
     } finally {
       await new Promise(resolve => setTimeout(resolve, 150));
-      this.lockCount = Math.max(0, this.lockCount - 1);
+      if (!this._isUnloading) {
+        if (isGlobal) {
+          this._globalLockCount = Math.max(0, (this._globalLockCount || 0) - 1);
+        } else if (this._lockedPaths) {
+          for (const p of normalizedPaths) {
+            const count = this._lockedPaths.get(p) || 0;
+            if (count <= 1) {
+              this._lockedPaths.delete(p);
+            } else {
+              this._lockedPaths.set(p, count - 1);
+            }
+          }
+        }
+      }
     }
   }
-};
+
+  /**
+   * Centralized habit editor launcher.
+   * On Desktop: opens Native Popout Window via official openPopoutLeaf.
+   * On Mobile: opens responsive EditHabitModal.
+   * Smart single-instance management: focuses existing popout if already open.
+   * @param {Object} habit
+   * @param {Function} onSubmit
+   */
+  async openEditHabit(habit, onSubmit) {
+    if (Platform.isMobile) {
+      new EditHabitModal(this.app, this, habit, onSubmit).open();
+      return;
+    }
+
+    if (typeof this.app?.workspace?.openPopoutLeaf === 'function') {
+      const existingLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_HABIT_EDIT);
+      if (existingLeaves && existingLeaves.length > 0) {
+        const leaf = existingLeaves[0];
+        const view = leaf.view;
+        if (view instanceof HabitEditView || typeof view?.setHabit === 'function') {
+          // If already editing this habit, focus the window
+          if (view.habit?.id === habit.id) {
+            this.app.workspace.setActiveLeaf(leaf, { focus: true });
+            if (view.containerEl?.win) view.containerEl.win.focus();
+            return;
+          }
+
+          // If different habit and current is dirty, warn before switching
+          if (typeof view.isDirty === 'function' && view.isDirty()) {
+            this.app.workspace.setActiveLeaf(leaf, { focus: true });
+            if (view.containerEl?.win) view.containerEl.win.focus();
+            const t = (k, p = {}) => this.translationManager.t(k, p);
+            NoticeService.warning(t("confirm_discard_changes_desc") || "لديك تعديلات غير محفوظة في نافذة التعديل المفتوحة.", this);
+            return;
+          }
+
+          // Update habit in existing window and bring to front
+          await view.setHabit(habit, onSubmit);
+          this.app.workspace.setActiveLeaf(leaf, { focus: true });
+          if (view.containerEl?.win) view.containerEl.win.focus();
+          return;
+        }
+      }
+
+      // Open new popout leaf with comfortable desktop dimensions
+      const leaf = this.app.workspace.openPopoutLeaf({
+        size: { width: 720, height: 640 }
+      });
+      await leaf.setViewState({
+        type: VIEW_TYPE_HABIT_EDIT,
+        active: true
+      });
+      const view = leaf.view;
+      if (view instanceof HabitEditView || typeof view?.setHabit === 'function') {
+        await view.setHabit(habit, onSubmit);
+      }
+    } else {
+      new EditHabitModal(this.app, this, habit, onSubmit).open();
+    }
+  }
+}

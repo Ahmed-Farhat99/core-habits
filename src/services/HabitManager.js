@@ -1,34 +1,43 @@
 import { Utils } from '../utils/Utils.js';
-import { getNoteByDate, TextUtils, findHabitEntry, buildHierarchyLabels } from '../utils/helpers.js';
+import { getNoteByDate, TextUtils, findHabitEntry, buildHierarchyLabels, getDailyNotesInfo, getDailyNotePath } from '../utils/helpers.js';
 import { inspectHabitContract, HABIT_SCHEMA_VERSION } from '../domain/HabitDataContract.js';
+import { HabitEntity } from '../domain/HabitEntity.js';
+import { ProgressionEngine } from './ProgressionEngine.js';
 import { StreakCalculator } from './StreakCalculator.js';
-import { Modal, Notice } from 'obsidian';
+import { NoticeService } from './NoticeService.js';
 import { RenameProgressModal } from '../modals/RenameProgressModal.js';
-import { TRANSLATIONS } from '../constants.js';
+import { TranslationManager } from './TranslationManager.js';
+import { VaultOrderStore } from './VaultOrderStore.js';
+import {
+  KNOWN_HABIT_HEADINGS,
+  DEFAULT_PARENT_HEADING,
+  DEFAULT_PARENT_HEADING_EN,
+  DEFAULT_HABIT_HEADING
+} from '../constants.js';
 
 export class HabitManager {
   constructor(plugin) {
     this.plugin = plugin;
+    this.vaultOrderStore = new VaultOrderStore(plugin?.app, plugin);
     this.habitsMap = new Map();
+    this._pendingMoveTimeouts = new Map();
     this.isInitialized = false;
   }
 
-  t(key, params = {}) {
-    if (this.plugin.translationManager) {
-      return this.plugin.translationManager.t(key, params);
-    }
-    const lang = this.plugin.settings?.language || "en";
-    const dict = TRANSLATIONS[lang] || TRANSLATIONS["en"];
-    let text = dict[key] || TRANSLATIONS["en"][key] || key;
-    Object.keys(params).forEach((param) => {
-      text = text.replace(`{${param}}`, params[param]);
-    });
-    return text;
+  get repository() {
+    return this.plugin?.habitRepository || null;
   }
 
-  async runWithLock(callback) {
+  t(key, params = {}) {
+    if (this.plugin?.translationManager?.t) {
+      return this.plugin.translationManager.t(key, params);
+    }
+    return new TranslationManager(this.plugin).t(key, params);
+  }
+
+  async runWithLock(callback, targetPaths = []) {
     if (this.plugin && typeof this.plugin.runWithLock === 'function') {
-      return await this.plugin.runWithLock(callback);
+      return await this.plugin.runWithLock(callback, targetPaths);
     }
     return await callback();
   }
@@ -37,85 +46,196 @@ export class HabitManager {
    * Initializes the HabitManager by reading all habit files from the vault.
    */
   async initialize() {
-    this.habitsMap.clear();
-    if (this.plugin.habitRepository) {
-      const habits = await this.plugin.habitRepository.loadAll();
-      for (const habit of habits) {
-        if (habit && habit.id) {
-          const contractErrors = inspectHabitContract(habit);
-          if (contractErrors.length > 0) {
-            console.warn(`[Core Habits] Habit contract validation failed for loaded habit "${habit.name}":`, contractErrors);
-          }
-          this.habitsMap.set(habit.id, habit);
+    const loaded = new Map();
+    const repo = this.repository;
+    if (!repo) throw new Error("Habit repository is unavailable");
+    const habits = await repo.loadAll();
+    for (const habit of habits) {
+      if (habit && habit.id) {
+        const contractErrors = inspectHabitContract(habit);
+        if (contractErrors.length > 0) {
+          console.warn(`[Core Habits] Habit contract validation failed for loaded habit "${habit.name}":`, contractErrors);
         }
+        loaded.set(habit.id, habit);
       }
     }
+    this.habitsMap = loaded;
+    await this.reconcileHabitOrder();
     this.isInitialized = true;
     Utils.debugLog(this.plugin, `HabitManager initialized with ${this.habitsMap.size} habits.`);
   }
 
+  /**
+   * Reconciles habit ordering using VaultOrderStore (_order.md) as the Single Source of Truth,
+   * with data.json as a fast runtime cache and deterministic fallback reconstruction.
+   */
+  async reconcileHabitOrder() {
+    if (!this.plugin?.settings) return;
+
+    const loadedHabits = Array.from(this.habitsMap.values());
+    const validIds = new Set(loadedHabits.map((h) => h.id));
+
+    // 1. Read portable persistent source of truth from Vault (_order.md)
+    let vaultOrderData = null;
+    if (this.vaultOrderStore) {
+      try {
+        vaultOrderData = await this.vaultOrderStore.readOrder();
+      } catch (err) {
+        console.error("[Core Habits] Failed to read order from VaultOrderStore:", err);
+      }
+    }
+
+    // 2. Read fast cache from data.json
+    const cachedOrder = Array.isArray(this.plugin.settings.habitOrder)
+      ? [...this.plugin.settings.habitOrder]
+      : [];
+    const cachedVersion = this.plugin.settings.habitOrderVersion || 0;
+
+    let baseOrder;
+    let currentVersion;
+    let mustWriteVault = false;
+
+    if (vaultOrderData && Array.isArray(vaultOrderData.habitOrder) && vaultOrderData.habitOrder.length > 0) {
+      currentVersion = vaultOrderData.orderVersion || 0;
+      // Vault order strictly WINS over cache
+      baseOrder = [...vaultOrderData.habitOrder];
+    } else if (cachedOrder.length > 0) {
+      // Vault file missing, but local cache exists: use cache as bridge to populate Vault
+      baseOrder = [...cachedOrder];
+      currentVersion = cachedVersion;
+      mustWriteVault = true;
+    } else {
+      // Both Vault file and cache are missing (cold start / fresh recovery):
+      // Deterministically reconstruct from actual habit notes
+      const sorted = VaultOrderStore.sortHabitsDeterministically(loadedHabits);
+      baseOrder = sorted.map((h) => h.id);
+      currentVersion = 0;
+      mustWriteVault = true;
+    }
+
+    // 3. Prune IDs that no longer exist in loaded habit files
+    let reconciled = baseOrder.filter((id) => validIds.has(id));
+    if (reconciled.length !== baseOrder.length) {
+      mustWriteVault = true;
+    }
+
+    // 4. Append any newly loaded habits not present in order (deterministic sort)
+    const unlisted = loadedHabits.filter((h) => !reconciled.includes(h.id));
+    if (unlisted.length > 0) {
+      const sortedUnlisted = VaultOrderStore.sortHabitsDeterministically(unlisted);
+      for (const h of sortedUnlisted) {
+        reconciled.push(h.id);
+      }
+      mustWriteVault = true;
+    }
+
+    // 5. If Vault file was missing or modified during reconciliation, write it back
+    if (mustWriteVault && loadedHabits.length > 0 && this.vaultOrderStore) {
+      try {
+        const written = await this.vaultOrderStore.writeOrder(reconciled, currentVersion);
+        currentVersion = written.orderVersion;
+      } catch (err) {
+        console.error("[Core Habits] Failed to write reconciled order to VaultOrderStore:", err);
+      }
+    }
+
+    // 6. Update local fast cache (data.json) only if changed
+    const prevOrder = Array.isArray(this.plugin.settings.habitOrder) ? this.plugin.settings.habitOrder : [];
+    const prevVersion = this.plugin.settings.habitOrderVersion || 0;
+    const orderChanged = JSON.stringify(prevOrder) !== JSON.stringify(reconciled)
+      || (reconciled.length > 0 && prevVersion !== currentVersion);
+    if (orderChanged) {
+      this.plugin.settings.habitOrder = reconciled;
+      this.plugin.settings.habitOrderVersion = currentVersion;
+      if (typeof this.plugin.saveSettings === "function") {
+        await this.plugin.saveSettings({ silent: true });
+      }
+    }
+
+    // 7. Apply resolved order index to all loaded habits in memory
+    for (const habit of loadedHabits) {
+      const idx = reconciled.indexOf(habit.id);
+      habit.order = idx !== -1 ? idx : 0;
+    }
+  }
+
   async syncFile(file) {
+    if (this.vaultOrderStore && file.path === this.vaultOrderStore.getOrderFilePath()) {
+      await this.reconcileHabitOrder();
+      this.invalidateCaches();
+      return;
+    }
+
     const activeFolder = this.plugin.habitNoteManager.getActiveFolder();
     const archiveFolder = this.plugin.habitNoteManager.getArchiveFolder();
     
-    const isInsideActive = file.path.startsWith(activeFolder);
-    const isInsideArchive = file.path.startsWith(archiveFolder);
+    const isInsideActive = file.path.startsWith(`${activeFolder}/`);
+    const isInsideArchive = file.path.startsWith(`${archiveFolder}/`);
 
     if (isInsideActive || isInsideArchive) {
-      const props = await this.plugin.habitNoteManager.readHabitNoteProps(file.path);
-      if (props) {
-        const content = await this.plugin.app.vault.cachedRead(file);
-        const habit = this.plugin.habitNoteManager.propsToHabit(file, props, content);
-        if (habit && habit.id) {
-          
-          if (habit.archived && isInsideActive) {
-            setTimeout(async () => {
+      const habit = await this.repository.loadFile(file);
+      if (habit && habit.id) {
+          const needsMoveToArchive = habit.archived && isInsideActive;
+          const needsMoveToActive = !habit.archived && isInsideArchive;
+
+          if (needsMoveToArchive || needsMoveToActive) {
+            // Cancel any pending timer for this habit to debounce rapid changes
+            if (this._pendingMoveTimeouts.has(habit.id)) {
+              clearTimeout(this._pendingMoveTimeouts.get(habit.id));
+              this._pendingMoveTimeouts.delete(habit.id);
+            }
+
+            const targetArchived = habit.archived;
+            const timerId = setTimeout(async () => {
+              this._pendingMoveTimeouts.delete(habit.id);
               try {
+                const currentHabit = this.getHabitById(habit.id);
+                if (!currentHabit || currentHabit.deleted) return;
+                if (currentHabit.archived !== targetArchived) return;
+
+                const currentFile = this.repository.resolveHabitFile(currentHabit)
+                  || this.plugin.app.vault.getAbstractFileByPath(file.path);
+                if (!currentFile) return;
+
+                const destPath = this.plugin.habitNoteManager.getHabitFilePath(currentHabit.name, targetArchived);
+                if (currentFile.path === destPath) return;
+
                 await this.runWithLock(async () => {
-                  const currentFile = this.plugin.app.vault.getAbstractFileByPath(file.path);
-                  if (currentFile) {
-                    const destPath = this.plugin.habitNoteManager.getHabitFilePath(habit.name, true);
-                    await this.plugin.app.fileManager.renameFile(currentFile, destPath);
-                  }
-                });
+                  await this.plugin.habitNoteManager.ensureFolders();
+                  await this.plugin.app.vault.rename(currentFile, destPath);
+                }, [currentFile.path, destPath]);
               } catch (e) {
-                console.warn("[Core Habits] Auto-archive rename failed:", e);
+                console.warn(`[Core Habits] Auto-sync move failed for habit "${habit.name}":`, e);
               }
             }, 500);
-          } else if (!habit.archived && isInsideArchive) {
-            setTimeout(async () => {
-              try {
-                await this.runWithLock(async () => {
-                  const currentFile = this.plugin.app.vault.getAbstractFileByPath(file.path);
-                  if (currentFile) {
-                    const destPath = this.plugin.habitNoteManager.getHabitFilePath(habit.name, false);
-                    await this.plugin.app.fileManager.renameFile(currentFile, destPath);
-                  }
-                });
-              } catch (e) {
-                console.warn("[Core Habits] Auto-restore rename failed:", e);
-              }
-            }, 500);
+
+            this._pendingMoveTimeouts.set(habit.id, timerId);
+          } else {
+            // State does not need move (e.g. user quickly reverted changes) — cancel pending timer
+            if (this._pendingMoveTimeouts.has(habit.id)) {
+              clearTimeout(this._pendingMoveTimeouts.get(habit.id));
+              this._pendingMoveTimeouts.delete(habit.id);
+            }
           }
 
           this.habitsMap.set(habit.id, habit);
-        }
+          this.plugin.habitNoteManager?.indexHabitFile?.(habit.id, file.path);
+          if (this.plugin.settings?.habitOrder && Array.isArray(this.plugin.settings.habitOrder)) {
+            if (!this.plugin.settings.habitOrder.includes(habit.id)) {
+              await this.persistHabitOrder([...this.plugin.settings.habitOrder, habit.id]);
+            } else {
+              habit.order = this.plugin.settings.habitOrder.indexOf(habit.id);
+            }
+          }
       }
     }
   }
 
   invalidateCaches() {
-    StreakCalculator.invalidateAll();
-    if (this.plugin.app && this.plugin.app.workspace) {
-      this.plugin.app.workspace.getLeavesOfType("weekly-habits-view").forEach((leaf) => {
-        if (leaf.view) {
-          leaf.view._lastFourWeeksCache = null;
-          leaf.view.lastWeekRatesCache = null;
-          if (leaf.view.streakContentCache) {
-            leaf.view.streakContentCache.clear();
-          }
-        }
-      });
+    if (this.plugin?.statsService) this.plugin.statsService.invalidateCache();
+    else {
+      StreakCalculator.invalidateAll();
+      this.plugin?.app?.workspace?.trigger?.("core-habits:cache-invalidated");
     }
   }
 
@@ -124,36 +244,76 @@ export class HabitManager {
    * @param {import('obsidian').TAbstractFile} file 
    */
   async removeFile(file) {
+    if (this.vaultOrderStore && file.path === this.vaultOrderStore.getOrderFilePath()) {
+      await this.reconcileHabitOrder();
+      this.invalidateCaches();
+      return;
+    }
+
     let changed = false;
+    const deletedFileId = this.plugin.app?.metadataCache?.getFileCache?.(file)?.frontmatter?.habit_id
+      || this.plugin.habitNoteManager?.getHabitIdByPath?.(file.path);
     for (const [id, habit] of this.habitsMap.entries()) {
       const expectedPath = this.plugin.habitNoteManager.getHabitFilePath(habit.name, habit.archived);
-      if (expectedPath === file.path || habit.name === file.basename) {
+      const insideHabitFolder = file.path.startsWith(`${this.plugin.habitNoteManager.getActiveFolder()}/`)
+        || file.path.startsWith(`${this.plugin.habitNoteManager.getArchiveFolder()}/`);
+      if (expectedPath === file.path || (insideHabitFolder && deletedFileId === id)) {
+        if (this._pendingMoveTimeouts.has(id)) {
+          clearTimeout(this._pendingMoveTimeouts.get(id));
+          this._pendingMoveTimeouts.delete(id);
+        }
         this.habitsMap.delete(id);
-
-        if (!this.plugin.settings.deletedHabits) {
-          this.plugin.settings.deletedHabits = [];
+        this.plugin.habitNoteManager?.unindexHabitFile?.(file.path);
+        this.plugin.habitNoteManager?.unindexHabitFile?.(id);
+        if (this.plugin.settings?.habitOrder && Array.isArray(this.plugin.settings.habitOrder)) {
+          const prevLen = this.plugin.settings.habitOrder.length;
+          const filtered = this.plugin.settings.habitOrder.filter((hId) => hId !== id);
+          if (filtered.length !== prevLen) {
+            await this.persistHabitOrder(filtered);
+          }
         }
-        if (!this.plugin.settings.deletedHabits.includes(habit.name)) {
-          this.plugin.settings.deletedHabits.push(habit.name);
-          changed = true;
-        }
-        if (habit.linkText && !this.plugin.settings.deletedHabits.includes(habit.linkText)) {
-          this.plugin.settings.deletedHabits.push(habit.linkText);
-          changed = true;
-        }
+        changed = true;
       }
     }
     if (changed) {
-      await this.plugin.saveSettings();
+      this.invalidateCaches();
     }
   }
 
-  getHabits() {
-    return Array.from(this.habitsMap.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  /**
+   * Cleans up all pending timers and internal maps on plugin unload.
+   */
+  destroy() {
+    if (this._pendingMoveTimeouts) {
+      for (const timerId of this._pendingMoveTimeouts.values()) {
+        clearTimeout(timerId);
+      }
+      this._pendingMoveTimeouts.clear();
+    }
+    if (this._checkpointTimers) {
+      for (const timer of this._checkpointTimers.values()) {
+        clearTimeout(timer);
+      }
+      this._checkpointTimers.clear();
+    }
+    this.habitsMap?.clear();
   }
 
-  // eslint-disable-next-line no-unused-vars
-  getHabitsForTimeRange(rangeStartMs, rangeEndMs) {
+  getHabits() {
+    const orderList = Array.isArray(this.plugin?.settings?.habitOrder) ? this.plugin.settings.habitOrder : null;
+    return Array.from(this.habitsMap.values()).sort((a, b) => {
+      if (orderList) {
+        const idxA = orderList.indexOf(a.id);
+        const idxB = orderList.indexOf(b.id);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+      }
+      return (a.order || 0) - (b.order || 0);
+    });
+  }
+
+  getHabitsForTimeRange(rangeStartMs) {
     const allHabits = this.getHabits();
     return allHabits.filter((habit) => {
       if (habit.deleted) return false;
@@ -171,13 +331,44 @@ export class HabitManager {
     return this.habitsMap.get(id) || null;
   }
 
+  /**
+   * Resolves a habit by name, linkText, or nameHistory (case-insensitive and Arabic folding aware).
+   * @param {string} habitName
+   * @returns {object|null}
+   */
+  findHabitByNameOrAlias(habitName) {
+    if (!habitName) return null;
+    const cleanName = TextUtils.clean(habitName);
+    const targetNameFolded = TextUtils.foldArabic(cleanName);
+    return this.getHabits().find((h) =>
+      TextUtils.foldArabic(h.name) === targetNameFolded ||
+      TextUtils.foldArabic(h.linkText || "") === targetNameFolded ||
+      (h.nameHistory || []).some(
+        (n) => TextUtils.foldArabic(n.replace(/\[\[|\]\]/g, "")) === targetNameFolded
+      )
+    ) || null;
+  }
+
   async addHabit(habitData) {
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+    const habitPath = habitData?.name ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habitData.name, habitData.archived ?? false) : null;
+    const targetPaths = [habitPath, orderPath].filter(Boolean);
     return await this.runWithLock(async () => {
       delete habitData._renameInFiles;
       delete habitData.isArchived;
 
       const errors = this.validateHabit(habitData);
       if (errors.length > 0) throw new Error(`Validation failed: ${errors.join(", ")}`);
+
+      // Enforce 50 active habits hard cap
+      if (!habitData.archived && this.getActiveHabits().length >= 50) {
+        const isAr = this.plugin?.settings?.language === "ar";
+        const msg = this.t("error_max_habits_reached")
+          || (isAr
+            ? "تم الوصول للحد الأقصى (50 عادة نشطة). لا يمكن إضافة المزيد من العادات."
+            : "Maximum limit reached (50 active habits). Cannot add more habits.");
+        throw new Error(msg);
+      }
 
       // Check all habits (active and archived) for duplicate names to prevent collisions
       const existingHabit = this.getHabits().find(
@@ -186,90 +377,83 @@ export class HabitManager {
       if (existingHabit) {
         if (existingHabit.deleted) {
           // Restore the soft-deleted habit!
-          existingHabit.deleted = false;
-          existingHabit.archived = habitData.archived ?? false;
-          existingHabit.schedule = habitData.schedule || existingHabit.schedule;
-          existingHabit.color = habitData.color || existingHabit.color;
-          existingHabit.parentId = habitData.parentId || existingHabit.parentId || null;
-          existingHabit.habitType = habitData.habitType || existingHabit.habitType || "build";
-          existingHabit.atomicDescription = habitData.atomicDescription || existingHabit.atomicDescription || null;
-          existingHabit.notes = habitData.notes || existingHabit.notes || null;
-          
-          // Move the file to the correct location (Active or Archive)
-          const currentFile = this.plugin.habitNoteManager._resolveHabitFile(existingHabit);
-          const destPath = this.plugin.habitNoteManager.getHabitFilePath(existingHabit.name, existingHabit.archived);
-          if (currentFile && currentFile.path !== destPath) {
-            await this.plugin.app.fileManager.renameFile(currentFile, destPath);
+          const restored = { ...existingHabit };
+          restored.deleted = false;
+          restored.archived = habitData.archived ?? false;
+          restored.restoredDate = restored.archived ? existingHabit.restoredDate : Date.now();
+          restored.schedule = habitData.schedule ?? existingHabit.schedule;
+          restored.color = habitData.color ?? existingHabit.color;
+          restored.parentId = habitData.parentId ?? existingHabit.parentId ?? null;
+          restored.habitType = habitData.habitType ?? existingHabit.habitType ?? "build";
+          if (habitData.atomicDescription && Object.keys(habitData.atomicDescription).length > 0) {
+            restored.atomicDescription = habitData.atomicDescription;
           }
-          
-          // Update frontmatter
-          const props = this.plugin.habitNoteManager._habitToProps(existingHabit);
-          await this.plugin.habitNoteManager.updateHabitNoteProps(destPath, props);
-          
-          if (this.plugin.settings.deletedHabits) {
-            const nameLower = existingHabit.name.toLowerCase();
-            const linkLower = existingHabit.linkText.toLowerCase();
-            this.plugin.settings.deletedHabits = this.plugin.settings.deletedHabits.filter(
-              (n) => n.toLowerCase() !== nameLower && n.toLowerCase() !== linkLower
-            );
-            await this.plugin.saveSettings();
-          }
+          if (habitData.notes != null) restored.notes = habitData.notes;
 
-          this.habitsMap.set(existingHabit.id, existingHabit);
+          try {
+            if (restored.archived) await this.repository.archive(restored);
+            else await this.repository.restore(restored);
+          }
+          catch (error) { await this.initialize(); throw error; }
+          
+          this.habitsMap.set(restored.id, restored);
           this.invalidateCaches();
-          return existingHabit;
+
+          return restored;
         } else {
           throw new Error(this.t("error_duplicate_habit_name", { name: habitData.name }));
         }
       }
 
-      const linkText = habitData.linkText || `[[${habitData.name.trim()}]]`;
-      const newHabit = {
-        schemaVersion: HABIT_SCHEMA_VERSION,
-        id: habitData.id || `habit-${Date.now()}`,
+      const entity = new HabitEntity({
+        ...habitData,
+        id: habitData.id || `habit-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
+        schemaVersion: habitData.schemaVersion ?? HABIT_SCHEMA_VERSION,
         createdAt: habitData.createdAt || Date.now(),
-        name: habitData.name,
-        linkText: linkText,
-        schedule: habitData.schedule || { type: "daily", days: [0, 1, 2, 3, 4, 5, 6] },
-        levelData: habitData.levelData || null,
-        currentLevel: habitData.currentLevel || 1,
-        order: habitData.order ?? this.getActiveHabits().length,
-        archived: habitData.archived ?? false,
-        archivedDate: habitData.archivedDate || null,
-        habitType: habitData.habitType || "build",
-        atomicDescription: habitData.atomicDescription || null,
-        parentId: habitData.parentId || null,
+        name: habitData.name.trim(),
+        linkText: habitData.linkText || `[[${habitData.name.trim()}]]`,
         color: habitData.color || "teal",
-        notes: habitData.notes || null,
-        savedLongestStreak: habitData.savedLongestStreak || 0,
-        nameHistory: [],
-      };
+        order: habitData.order ?? this.getActiveHabits().length,
+        savedLongestStreak: habitData.savedLongestStreak || 0
+      });
 
-      const contractErrors = inspectHabitContract(newHabit);
+      const contractErrors = entity.validate();
       if (contractErrors.length > 0) {
         throw new Error(`Contract validation failed: ${contractErrors.join(", ")}`);
       }
 
-      if (this.plugin.settings.deletedHabits) {
-        const nameLower = newHabit.name.toLowerCase();
-        const linkLower = newHabit.linkText.toLowerCase();
-        this.plugin.settings.deletedHabits = this.plugin.settings.deletedHabits.filter(
-          (n) => n.toLowerCase() !== nameLower && n.toLowerCase() !== linkLower
-        );
-        await this.plugin.saveSettings();
-      }
+      const newHabit = entity.toJSON();
+      if (this.habitsMap.has(newHabit.id)) throw new Error(`Habit ID already exists: ${newHabit.id}`);
 
-      if (this.plugin.habitRepository) {
-        await this.plugin.habitRepository.create(newHabit);
-      }
+      try { await this.repository.create(newHabit); }
+      catch (error) { await this.initialize(); throw error; }
       
       this.habitsMap.set(newHabit.id, newHabit);
+
+      // Maintain habitOrder in VaultOrderStore and settings cache
+      if (this.plugin.settings) {
+        const currentOrder = Array.isArray(this.plugin.settings.habitOrder)
+          ? [...this.plugin.settings.habitOrder]
+          : [];
+        if (!currentOrder.includes(newHabit.id)) {
+          currentOrder.push(newHabit.id);
+          await this.persistHabitOrder(currentOrder);
+        }
+      }
+
       this.invalidateCaches();
       return newHabit;
-    });
+    }, targetPaths);
   }
 
-  async updateHabit(id, habitData) {
+  async updateHabit(id, habitData, uiHandlers = {}) {
+    const currentHabit = this.getHabitById(id);
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+    const currentPath = currentHabit ? this.repository?.resolveHabitFile?.(currentHabit)?.path : null;
+    const newPath = (currentHabit && habitData?.name)
+      ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habitData.name, currentHabit.archived)
+      : null;
+    const targetPaths = [currentPath, newPath, orderPath].filter(Boolean);
     return await this.runWithLock(async () => {
       const shouldRenameAll = habitData._renameInFiles;
       delete habitData._renameInFiles;
@@ -289,25 +473,28 @@ export class HabitManager {
         }
       }
 
+      const oldLongest = currentHabit.savedLongestStreak || 0;
+      const newLongest = Math.max(oldLongest, habitData.savedLongestStreak || 0);
       const nameChanged = habitData.name && habitData.name.trim() !== currentHabit.name.trim();
-      if (nameChanged) {
-        if (!currentHabit.nameHistory) currentHabit.nameHistory = [];
-        if (!currentHabit.nameHistory.includes(currentHabit.linkText)) {
-          currentHabit.nameHistory.push(currentHabit.linkText);
-        }
-      }
 
       const updated = {
         ...currentHabit,
         ...habitData,
         id,
-        schemaVersion: HABIT_SCHEMA_VERSION,
-        nameHistory: currentHabit.nameHistory || [],
+        savedLongestStreak: newLongest,
+        schemaVersion: Math.max(currentHabit.schemaVersion || 0, HABIT_SCHEMA_VERSION),
+        nameHistory: nameChanged
+          ? [...new Set([...(currentHabit.nameHistory || []), currentHabit.linkText].filter(Boolean))]
+          : [...(currentHabit.nameHistory || [])],
       };
 
       if (nameChanged) {
         updated.linkText = `[[${habitData.name.trim()}]]`;
       }
+
+      const effectiveLevel = habitData.currentLevel 
+        || ProgressionEngine.calculateLevel(updated, null, updated.levelData);
+      updated.currentLevel = Math.max(currentHabit.currentLevel || 1, effectiveLevel);
 
       const contractErrors = inspectHabitContract(updated);
       if (contractErrors.length > 0) {
@@ -317,101 +504,91 @@ export class HabitManager {
       const oldName = currentHabit.name;
       const newName = habitData.name ? habitData.name.trim() : "";
 
-      if (shouldRenameAll && nameChanged) {
-        // 1. Rename the physical file first
-        await this.renameHabitFile(currentHabit, newName);
-      }
-
-      if (this.plugin.habitRepository) {
-        await this.plugin.habitRepository.update(updated);
-      }
+      try { await this.repository.update(updated); }
+      catch (error) { await this.initialize(); throw error; }
 
       this.habitsMap.set(updated.id, updated);
       this.invalidateCaches();
 
       if (shouldRenameAll && nameChanged) {
         // 2. Perform the batch renaming of daily notes habit references
-        const t = (key, params) => this.t(key, params);
         const prep = await this.prepareBatchRename(id, oldName);
 
-        if (prep.needsConfirmation) {
-          const confirmModal = new Modal(this.plugin.app);
-          const confirmed = confirmModal.contentEl
-            ? await new Promise((resolve) => {
-                const { contentEl } = confirmModal;
-                contentEl.createEl("h2", { text: t("rename_confirm_title") });
-                contentEl.createEl("p", { text: t("rename_confirm_desc", { oldName, newName, count: prep.fileCount }) });
-                const footer = contentEl.createDiv({ cls: "modal-button-container" });
-                footer.createEl("button", { text: t("cancel"), cls: "dh-btn" }).onclick = () => { confirmModal.close(); resolve(false); };
-                footer.createEl("button", { text: t("rename_confirm_btn_all"), cls: "dh-btn mod-warning" }).onclick = () => { confirmModal.close(); resolve(true); };
-                confirmModal.open();
-              })
-            : true;
-
-          if (confirmed) {
-            let cancelRequested = false;
-            let progressModal = new RenameProgressModal(
-              this.plugin.app, this.plugin, prep.fileCount, () => { cancelRequested = true; }
-            );
-            if (progressModal.contentEl) {
-              progressModal.open();
-            }
-
-            try {
-              const result = await this.executeBatchRename(
-                newName, prep.uniqueOldNames, prep.filesToUpdate,
-                (curr, total) => {
-                  if (progressModal.updateProgress) progressModal.updateProgress(curr, total);
-                },
-                () => cancelRequested
-              );
-              if (progressModal.close) progressModal.close();
-              if (cancelRequested) {
-                new Notice(t("rename_cancelled_notice", { count: result.updated }));
-              } else {
-                new Notice(t("rename_success_notice", { count: result.updated }));
-              }
-            } catch (err) {
-              if (progressModal.close) progressModal.close();
-              console.error(err);
-              new Notice(t("rename_error_notice"));
-            }
-          }
+        if (typeof uiHandlers.onBatchRename === "function") {
+          await uiHandlers.onBatchRename({
+            prep,
+            oldName,
+            newName,
+            execute: (onProgress, isCancelled) =>
+              this.executeBatchRename(newName, prep.uniqueOldNames, prep.filesToUpdate, onProgress, isCancelled, id)
+          });
         } else {
-          new Notice(t("rename_no_files_notice"));
+          await RenameProgressModal.runBatchRenameWorkflow(this.plugin.app, this.plugin, {
+            oldName,
+            newName,
+            prep,
+            execute: (onProgress, isCancelled) =>
+              this.executeBatchRename(newName, prep.uniqueOldNames, prep.filesToUpdate, onProgress, isCancelled, id)
+          });
         }
       }
 
       return updated;
-    });
+    }, targetPaths);
   }
 
   async archiveHabit(id) {
+    const habit = this.getHabitById(id);
+    const activePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, false) : null;
+    const archivePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, true) : null;
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+    const targetPaths = [activePath, archivePath, orderPath].filter(Boolean);
     return await this.runWithLock(async () => {
       const habit = this.getHabitById(id);
       if (!habit) throw new Error(`Habit not found: ${id}`);
 
+      let longestStreak = habit.savedLongestStreak || 0;
+      const calculator = this.plugin.streakCalculator || new StreakCalculator(this.plugin);
+      try {
+        const stats = await calculator.calculate(habit);
+        if (stats && typeof stats.longestStreak === "number") {
+          longestStreak = Math.max(longestStreak, stats.longestStreak);
+        }
+      } catch (e) {
+        console.warn("[Core Habits] Could not calculate streak before archiving:", e);
+      }
+
+      const currentLevel = ProgressionEngine.calculateLevel(habit, { longestStreak });
       const archivedHabit = {
         ...habit,
         archived: true,
         archivedDate: Date.now(),
-        restoredDate: null
+        restoredDate: null,
+        savedLongestStreak: longestStreak,
+        currentLevel: Math.max(habit.currentLevel || 1, currentLevel)
       };
 
-      if (this.plugin.habitRepository) {
-        await this.plugin.habitRepository.archive(archivedHabit);
-      }
+      try { await this.repository.archive(archivedHabit); }
+      catch (error) { await this.initialize(); throw error; }
 
       this.habitsMap.set(archivedHabit.id, archivedHabit);
       this.invalidateCaches();
       return archivedHabit;
-    });
+    }, targetPaths);
   }
 
   async restoreHabit(id) {
+    const habit = this.getHabitById(id);
+    const archivePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, true) : null;
+    const activePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, false) : null;
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+    const targetPaths = [archivePath, activePath, orderPath].filter(Boolean);
     return await this.runWithLock(async () => {
       const habit = this.getHabitById(id);
       if (!habit) throw new Error(`Habit not found: ${id}`);
+      if (this.getActiveHabits().length >= 50) {
+        throw new Error(this.t("error_max_habits_reached"));
+      }
 
       const collision = this.getActiveHabits().find(
         (h) => h.id !== id && h.name.trim().toLowerCase() === habit.name.trim().toLowerCase()
@@ -420,11 +597,13 @@ export class HabitManager {
         throw new Error(this.t("error_duplicate_habit_name", { name: habit.name }));
       }
 
+      const currentLevel = ProgressionEngine.calculateLevel(habit);
       const restoredHabit = {
         ...habit,
         archived: false,
         archivedDate: habit.archivedDate || null,
-        restoredDate: Date.now()
+        restoredDate: Date.now(),
+        currentLevel: Math.max(habit.currentLevel || 1, currentLevel)
       };
 
       const siblings = this.getActiveHabits().filter(h => h.parentId === restoredHabit.parentId);
@@ -432,58 +611,204 @@ export class HabitManager {
       siblings.forEach(h => { if (h.order > maxOrder) maxOrder = h.order; });
       restoredHabit.order = maxOrder + 1;
 
-      if (this.plugin.habitRepository) {
-        await this.plugin.habitRepository.restore(restoredHabit);
-      }
+      try { await this.repository.restore(restoredHabit); }
+      catch (error) { await this.initialize(); throw error; }
 
       this.habitsMap.set(restoredHabit.id, restoredHabit);
+
+      // Maintain portable habitOrder in VaultOrderStore and settings cache
+      if (this.plugin.settings) {
+        let currentOrder = Array.isArray(this.plugin.settings.habitOrder)
+          ? [...this.plugin.settings.habitOrder]
+          : [];
+        // Remove restoredHabit if already present to ensure clean repositioning
+        currentOrder = currentOrder.filter((habitId) => habitId !== restoredHabit.id);
+
+        if (siblings.length > 0) {
+          const siblingIds = new Set(siblings.map((s) => s.id));
+          let lastSiblingIdx = -1;
+          for (let i = 0; i < currentOrder.length; i++) {
+            if (siblingIds.has(currentOrder[i])) {
+              lastSiblingIdx = i;
+            }
+          }
+          if (lastSiblingIdx !== -1) {
+            currentOrder.splice(lastSiblingIdx + 1, 0, restoredHabit.id);
+          } else {
+            currentOrder.push(restoredHabit.id);
+          }
+        } else {
+          currentOrder.push(restoredHabit.id);
+        }
+
+        await this.persistHabitOrder(currentOrder);
+      }
+
       this.invalidateCaches();
       return restoredHabit;
-    });
+    }, targetPaths);
   }
 
-  async deleteHabit(id) {
+  /**
+   * Safely synchronizes high-water milestone checkpoint for a habit.
+   * Updates in-memory habit immediately and schedules safe, debounced persistence to frontmatter.
+   * @param {string} habitId
+   * @param {number} peakStreak
+   * @param {number} newLevel
+   */
+  async syncMilestoneCheckpoint(habitId, peakStreak, newLevel) {
+    if (!habitId) return;
+    const habit = this.getHabitById(habitId);
+    if (!habit) return;
+
+    const targetStreak = Math.max(habit.savedLongestStreak || 0, peakStreak || 0);
+    const targetLevel = Math.max(habit.currentLevel || 1, newLevel || 1);
+
+    const isStreakHigher = targetStreak > (habit.savedLongestStreak || 0);
+    if (!isStreakHigher) return;
+
+    habit.savedLongestStreak = targetStreak;
+    habit.currentLevel = targetLevel;
+    this.habitsMap.set(habit.id, habit);
+
+    if (!this._checkpointTimers) this._checkpointTimers = new Map();
+    if (this._checkpointTimers.has(habitId)) {
+      clearTimeout(this._checkpointTimers.get(habitId));
+    }
+
+    const timer = setTimeout(async () => {
+      this._checkpointTimers?.delete(habitId);
+      try {
+        const file = this.repository?.resolveHabitFile(habit);
+        if (file && this.plugin?.habitNoteManager) {
+          const propsToUpdate = { saved_longest_streak: targetStreak };
+          if (!habit.schemaVersion || habit.schemaVersion < 3) {
+            propsToUpdate.current_level = targetLevel;
+          }
+          await this.runWithLock(async () => {
+            await this.plugin.habitNoteManager.updateHabitNoteProps(file.path, propsToUpdate, { full: false });
+          }, file.path);
+        }
+      } catch (err) {
+        console.warn(`[Core Habits] Could not persist milestone checkpoint for ${habit.name}:`, err);
+      }
+    }, 1000);
+
+    this._checkpointTimers.set(habitId, timer);
+  }
+
+  /**
+   * Flushes all pending milestone checkpoints immediately to disk.
+   */
+  async flushMilestoneCheckpoints() {
+    if (!this._checkpointTimers || this._checkpointTimers.size === 0) return;
+    for (const [habitId, timer] of this._checkpointTimers) {
+      clearTimeout(timer);
+      const habit = this.getHabitById(habitId);
+      if (habit) {
+        try {
+          const file = this.repository?.resolveHabitFile(habit);
+          if (file && this.plugin?.habitNoteManager) {
+            const propsToUpdate = { saved_longest_streak: habit.savedLongestStreak };
+            if (!habit.schemaVersion || habit.schemaVersion < 3) {
+              propsToUpdate.current_level = habit.currentLevel;
+            }
+            await this.runWithLock(async () => {
+              await this.plugin.habitNoteManager.updateHabitNoteProps(file.path, propsToUpdate, { full: false });
+            }, file.path);
+          }
+        } catch (err) {
+          console.warn(`[Core Habits] Could not flush checkpoint for ${habit.name}:`, err);
+        }
+      }
+    }
+    this._checkpointTimers.clear();
+  }
+
+  /**
+   * Restores all archived habits to active status.
+   * Skips any habit whose name collides with an existing active habit.
+   * @returns {Promise<{ restoredCount: number, skippedCount: number }>}
+   */
+  async restoreAllArchivedHabits() {
+    const archived = this.getArchivedHabits();
+    let restoredCount = 0;
+    let skippedCount = 0;
+
+    for (const habit of archived) {
+      try {
+        await this.restoreHabit(habit.id);
+        restoredCount++;
+      } catch (e) {
+        console.warn(`[Core Habits] Could not restore habit ${habit.name}:`, e);
+        skippedCount++;
+      }
+    }
+    return { restoredCount, skippedCount };
+  }
+
+  /** Removes archived habits from the visible archive while preserving their notes. */
+  async removeArchivedHabits() {
+    const archived = this.getArchivedHabits();
+    let removedCount = 0;
+
+    for (const habit of archived) {
+      try {
+        await this.removeHabit(habit.id);
+        removedCount++;
+      } catch (e) {
+        console.error(`[Core Habits] Failed to remove archived habit ${habit.name}:`, e);
+      }
+    }
+    return removedCount;
+  }
+
+  async removeHabit(id) {
+    const habit = this.getHabitById(id);
+    const activePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, false) : null;
+    const archivePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, true) : null;
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+    const targetPaths = [activePath, archivePath, orderPath].filter(Boolean);
     return await this.runWithLock(async () => {
       const habit = this.getHabitById(id);
       if (!habit) throw new Error(`Habit not found: ${id}`);
 
-      habit.deleted = true;
-      habit.archived = true;
-      habit.archivedDate = Date.now();
-
-      // Move the file to the Archive folder
-      const currentFile = this.plugin.habitNoteManager._resolveHabitFile(habit);
-      const destPath = this.plugin.habitNoteManager.getHabitFilePath(habit.name, true);
-      
-      if (currentFile) {
-        if (currentFile.path !== destPath) {
-          await this.plugin.app.fileManager.renameFile(currentFile, destPath);
-        }
-        // Update frontmatter
-        const props = this.plugin.habitNoteManager._habitToProps(habit);
-        await this.plugin.habitNoteManager.updateHabitNoteProps(destPath, props);
-      }
-
-      this.habitsMap.set(id, habit);
+      const deletedHabit = { ...habit, deleted: true, archived: true, archivedDate: Date.now() };
+      try { await this.repository.archive(deletedHabit); }
+      catch (error) { await this.initialize(); throw error; }
+      this.habitsMap.set(id, deletedHabit);
       this.invalidateCaches();
 
-      if (!this.plugin.settings.deletedHabits) {
-        this.plugin.settings.deletedHabits = [];
-      }
-      if (!this.plugin.settings.deletedHabits.includes(habit.name)) {
-        this.plugin.settings.deletedHabits.push(habit.name);
-      }
-      if (habit.linkText && !this.plugin.settings.deletedHabits.includes(habit.linkText)) {
-        this.plugin.settings.deletedHabits.push(habit.linkText);
-      }
-      await this.plugin.saveSettings();
-
-      return habit;
-    });
+      return deletedHabit;
+    }, targetPaths);
   }
 
-  async deleteHabitPermanently(id) {
-    return await this.deleteHabit(id);
+  getRemovedHabits() {
+    return this.getHabits().filter((habit) => habit.deleted);
+  }
+
+  async restoreRemovedHabit(id) {
+    const habit = this.getHabitById(id);
+    const activePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, false) : null;
+    const archivePath = habit ? this.plugin?.habitNoteManager?.getHabitFilePath?.(habit.name, true) : null;
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+    const targetPaths = [activePath, archivePath, orderPath].filter(Boolean);
+    return await this.runWithLock(async () => {
+      const habit = this.getHabitById(id);
+      if (!habit?.deleted) throw new Error(`Removed habit not found: ${id}`);
+      if (this.getActiveHabits().length >= 50) throw new Error(this.t("error_max_habits_reached"));
+      if (this.getActiveHabits().some((active) => active.name.trim().toLowerCase() === habit.name.trim().toLowerCase())) {
+        throw new Error(this.t("error_duplicate_habit_name", { name: habit.name }));
+      }
+
+      const restored = { ...habit, deleted: false, archived: false, restoredDate: Date.now() };
+      try { await this.repository.restore(restored); }
+      catch (error) { await this.initialize(); throw error; }
+
+      this.habitsMap.set(id, restored);
+      this.invalidateCaches();
+      return restored;
+    }, targetPaths);
   }
 
   getActiveHabits() {
@@ -512,75 +837,115 @@ export class HabitManager {
   }
 
   async moveHabitUp(id) {
-    const habitToMove = this.getHabitById(id);
-    if (!habitToMove) throw new Error(`Habit not found: ${id}`);
-
-    const siblings = this.getEffectiveSiblings(habitToMove);
-    siblings.forEach((h, i) => { h.order = i; });
-
-    const index = siblings.findIndex((h) => h.id === id);
-    if (index <= 0) return;
-
-    const currentHabit = siblings[index];
-    const previousHabit = siblings[index - 1];
-
-    const temp = currentHabit.order;
-    currentHabit.order = previousHabit.order;
-    previousHabit.order = temp;
-
-    this.habitsMap.set(currentHabit.id, currentHabit);
-    this.habitsMap.set(previousHabit.id, previousHabit);
-
-    await this._syncOrders(siblings);
+    return this._moveHabit(id, -1);
   }
 
   async moveHabitDown(id) {
-    const habitToMove = this.getHabitById(id);
-    if (!habitToMove) throw new Error(`Habit not found: ${id}`);
+    return this._moveHabit(id, 1);
+  }
 
-    const siblings = this.getEffectiveSiblings(habitToMove);
-    siblings.forEach((h, i) => { h.order = i; });
-
-    const index = siblings.findIndex((h) => h.id === id);
-    if (index === -1 || index === siblings.length - 1) return;
-
-    const currentHabit = siblings[index];
-    const nextHabit = siblings[index + 1];
-
-    const temp = currentHabit.order;
-    currentHabit.order = nextHabit.order;
-    nextHabit.order = temp;
-
-    this.habitsMap.set(currentHabit.id, currentHabit);
-    this.habitsMap.set(nextHabit.id, nextHabit);
-
-    await this._syncOrders(siblings);
+  async _moveHabit(id, direction) {
+    const habit = this.getHabitById(id);
+    if (!habit) throw new Error(`Habit not found: ${id}`);
+    const siblings = this.getEffectiveSiblings(habit);
+    const index = siblings.findIndex((item) => item.id === id);
+    if (index + direction < 0 || index + direction >= siblings.length) return;
+    const ids = siblings.map((item) => item.id);
+    [ids[index], ids[index + direction]] = [ids[index + direction], ids[index]];
+    await this._persistOrders(ids, siblings.map((item) => item.id));
   }
 
   async updateHabitsOrder(orderedIds) {
-    return await this.runWithLock(async () => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        const id = orderedIds[i];
-        const habit = this.getHabitById(id);
-        if (habit) {
-          habit.order = i;
-          this.habitsMap.set(id, habit);
-          
-          // Update frontmatter
-          const path = this.plugin.habitNoteManager.getHabitFilePath(habit.name, habit.archived);
-          await this.plugin.habitNoteManager.updateHabitNoteProps(path, { order: i });
-        }
-      }
-    });
+    return this._persistOrders(orderedIds);
   }
 
-  async _syncOrders(siblings) {
-    return await this.runWithLock(async () => {
-      for (const h of siblings) {
-        const path = this.plugin.habitNoteManager.getHabitFilePath(h.name, h.archived);
-        await this.plugin.habitNoteManager.updateHabitNoteProps(path, { order: h.order });
+  /**
+   * Persists habit ordering to the Vault (_order.md) as the SSOT,
+   * updates the fast cache (settings.habitOrder), and synchronizes in-memory order index.
+   * @param {string[]} nextOrder
+   * @returns {Promise<number>} Updated revision version
+   */
+  async persistHabitOrder(nextOrder) {
+    const currentVer = this.plugin.settings?.habitOrderVersion || 0;
+    let newVer = currentVer + 1;
+
+    if (this.vaultOrderStore) {
+      try {
+        const written = await this.vaultOrderStore.writeOrder(nextOrder, currentVer);
+        newVer = written.orderVersion;
+      } catch (err) {
+        console.error("[Core Habits] Failed to write order to VaultOrderStore:", err);
       }
-    });
+    }
+
+    if (this.plugin.settings) {
+      this.plugin.settings.habitOrder = nextOrder;
+      this.plugin.settings.habitOrderVersion = newVer;
+      if (typeof this.plugin.saveSettings === "function") {
+        await this.plugin.saveSettings({ silent: true });
+      }
+    }
+
+    for (const habit of this.habitsMap.values()) {
+      const idx = nextOrder.indexOf(habit.id);
+      habit.order = idx !== -1 ? idx : 0;
+    }
+
+    return newVer;
+  }
+
+  async _persistOrders(orderedIds, siblingIds = orderedIds) {
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+    return await this.runWithLock(async () => {
+      if (!Array.isArray(orderedIds)) return;
+      const previousOrder = Array.isArray(this.plugin.settings?.habitOrder)
+        ? [...this.plugin.settings.habitOrder]
+        : Array.from(this.habitsMap.keys());
+      const previousVersion = this.plugin.settings?.habitOrderVersion || 0;
+
+      const siblingSet = new Set(siblingIds);
+      // Map existing positions of siblings in the overall habitOrder array
+      const positions = [];
+      for (let i = 0; i < previousOrder.length; i++) {
+        if (siblingSet.has(previousOrder[i])) {
+          positions.push(i);
+        }
+      }
+
+      const nextOrder = [...previousOrder];
+      if (positions.length === orderedIds.length) {
+        for (let i = 0; i < positions.length; i++) {
+          nextOrder[positions[i]] = orderedIds[i];
+        }
+      } else {
+        const remaining = previousOrder.filter((id) => !siblingSet.has(id));
+        nextOrder.length = 0;
+        nextOrder.push(...remaining, ...orderedIds);
+      }
+
+      // Rollback backup in case saveSettings fails
+      const previousHabitOrders = new Map();
+      for (const habit of this.habitsMap.values()) {
+        previousHabitOrders.set(habit.id, habit.order);
+      }
+
+      try {
+        await this.persistHabitOrder(nextOrder);
+      } catch (error) {
+        // Rollback on failure
+        if (this.plugin.settings) {
+          this.plugin.settings.habitOrder = previousOrder;
+          this.plugin.settings.habitOrderVersion = previousVersion;
+        }
+        for (const [hId, prevOrder] of previousHabitOrders) {
+          const h = this.habitsMap.get(hId);
+          if (h) h.order = prevOrder;
+        }
+        throw error;
+      }
+
+      this.invalidateCaches();
+    }, orderPath);
   }
 
   validateHabit(habitData) {
@@ -590,7 +955,7 @@ export class HabitManager {
   }
 
   isHabitScheduledForDay(habit, dayOfWeek) {
-    return Array.isArray(habit.schedule?.days) && habit.schedule.days.includes(dayOfWeek);
+    return HabitEntity.isScheduledForDay(habit, dayOfWeek);
   }
 
   getHabitsForDay(dayOfWeek) {
@@ -601,12 +966,15 @@ export class HabitManager {
 
   async ensureHabitsInNote(date, forceHabit = null, forceWrite = false) {
     if (!this.plugin.settings.autoWriteHabits && !forceWrite) return;
+    const info = getDailyNotesInfo(this.plugin.app, this.plugin.settings);
+    const targetPath = getDailyNotePath(date, info) || [];
 
     return await this.runWithLock(async () => {
       try {
         const dailyNote = await getNoteByDate(this.plugin.app, date, true, this.plugin.settings);
         if (!dailyNote) return;
 
+        let didModify = false;
         await this.plugin.app.vault.process(dailyNote, (content) => {
           const originalContent = content;
           const dayOfWeek = date.day();
@@ -616,11 +984,56 @@ export class HabitManager {
             scheduledHabits.push(forceHabit);
           }
 
-          const parentHeading = this.plugin.settings.dailyParentHeading;
-          const subHeading = this.plugin.settings.habitHeading;
-          const sectionContent = Utils.getSectionContent(content, parentHeading, subHeading) || "";
+          const currentParentHeading = this.plugin.settings.dailyParentHeading || "";
+          const currentSubHeading = this.plugin.settings.habitHeading || DEFAULT_HABIT_HEADING;
 
-          const scanned = this.plugin.habitScanner.scan(sectionContent, this.plugin.settings.marker) || [];
+          // Candidate headings: check current settings first, then user history, then known defaults
+          const candidateSubHeadings = [
+            currentSubHeading,
+            ...(this.plugin.settings.habitHeadingHistory || []),
+            ...KNOWN_HABIT_HEADINGS
+          ].filter(Boolean);
+
+          const candidateParentHeadings = [
+            currentParentHeading,
+            ...(this.plugin.settings.dailyParentHeadingHistory || []),
+            DEFAULT_PARENT_HEADING,
+            DEFAULT_PARENT_HEADING_EN,
+            ""
+          ];
+
+          let sectionContent = null;
+          let matchedParent = currentParentHeading;
+          let matchedSub = currentSubHeading;
+
+          for (const parentH of candidateParentHeadings) {
+            for (const subH of candidateSubHeadings) {
+              const res = Utils.getSectionContent(content, parentH, subH);
+              if (res !== null) {
+                sectionContent = res;
+                matchedParent = parentH;
+                matchedSub = subH;
+                break;
+              }
+            }
+            if (sectionContent !== null) break;
+          }
+
+          if (sectionContent === null) {
+            for (const subH of candidateSubHeadings) {
+              const res = Utils.getSectionContent(content, "", subH);
+              if (res !== null) {
+                sectionContent = res;
+                matchedParent = "";
+                matchedSub = subH;
+                break;
+              }
+            }
+          }
+
+          const rawSection = sectionContent !== null ? sectionContent : "";
+          const scanned = this.plugin.habitScanner.scan(rawSection, this.plugin.settings.marker);
+          if (!Array.isArray(scanned)) throw new Error("Habit section could not be scanned safely");
 
           const habitsToAdd = [];
           for (const habit of scheduledHabits) {
@@ -636,95 +1049,46 @@ export class HabitManager {
             habitsToAdd.push(`- [${stateChar}] ${habit.linkText} ${markerStr}`);
           }
 
-          const lines = sectionContent.split(/\r?\n/);
-          let firstChecklistIdx = -1;
-          let lastChecklistIdx = -1;
-
-          lines.forEach((line, idx) => {
-            if (/^\s*-\s*\[([ x-])\]/i.test(line)) {
-              if (firstChecklistIdx === -1) firstChecklistIdx = idx;
-              lastChecklistIdx = idx;
+          const habitsMissing = scheduledHabits.filter((habit) =>
+            !findHabitEntry(scanned, habit.linkText, habit.nameHistory, habit.id)
+          );
+          if (habitsMissing.length === 0) return originalContent;
+          const newLines = habitsMissing.map((habit) =>
+            habitsToAdd[scheduledHabits.findIndex((item) => item.id === habit.id)]
+          );
+          const separator = content.includes("\r\n") ? "\r\n" : "\n";
+          let newContent;
+          if (sectionContent !== null) {
+            const parentRange = matchedParent ? Utils.findSectionRange(content, matchedParent, 2) : null;
+            const parentBlock = parentRange ? content.slice(parentRange.contentStart, parentRange.end) : content;
+            const sectionRange = Utils.findSectionRange(parentBlock, matchedSub, matchedParent ? 3 : 2);
+            if (sectionRange) {
+              const end = (parentRange ? parentRange.contentStart : 0) + sectionRange.end;
+              const before = content.slice(0, end);
+              const prefix = before.endsWith(separator) ? "" : separator;
+              newContent = before + prefix + newLines.join(separator) + separator + content.slice(end);
+            } else {
+              newContent = Utils.insertNestedContent(content, currentParentHeading, currentSubHeading, newLines.join(separator));
             }
-          });
-
-          let newSectionLines;
-          if (firstChecklistIdx !== -1) {
-            newSectionLines = [
-              ...lines.slice(0, firstChecklistIdx),
-              ...habitsToAdd,
-              ...lines.slice(lastChecklistIdx + 1)
-            ];
           } else {
-            newSectionLines = [...lines];
-            if (habitsToAdd.length > 0) {
-              newSectionLines.push(...habitsToAdd);
-            }
+            newContent = Utils.insertNestedContent(content, currentParentHeading, currentSubHeading, newLines.join(separator));
           }
 
-          const newSectionContent = newSectionLines.join("\n");
-          const newContent = Utils.replaceNestedContent(content, parentHeading, subHeading, newSectionContent);
-
           if (newContent !== originalContent) {
+            didModify = true;
             Utils.debugLog(this.plugin, `Updated daily note habits list for ${dailyNote.basename}`);
             return newContent;
           }
           return originalContent;
         });
+        if (didModify) {
+          await this.plugin.statsService?.rescanFile(dailyNote);
+        }
       } catch (error) {
         console.error("[Core Habits] Sync failed:", error);
+        throw error;
       }
-    });
-  }
-
-  async importHabitsFromContent(content, force = false) {
-    const foundHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
-    if (!foundHabits) return 0;
-    let importedCount = 0;
-
-    for (const habit of foundHabits) {
-      const fullLink = habit.text;
-      const cleanName = fullLink.replace(/\[\[|\]\]/g, "").trim();
-
-      if (!force && this.plugin.settings.deletedHabits) {
-        const nameLower = cleanName.toLowerCase();
-        const linkLower = fullLink.toLowerCase();
-        const isDeleted = this.plugin.settings.deletedHabits.some(
-          (n) => n.toLowerCase() === nameLower || n.toLowerCase() === linkLower
-        );
-        if (isDeleted) continue;
-      }
-
-      const exists = this.getHabits().some(
-        (h) =>
-          h.linkText.replace(/\s+/g, "").toLowerCase() === fullLink.replace(/\s+/g, "").toLowerCase() ||
-          h.name.trim().toLowerCase() === fullLink.replace(/\[\[|\]\]/g, "").trim().toLowerCase(),
-      );
-
-      if (!exists) {
-        await this.addHabit({
-          name: cleanName,
-          linkText: fullLink,
-          schedule: { type: "daily", days: [0, 1, 2, 3, 4, 5, 6] },
-        });
-        importedCount++;
-      }
-    }
-    return importedCount;
-  }
-
-  async renameHabitFile(habit, newName) {
-    const file = this.plugin.habitNoteManager._resolveHabitFile(habit);
-    if (!file) {
-      throw new Error(`Could not find habit file for "${habit.name}"`);
-    }
-    const newPath = this.plugin.habitNoteManager.getHabitFilePath(newName, habit.archived);
-    this.plugin.habitNoteManager.validatePathSafety(newPath);
-
-    const existingFile = this.plugin.app.vault.getAbstractFileByPath(newPath);
-    if (existingFile && existingFile !== file) {
-      throw new Error(this.t("error_file_exists", { path: newPath }));
-    }
-    await this.plugin.app.fileManager.renameFile(file, newPath);
+    }, targetPath);
   }
 
   async prepareBatchRename(habitId, oldName) {
@@ -748,7 +1112,11 @@ export class HabitManager {
 
     for (const file of markdownFiles) {
       const content = await this.plugin.app.vault.cachedRead(file);
-      const hasOldName = oldNamesArr.some(oldName => content.includes(oldName));
+      const hasOldName = content.split(/\r?\n/).some((line) =>
+        (/^\s*-\s*\[[ x-]\]/i.test(line) && line.includes(`[habit:: ${habitId}]`)
+          || /^\s*-\s/.test(line) && line.includes(`[habit-id:: ${habitId}]`))
+        && oldNamesArr.some((oldName) => line.includes(oldName))
+      );
       if (hasOldName) {
         filesToUpdate.push(file);
       }
@@ -762,11 +1130,13 @@ export class HabitManager {
     };
   }
 
-  async executeBatchRename(newName, uniqueOldNames, filesToUpdate, onProgress, isCancelled) {
+  async executeBatchRename(newName, uniqueOldNames, filesToUpdate, onProgress, isCancelled, habitId = null) {
     let updated = 0;
     const total = filesToUpdate.length;
-
-    const newCleanName = TextUtils.clean(newName);
+    const id = habitId || this.getHabits().find((habit) =>
+      uniqueOldNames.includes(habit.linkText) || (habit.nameHistory || []).some((name) => uniqueOldNames.includes(name))
+    )?.id;
+    if (!id) throw new Error("Cannot rename habit references without a habit ID");
 
     for (let i = 0; i < total; i++) {
       if (isCancelled && isCancelled()) {
@@ -774,20 +1144,24 @@ export class HabitManager {
       }
 
       const file = filesToUpdate[i];
-      await this.plugin.app.vault.process(file, (content) => {
-        let newContent = content;
-
-        for (const oldLinkText of uniqueOldNames) {
-          const oldPlainName = oldLinkText.replace(/\[\[|\]\]/g, "");
-          const oldCleanName = TextUtils.clean(oldPlainName);
-
-          newContent = newContent.replaceAll(oldLinkText, `[[${newName}]]`);
-          newContent = newContent.replaceAll(`[habit-note:: ${oldCleanName}]`, `[habit-note:: ${newCleanName}]`);
-          newContent = newContent.replaceAll(`habit:: ${oldCleanName}`, `habit:: ${newCleanName}`);
-        }
-
-        return newContent;
-      });
+      await this.runWithLock(async () => {
+        await this.plugin.app.vault.process(file, (content) => {
+          return content.split(/(\r?\n)/).map((part) => {
+            const checklist = /^\s*-\s*\[[ x-]\]/i.test(part) && part.includes(`[habit:: ${id}]`);
+            const comment = /^\s*-\s/.test(part) && part.includes(`[habit-id:: ${id}]`);
+            if (!checklist && !comment) return part;
+            let line = part;
+            for (const oldLink of uniqueOldNames) {
+              line = line.replaceAll(oldLink, `[[${newName}]]`);
+              if (comment) {
+                const oldClean = TextUtils.clean(oldLink.replace(/\[\[|\]\]/g, ""));
+                line = line.replace(`[habit-note:: ${oldClean}]`, `[habit-note:: ${TextUtils.clean(newName)}]`);
+              }
+            }
+            return line;
+          }).join("");
+        });
+      }, file?.path);
 
       updated++;
       if (onProgress) {
@@ -803,6 +1177,7 @@ export class HabitManager {
     const marker = this.plugin.settings.marker;
     return await this.runWithLock(async () => {
       try {
+        let soundType = null;
         await app.vault.process(file, (data) => {
           const separator = data.includes("\r\n") ? "\r\n" : "\n";
           const lines = data.split(/\r?\n/);
@@ -814,6 +1189,7 @@ export class HabitManager {
           if (entry) {
             targetLineIndex = entry.lineIndex;
           }
+          if (targetLineIndex === -1) throw new Error(`Habit entry not found: ${habit.id}`);
 
           if (targetLineIndex !== -1) {
             let line = lines[targetLineIndex];
@@ -833,53 +1209,63 @@ export class HabitManager {
               }
 
               // Play auditory milestone beeps for completions
-              if (nextChar === "x" && match[2].toLowerCase() !== "x") {
-                this.plugin.audioEngine.playSound({ type: "check" });
-              } else if (nextChar !== "x" && match[2].toLowerCase() === "x") {
-                this.plugin.audioEngine.playSound({ type: "uncheck" });
-              }
+              if (nextChar === "x" && match[2].toLowerCase() !== "x") soundType = "check";
+              else if (nextChar !== "x" && match[2].toLowerCase() === "x") soundType = "uncheck";
 
               lines[targetLineIndex] = `${match[1]}${nextChar}${match[3]}${match[4]}`;
             }
           }
           return lines.join(separator);
         });
-
-        // Invalidate specific caches
-        StreakCalculator.invalidate(habit.id);
-        app.workspace.getLeavesOfType("weekly-habits-view").forEach((leaf) => {
-          if (leaf.view) {
-            leaf.view._lastFourWeeksCache = null;
-            leaf.view.lastWeekRatesCache = null;
-          }
-        });
-        if (this.plugin._sharedStreakCache) {
-          this.plugin._sharedStreakCache.clear();
+        if (soundType) this.plugin.audioEngine?.playSound({ type: soundType });
+        if (this.plugin.statsService) await this.plugin.statsService.rescanFile(file);
+        else {
+          StreakCalculator.invalidate(habit.id);
+          this.plugin?.app?.workspace?.trigger?.("core-habits:cache-invalidated", { habitId: habit.id });
         }
       } catch (error) {
         console.error("[Core Habits] Failed to toggle habit:", error);
-        new Notice(this.t("error_modifying_note"));
+        NoticeService.error(this.t("error_modifying_note"), this.plugin);
+        throw error;
       }
-    });
+    }, file?.path);
+  }
+
+  /**
+   * Completes the daily checklist use case without exposing note creation or
+   * file lookup to the view.
+   */
+  async toggleHabitForDate(date, habit, targetState = null) {
+    await this.ensureHabitsInNote(date, habit, true);
+    const file = await getNoteByDate(this.plugin.app, date, true, this.plugin.settings);
+    if (!file) return false;
+    await this.toggleHabitInNote(file, habit, targetState);
+    return true;
   }
 
   async handleVaultRename(file, oldPath) {
+    return this.runWithLock(async () => {
+    const activeFolder = `${this.plugin.habitNoteManager.getActiveFolder()}/`;
+    const archiveFolder = `${this.plugin.habitNoteManager.getArchiveFolder()}/`;
+    const insideHabitFolder = (path) => path.startsWith(activeFolder) || path.startsWith(archiveFolder);
+    if (!insideHabitFolder(file.path) || !insideHabitFolder(oldPath)) return;
+    const habitId = this.plugin.app.metadataCache.getFileCache(file)?.frontmatter?.habit_id;
+    if (!habitId) return;
     // 1. Detect manual move between Active/ and Archive/
     const moveType = this.plugin.habitNoteManager.detectManualMove(file.path, oldPath);
     if (moveType) {
-      const cache = this.plugin.app.metadataCache.getFileCache(file);
-      const habitId = cache?.frontmatter?.habit_id;
       if (habitId) {
+        this.plugin.habitNoteManager?.indexHabitFile?.(habitId, file.path);
         const habit = this.getHabitById(habitId);
         if (habit) {
-          habit.archived = moveType === 'archived';
-          habit.archivedDate = moveType === 'archived' ? Date.now() : null;
-          habit.restoredDate = moveType === 'restored' ? Date.now() : null;
-
-          const props = this.plugin.habitNoteManager._habitToProps(habit);
-          await this.plugin.habitNoteManager.updateHabitNoteProps(file.path, props);
-
-          this.habitsMap.set(habit.id, habit);
+          const changed = {
+            ...habit,
+            archived: moveType === 'archived',
+            archivedDate: moveType === 'archived' ? Date.now() : habit.archivedDate,
+            restoredDate: moveType === 'restored' ? Date.now() : habit.restoredDate
+          };
+          await this.repository.updateFileProps(file, changed);
+          this.habitsMap.set(changed.id, changed);
           this.invalidateCaches();
 
           Utils.debugLog(this.plugin, `Manual move detected: ${habit.name} → ${moveType}`);
@@ -893,25 +1279,22 @@ export class HabitManager {
     const newBasename = file.basename;
     if (oldBasename === newBasename) return;
 
+    this.plugin.habitNoteManager?.indexHabitFile?.(habitId, file.path);
     const oldLink = `[[${oldBasename}]]`;
     for (const habit of this.getHabits()) {
-      if (habit.linkText !== oldLink) continue;
-
-      if (!habit.nameHistory) habit.nameHistory = [];
-      if (!habit.nameHistory.includes(oldLink)) {
-        habit.nameHistory.push(oldLink);
-      }
-
-      habit.linkText = `[[${newBasename}]]`;
-      habit.name = newBasename;
-
-      const props = this.plugin.habitNoteManager._habitToProps(habit);
-      await this.plugin.habitNoteManager.updateHabitNoteProps(file.path, props);
-
-      this.habitsMap.set(habit.id, habit);
+      if (habit.id !== habitId) continue;
+      const changed = {
+        ...habit,
+        nameHistory: [...new Set([...(habit.nameHistory || []), habit.linkText, oldLink].filter(Boolean))],
+        linkText: `[[${newBasename}]]`,
+        name: newBasename
+      };
+      await this.repository.updateFileProps(file, changed);
+      this.habitsMap.set(changed.id, changed);
       this.invalidateCaches();
 
       Utils.debugLog(this.plugin, `Vault rename synced: "${oldBasename}" → "${newBasename}"`);
     }
+    }, [file?.path, oldPath].filter(Boolean));
   }
 }

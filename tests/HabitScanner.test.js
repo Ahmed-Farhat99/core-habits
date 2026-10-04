@@ -70,4 +70,19 @@ describe("HabitScanner Tests", () => {
       "Task 4"
     ]);
   });
+
+  it("should return empty array for empty or whitespace-only content", () => {
+    expect(scanner.scan("", "[habit:: true]")).toEqual([]);
+    expect(scanner.scan("   \n\t  \r\n  ", "[habit:: true]")).toEqual([]);
+  });
+
+  it("should return null for non-string, null, undefined, or oversized content", () => {
+    expect(scanner.scan(null, "[habit:: true]")).toBeNull();
+    expect(scanner.scan(undefined, "[habit:: true]")).toBeNull();
+    expect(scanner.scan(12345, "[habit:: true]")).toBeNull();
+    expect(scanner.scan({}, "[habit:: true]")).toBeNull();
+
+    const oversized = "a".repeat(1_000_001);
+    expect(scanner.scan(oversized, "[habit:: true]")).toBeNull();
+  });
 });

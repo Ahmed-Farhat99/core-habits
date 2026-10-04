@@ -1,26 +1,48 @@
-import { ItemView, setIcon, Notice, debounce } from 'obsidian';
-import { VIEW_TYPE_WEEKLY, DEBOUNCE_DELAY_MS, normalizeReflectionType, DEFAULT_REFLECTION_HEADING, DEFAULT_HABIT_NOTES_HEADING } from '../constants.js';
+import { GroupCollapseController } from '../components/ui/GroupCollapseController.js';
+import { ItemView, setIcon, debounce } from 'obsidian';
+import { NoticeService } from '../services/NoticeService.js';
+import { VIEW_TYPE_WEEKLY, DEBOUNCE_DELAY_MS, normalizeReflectionType, DEFAULT_HABIT_NOTES_HEADING, BREAKPOINTS } from '../constants.js';
 import { Utils } from '../utils/Utils.js';
 import { ReflectionPopup } from '../modals/ReflectionPopup.js';
 import { StreakCalculator } from '../services/StreakCalculator.js';
-import { DateUtils, getNoteByDate, calculateCurrentLevel } from '../utils/helpers.js';
-import { AddHabitModal } from '../modals/AddHabitModal.js';
+import { DateUtils, getNoteByDate, getDailyNoteDate } from '../utils/helpers.js';
+import { TooltipHelper } from '../utils/TooltipHelper.js';
+import { ProgressionEngine } from '../services/ProgressionEngine.js';
 import { HabitCommentPopup } from '../modals/HabitCommentPopup.js';
-import { DiaryRenderer } from './DiaryRenderer.js';
-import { DashboardRenderer } from './DashboardRenderer.js';
+import { DiaryViewController } from './diary/DiaryViewController.js';
+import { StatisticsViewController } from './statistics/StatisticsViewController.js';
 import { GridRenderer } from './GridRenderer.js';
 import { StatusView } from './StatusView.js';
+import { createWeeklyViewContexts } from './WeeklyViewContexts.js';
+import { bindTabKeys } from '../components/ui/TabBar.js';
+
+let weeklyPanelSequence = 0;
 
 class WeeklyGridView extends ItemView {
   get isAr() {
     return this.plugin.settings.language === "ar";
   }
+
+  get statisticsController() {
+    if (!this._statisticsController) {
+      this._statisticsController = new StatisticsViewController(this.viewContexts.statistics);
+    }
+    return this._statisticsController;
+  }
+
+  get diaryController() {
+    if (!this._diaryController) {
+      this._diaryController = new DiaryViewController(this.viewContexts.diary);
+    }
+    return this._diaryController;
+  }
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
     this.currentWeekStart = null;
-    this.isProcessing = false;
+    this._renderedWeekStartDay = this.plugin.settings.weekStartDay;
     this.isTogglingInProgress = false;
+    this._pendingToggles = new Set();
     this.activeFilePaths = new Set();
     this.currentDateMode = "gregorian";
     this.currentViewMode = "grid";
@@ -29,81 +51,12 @@ class WeeklyGridView extends ItemView {
     this.milestoneHit = new Map();
     this.focusedDayIndex = null;
     this.isCompactMode = false;
+    this._isClosed = false;
 
-    const viewContext = {
-      app: this.app,
-      plugin: this.plugin,
-      getComponent: () => this,
-      isAr: () => this.isAr,
-      getWeekStart: () => this.currentWeekStart,
-      setWeekStart: (date) => { this.currentWeekStart = date; },
-      getDiaryViewMode: () => this.diaryViewMode,
-      setDiaryViewMode: async (mode) => {
-        this.diaryViewMode = mode;
-        this.plugin.settings.diaryViewMode = mode;
-        await this.plugin.saveSettings({ silent: true });
-        await this.renderWeeklyGrid();
-      },
-      openReflectionPopup: (dayDate) => this.openReflectionPopup(dayDate),
-      parseDailyReflectionEntries: (content, dateMoment, path) => this.parseDailyReflectionEntries(content, dateMoment, path),
-      getReflectionTypeMeta: (type) => this.getReflectionTypeMeta(type),
-      renderWeeklyGrid: () => this.renderWeeklyGrid(),
-      
-      // Reflection and Active Paths updates
-      updateReflectionDaysAndActiveFiles: (reflectionDays, activePaths) => {
-        this.dailyReflectionDays = reflectionDays;
-        this.activeFilePaths = activePaths;
-      },
-      getReflectionDays: () => this.dailyReflectionDays,
-      getActiveFilePaths: () => this.activeFilePaths,
-      
-      // Cache / Stats (Dashboard)
-      getLastFourWeeksCache: () => this._lastFourWeeksCache,
-      setLastFourWeeksCache: (cache) => { this._lastFourWeeksCache = cache; },
-      
-      // Grid specific
-      getDailyStats: () => this.dailyStats,
-      setDailyStats: (stats) => { this.dailyStats = stats; },
-      getWeekContentCache: () => this.weekContentCache,
-      setWeekContentCache: (cache) => { this.weekContentCache = cache; },
-      isClosed: () => this._isClosed,
-      isProcessing: () => this.isProcessing,
-      setProcessing: (val) => { this.isProcessing = val; },
-      isTogglingInProgress: () => this.isTogglingInProgress,
-      setTogglingInProgress: (val) => { this.isTogglingInProgress = val; },
-      getIgnoreModifyFiles: () => this.ignoreModifyFiles,
-      getVisualTimers: () => this._visualTimers,
-      setVisualTimers: (timers) => { this._visualTimers = timers; },
-      getWeeklyContentContainer: () => this.getWeeklyContentContainer(),
-      getRenderToken: () => this.renderToken,
-      getWeekDayInfos: () => this.getWeekDayInfos(),
-      queueStreakCalculation: (habit, row) => this.queueStreakCalculation(habit, row),
-      getHabitNotesHeading: () => this.getHabitNotesHeading(),
-      extractSectionLines: (content, heading) => this.extractSectionLines(content, heading),
-      isCompactMode: () => this.isCompactMode,
-      getFocusedDayIndex: () => this.focusedDayIndex,
-      setFocusedDayIndex: (idx) => { this.focusedDayIndex = idx; },
-      
-      // Added for decoupling
-      getStreakCalculator: () => this.streakCalculator,
-      getRefreshTimer: () => this._refreshTimer,
-      setRefreshTimer: (timer) => { this._refreshTimer = timer; },
-      getLastWeekRatesCache: () => this.lastWeekRatesCache,
-      getMilestoneHit: () => this.milestoneHit,
-      toggleHabitCompletion: (habit, date, targetState) => this.toggleHabitCompletion(habit, date, targetState),
-      checkMilestone: (dateKey) => this.checkMilestone(dateKey),
-      getWeeklyDiaryEntries: () => this.getWeeklyDiaryEntries(),
-      openEditHabitModal: (habit) => this.openEditHabitModal(habit),
-      openCommentPopup: (habit, date) => this.openCommentPopup(habit, date),
-      openHabitPage: (habit) => this.openHabitPage(habit),
-      openDailyNote: (date) => this.openDailyNote(date),
-      toggleGroupCollapse: (pid, collapsed) => this.toggleGroupCollapse(pid, collapsed),
-      dismissGridHint: () => this.dismissGridHint()
-    };
-
-    this.diaryRenderer = new DiaryRenderer(viewContext);
-    this.dashboardRenderer = new DashboardRenderer(viewContext);
-    this.gridRenderer = new GridRenderer(viewContext);
+    this.viewContexts = createWeeklyViewContexts(this);
+    this._diaryController = null;
+    this._statisticsController = null;
+    this.gridRenderer = new GridRenderer(this.viewContexts.grid);
     // Load persisted collapse state from plugin data (survives Obsidian restarts)
     // Clean stale entries: only keep IDs that match active habits
     let groups = this.plugin.settings.collapsedGroups || [];
@@ -115,10 +68,9 @@ class WeeklyGridView extends ItemView {
     this.lastWeekRatesCache = new Map();
     this._streakQueue = [];
     this._isCalculatingStreaks = false;
-    this.streakContentCache = new Map();
-    this.streakCalculator = new StreakCalculator(this.plugin, this.streakContentCache);
-    this.ignoreModifyFiles = new Set();
+    this.streakCalculator = new StreakCalculator(this.plugin, new Map());
     this.renderToken = 0;
+    this._weekLoadGeneration = 0;
     this.initializeWeek();
     this.debouncedRefresh = debounce(
       this.renderWeeklyGrid.bind(this),
@@ -128,6 +80,29 @@ class WeeklyGridView extends ItemView {
   }
 
   queueStreakCalculation(habit, row) {
+    if (this._isClosed) return;
+    if (typeof IntersectionObserver !== "undefined") {
+      if (!this._streakObserver) {
+        const token = this.renderToken;
+        this._streakObserver = new IntersectionObserver((entries) => {
+          if (this._isClosed || this.renderToken !== token) return;
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            this._streakObserver?.unobserve(entry.target);
+            const pending = this._visibleStreaks?.get(entry.target);
+            this._visibleStreaks?.delete(entry.target);
+            if (pending) {
+              this._streakQueue.push(pending);
+              if (!this._isCalculatingStreaks) void this.processStreakQueue();
+            }
+          }
+        }, { rootMargin: "160px 0px" });
+      }
+      this._visibleStreaks ||= new Map();
+      this._visibleStreaks.set(row, { habit, row });
+      this._streakObserver.observe(row);
+      return;
+    }
     this._streakQueue.push({ habit, row });
     if (!this._isCalculatingStreaks) this.processStreakQueue();
   }
@@ -136,7 +111,7 @@ class WeeklyGridView extends ItemView {
     this._isCalculatingStreaks = true;
     const currentToken = this.renderToken;
     while (this._streakQueue.length > 0) {
-      if (this.renderToken !== currentToken) {
+      if (this._isClosed || this.renderToken !== currentToken) {
         break; // Abort stale queue
       }
       const { habit, row } = this._streakQueue.shift();
@@ -144,6 +119,7 @@ class WeeklyGridView extends ItemView {
         const { currentStreak } = await this.streakCalculator.calculate(habit);
         // Yield to main thread so the UI doesn't freeze
         await new Promise(resolve => setTimeout(resolve, 10));
+        if (this._isClosed || this.renderToken !== currentToken) break;
 
         const slot = row.querySelector(".dh-streak-badge-slot");
         if (slot && currentStreak >= 2) {
@@ -151,13 +127,14 @@ class WeeklyGridView extends ItemView {
             cls: "dh-streak-badge",
             text: `🔥${currentStreak}`,
           });
-          badge.title = this.plugin.translationManager.t("streak_title", { streak: currentStreak });
+          TooltipHelper.set(badge, TooltipHelper.formatStreak(currentStreak, this.plugin.translationManager.t.bind(this.plugin.translationManager), this.isAr));
         }
       } catch (e) {
         console.warn("[Core Habits] Local streak calc failed for", habit.name, e);
       }
     }
     this._isCalculatingStreaks = false;
+    if (!this._isClosed && this._streakQueue.length > 0) void this.processStreakQueue();
   }
 
   getViewType() {
@@ -165,11 +142,20 @@ class WeeklyGridView extends ItemView {
   }
 
   getDisplayText() {
-    return "Weekly Habits";
+    return "Core Habits";
   }
 
   getIcon() {
     return "calendar";
+  }
+
+  invalidateViewCaches() {
+    if (this.lastWeekRatesCache) {
+      this.lastWeekRatesCache.clear();
+    } else {
+      this.lastWeekRatesCache = new Map();
+    }
+    this.streakCalculator?.contentCache?.clear();
   }
 
   initializeWeek() {
@@ -178,11 +164,19 @@ class WeeklyGridView extends ItemView {
     const currentDayOfWeek = today.day();
     const daysFromWeekStart = (currentDayOfWeek - weekStartDay + 7) % 7;
     this.currentWeekStart = today.clone().subtract(daysFromWeekStart, "days");
+    this.focusedDayIndex = null;
+  }
+
+  async goToCurrentWeek() {
+    this.initializeWeek();
+    await this.renderWeeklyGrid();
   }
 
   async onOpen() {
-    this.isCompactMode = this.contentEl.clientWidth > 0 && this.contentEl.clientWidth < 500;
+    this._isClosed = false;
+    this.isCompactMode = this.contentEl.clientWidth > 0 && this.contentEl.clientWidth < BREAKPOINTS.COMPACT;
     await this.renderWeeklyGrid();
+    if (this._isClosed || this.plugin._isUnloading) return;
 
     // ResizeObserver to watch container width changes dynamically
     if (typeof ResizeObserver !== "undefined") {
@@ -190,7 +184,7 @@ class WeeklyGridView extends ItemView {
         for (let entry of entries) {
           const width = entry.contentRect.width;
           if (width === 0) continue; // Skip hidden/unmounted
-          const isCompact = width < 500;
+          const isCompact = width < BREAKPOINTS.COMPACT;
           if (isCompact !== this.isCompactMode) {
             this.isCompactMode = isCompact;
             this.debouncedRefresh();
@@ -203,29 +197,61 @@ class WeeklyGridView extends ItemView {
     // Live Sync: Listen for modifications only on active files
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
+        if (this._isClosed || this.plugin._isUnloading) return;
         // Ignore updates during toggle to prevent flicker
         if (this.isTogglingInProgress) return;
         // Ignore updates during settings save to prevent cascade
         if (this.plugin._isSaving) return;
 
-        if (this.ignoreModifyFiles.has(file.path)) {
-          this.ignoreModifyFiles.delete(file.path);
-          return;
-        }
-
-        if (this.activeFilePaths.has(file.path)) {
+        if (this.activeFilePaths.has(file.path) || (this.currentViewMode === "diary" && getDailyNoteDate(file, this.app, this.plugin.settings))) {
           Utils.debugLog(
             this.plugin,
             `Live Sync: Update triggered by ${file.basename}`,
           );
           this.debouncedRefresh();
         }
-      }),
+      })
     );
+
+    const refreshDiaryForFileChange = (file, oldPath = null) => {
+      if (this._isClosed || this.plugin._isUnloading || this.currentViewMode !== "diary") return;
+      const isDailyNote = getDailyNoteDate(file, this.app, this.plugin.settings);
+      const wasDailyNote = oldPath && getDailyNoteDate({ path: oldPath }, this.app, this.plugin.settings);
+      if (isDailyNote || wasDailyNote) this.debouncedRefresh();
+    };
+    this.registerEvent(this.app.vault.on("create", (file) => refreshDiaryForFileChange(file)));
+    this.registerEvent(this.app.vault.on("delete", (file) => refreshDiaryForFileChange(file)));
+    this.registerEvent(this.app.vault.on("rename", refreshDiaryForFileChange));
+
+    // Workspace Events: Decoupled service notifications
+    if (this.app?.workspace?.on) {
+      this.registerEvent(
+        this.app.workspace.on("core-habits:cache-invalidated", () => {
+          this.invalidateViewCaches();
+        })
+      );
+
+      this.registerEvent(
+        this.app.workspace.on("core-habits:stats-updated", () => {
+          if (!this._isClosed && !this.plugin._isUnloading && this.currentViewMode === "dashboard") {
+            this.renderWeeklyGrid();
+          }
+        })
+      );
+    }
   }
 
   async onClose() {
     this._isClosed = true;
+    this.renderToken++;
+    this._weekLoadGeneration++;
+    this._streakObserver?.disconnect();
+    this._streakObserver = null;
+    this._visibleStreaks?.clear();
+    this._pendingRender = false;
+    this._streakQueue = [];
+    this.debouncedRefresh?.cancel?.();
+    if (this._pendingRenderTimer) clearTimeout(this._pendingRenderTimer);
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
     if (this._visualTimers) {
       this._visualTimers.forEach(clearTimeout);
@@ -236,26 +262,43 @@ class WeeklyGridView extends ItemView {
       this.resizeObserver = null;
     }
 
+    if (this._diaryController && typeof this._diaryController.destroy === "function") {
+      this._diaryController.destroy();
+      this._diaryController = null;
+    }
+    if (this._statisticsController && typeof this._statisticsController.destroy === "function") {
+      this._statisticsController.destroy();
+    }
+
     // Clean up memory when view is closed
+    this.invalidateViewCaches();
     this.dailyStats = {};
     this.activeFilePaths.clear();
     if (this.milestoneHit) this.milestoneHit.clear();
-    this.isProcessing = false;
     this.isTogglingInProgress = false;
+    this._pendingToggles?.clear();
     this.contentEl.empty();
   }
 
   // Method to refresh the view when settings change
   async refresh() {
+    if (!this.currentWeekStart) this.initializeWeek();
+    if (this._renderedWeekStartDay !== this.plugin.settings.weekStartDay) {
+      const anchor = this.currentWeekStart.clone().add(3, "days");
+      const daysFromWeekStart = (anchor.day() - this.plugin.settings.weekStartDay + 7) % 7;
+      this.currentWeekStart = anchor.subtract(daysFromWeekStart, "days");
+      this.focusedDayIndex = null;
+      this._renderedWeekStartDay = this.plugin.settings.weekStartDay;
+    }
     await this.renderWeeklyGrid();
   }
 
   /** Returns array of 7 day infos for the current week: { dayDate, dateKey, isToday, dayOfWeek }. */
-  getWeekDayInfos() {
+  getWeekDayInfos(weekStart = this.currentWeekStart) {
     const today = window.moment();
     const infos = [];
     for (let i = 0; i < 7; i++) {
-      const dayDate = this.currentWeekStart.clone().add(i, "days");
+      const dayDate = weekStart.clone().add(i, "days");
       infos.push({
         dayDate,
         dateKey: DateUtils.formatDateKey(dayDate),
@@ -268,6 +311,8 @@ class WeeklyGridView extends ItemView {
 
   /** Returns the single content container for the weekly view; creates it if missing. */
   getWeeklyContentContainer() {
+    if (this._isClosed || this.plugin._isUnloading) return null;
+    this.contentEl.classList.add("dh-weekly-query-host");
     if (this._contentContainerEl && this.contentEl.contains(this._contentContainerEl)) {
       return this._contentContainerEl;
     }
@@ -281,8 +326,22 @@ class WeeklyGridView extends ItemView {
   }
 
   async renderWeeklyGrid() {
-    if (this._isRendering) return;
+    if (this._isClosed || this.plugin._isUnloading) return;
+    if (this._isRendering) {
+      this.renderToken++;
+      this._streakQueue = [];
+      this._streakObserver?.disconnect();
+      this._streakObserver = null;
+      this._visibleStreaks?.clear();
+      this._pendingRender = true;
+      return;
+    }
     this._isRendering = true;
+    const renderToken = ++this.renderToken;
+    this._streakQueue = [];
+    this._streakObserver?.disconnect();
+    this._streakObserver = null;
+    this._visibleStreaks?.clear();
     const container = this.getWeeklyContentContainer();
     if (!container) {
       this._isRendering = false;
@@ -290,6 +349,11 @@ class WeeklyGridView extends ItemView {
     }
 
     if (!this.plugin.isFullyLoaded) {
+      if (this.plugin.startupError) {
+        StatusView.renderError(container, "Core Habits could not initialize safely. Check the console and reload after fixing the error.");
+        this._isRendering = false;
+        return;
+      }
       const loadingText = this.plugin.translationManager
         ? this.plugin.translationManager.t("loading_habits")
         : "Loading habits...";
@@ -303,16 +367,18 @@ class WeeklyGridView extends ItemView {
       const scrollParent = container.closest(".workspace-leaf-content");
       const scrollTop = scrollParent ? scrollParent.scrollTop : 0;
 
-      // Preload all week data concurrently
-      await this.loadWeekData();
+      // Preload all week data concurrently (only needed for grid and dashboard, not diary)
+      if (this.currentViewMode !== "diary") {
+        const loaded = await this.loadWeekData(this.currentWeekStart.clone(), renderToken);
+        if (loaded === false) return;
+        if (this._isClosed || this.plugin._isUnloading || this.renderToken !== renderToken) return;
+      }
 
       // Use a DocumentFragment or off-screen div to prevent flickering during async reads
       const tempContainer = document.createElement("div");
-      tempContainer.className = "weekly-grid-container daily-habits-plugin";
+      tempContainer.className = `weekly-grid-container daily-habits-plugin is-${this.currentViewMode}-view`;
       
       this._streakCache = new Map();
-      this._streakQueue = [];
-      this.renderToken = Date.now();
 
       const dir = this.plugin.translationManager.t("direction");
       tempContainer.setAttribute("dir", dir);
@@ -323,20 +389,45 @@ class WeeklyGridView extends ItemView {
       }
 
       await this.renderWeekHeader(tempContainer);
+      if (this._isClosed || this.plugin._isUnloading || this.renderToken !== renderToken) return;
 
-      const viewContentEl = tempContainer.createDiv({ cls: "dh-view-content" });
+      const viewContentEl = tempContainer.createDiv({
+        cls: "dh-view-content",
+        attr: {
+          id: this._tabPanelId,
+          role: "tabpanel",
+          "aria-labelledby": `${this._tabPanelId}-${this.currentViewMode}`
+        }
+      });
 
-      if (this.currentViewMode === "dashboard") {
-        await this.dashboardRenderer.render(viewContentEl);
-      } else if (this.currentViewMode === "diary") {
-        await this.diaryRenderer.render(viewContentEl);
-      } else {
-        this.streakCalculator = new StreakCalculator(this.plugin, this._streakCache);
-        const today = window.moment();
-        const habits = this.plugin.habitManager.getActiveHabits();
-        await this.gridRenderer.renderGridTable(viewContentEl, today, habits, this.weekContentCache);
+      try {
+        if (this.currentViewMode === "dashboard") {
+          await this.statisticsController.render(viewContentEl);
+        } else if (this.currentViewMode === "diary") {
+          await this.diaryController.render(viewContentEl);
+        } else {
+          this.streakCalculator = new StreakCalculator(this.plugin, this._streakCache);
+          const today = window.moment();
+          const habits = this.plugin.habitManager.getActiveHabits();
+          await this.gridRenderer.renderGridTable(viewContentEl, today, habits, this.weekContentCache);
+        }
+      } catch (subViewErr) {
+        console.error("[Core Habits] Subview render error:", subViewErr);
+        Utils.debugLog(this.plugin, "Subview render error", subViewErr);
+        const errorEl = StatusView.renderError(
+          viewContentEl,
+          this.plugin.translationManager.t("weekly_view_error") || "Error rendering view",
+          "⚠️"
+        );
+        const retryBtn = errorEl.createEl("button", {
+          cls: "dh-btn mod-cta",
+          text: this.plugin.translationManager.t("refresh") || "Retry",
+        });
+        retryBtn.onclick = () => {
+          this.renderWeeklyGrid();
+        };
       }
-
+      if (this._isClosed || this.plugin._isUnloading || this.renderToken !== renderToken) return;
 
       // Preserve scroll position of the grid wrapper to prevent jump-to-top on re-render
       const existingWrapper = container.querySelector(".habits-grid-wrapper");
@@ -358,7 +449,7 @@ class WeeklyGridView extends ItemView {
         newWrapper.scrollTop = wrapperScrollTop;
         newWrapper.scrollLeft = wrapperScrollLeft;
         requestAnimationFrame(() => {
-          if (newWrapper) {
+          if (!this._isClosed && this.renderToken === renderToken && newWrapper) {
             newWrapper.scrollTop = wrapperScrollTop;
             newWrapper.scrollLeft = wrapperScrollLeft;
           }
@@ -366,26 +457,51 @@ class WeeklyGridView extends ItemView {
       }
 
       if (scrollParent && scrollTop > 0) {
-        requestAnimationFrame(() => { scrollParent.scrollTop = scrollTop; });
+        requestAnimationFrame(() => { if (!this._isClosed && this.renderToken === renderToken) scrollParent.scrollTop = scrollTop; });
       }
     } catch (err) {
+      if (this._isClosed || this.plugin._isUnloading) return;
+      console.error("[Core Habits] renderWeeklyGrid error:", err);
       Utils.debugLog(this.plugin, "renderWeeklyGrid error", err);
-      new Notice(this.plugin.translationManager.t("weekly_view_error"));
+      NoticeService.error(this.plugin.translationManager.t("weekly_view_error"), this.plugin);
+
       try {
-        this.app.vault.adapter.write("weekly_error.txt", err.stack || err.toString());
-      } catch { /* ignore */ }
+        const errorEl = StatusView.renderError(
+          container,
+          this.plugin.translationManager.t("weekly_view_error") || "An unexpected error occurred",
+          "⚠️"
+        );
+        const retryBtn = errorEl.createEl("button", {
+          cls: "dh-btn mod-cta",
+          text: this.plugin.translationManager.t("refresh") || "Retry",
+        });
+        retryBtn.onclick = () => {
+          this.renderWeeklyGrid();
+        };
+      } catch { /* ignore secondary error */ }
     } finally {
       this._isRendering = false;
+      if (this._pendingRender && !this._isClosed && !this.plugin._isUnloading) {
+        this._pendingRender = false;
+        this._pendingRenderTimer = setTimeout(() => {
+          this._pendingRenderTimer = null;
+          if (!this._isClosed && !this.plugin._isUnloading) void this.renderWeeklyGrid();
+        }, 0);
+      }
     }
   }
 
   async renderWeekHeader(container) {
+    this._tabPanelId ||= `dh-weekly-panel-${++weeklyPanelSequence}`;
     // Main Card Container
     const headerCard = container.createDiv({ cls: "weekly-header-controls" });
     const weekEnd = this.currentWeekStart.clone().add(6, "days");
 
     // --- NAVIGATION TABS ---
-    const navTabs = headerCard.createDiv({ cls: "dh-nav-tabs" });
+    const navTabs = headerCard.createDiv({
+      cls: "dh-tabs dh-nav-tabs",
+      attr: { role: "tablist", "aria-label": this.plugin.translationManager.t("view_mode") || "View mode" }
+    });
 
     const tabs = [
       { id: "grid", icon: "calendar", label: this.plugin.translationManager.t("tab_weekly_grid") },
@@ -393,10 +509,21 @@ class WeeklyGridView extends ItemView {
       { id: "diary", icon: "book-open", label: this.plugin.translationManager.t("tab_my_diary") }
     ];
 
+    const tabButtons = {};
     tabs.forEach(tab => {
+      const selected = this.currentViewMode === tab.id;
       const tabBtn = navTabs.createEl("button", {
-        cls: `dh-btn dh-nav-tab ${this.currentViewMode === tab.id ? "is-active" : ""}`,
+        cls: `dh-tab dh-nav-tab ${selected ? "is-active" : ""}`,
+        attr: {
+          id: `${this._tabPanelId}-${tab.id}`,
+          type: "button",
+          role: "tab",
+          "aria-controls": this._tabPanelId,
+          "aria-selected": String(selected),
+          tabindex: selected ? "0" : "-1"
+        }
       });
+      tabButtons[tab.id] = tabBtn;
       setIcon(tabBtn, tab.icon);
       tabBtn.createSpan({ cls: "dh-nav-tab-label", text: tab.label });
 
@@ -407,49 +534,69 @@ class WeeklyGridView extends ItemView {
         }
       };
     });
+    bindTabKeys(navTabs, tabButtons, (tabId) => tabButtons[tabId].click());
 
     // --- WEEK NAVIGATION ---
-    if (this.currentViewMode === "grid" || this.currentViewMode === "diary") {
+    if (this.currentViewMode === "grid") {
       const mainStage = headerCard.createDiv({ cls: "dh-date-navigator-stage" });
 
       const dir = this.plugin.translationManager.t("direction");
       const prevIcon = dir === "rtl" ? "chevron-right" : "chevron-left";
       const nextIcon = dir === "rtl" ? "chevron-left" : "chevron-right";
 
-      // 1. زر "اليوم" (اليمن في RTL)
-      const todayBtn = mainStage.createEl("button", {
-        cls: "dh-btn dh-header-text-btn",
-        title: this.plugin.translationManager.t("back_to_today")
-      });
-      todayBtn.createSpan({ text: this.plugin.translationManager.t("today") });
+      // --- ZONE 1: START ACTIONS (Fixed position: Today + Previous Week) ---
+      const startZone = mainStage.createDiv({ cls: "dh-nav-zone dh-nav-zone-start" });
 
+      const todayBtn = startZone.createEl("button", {
+        cls: "dh-header-text-btn",
+        attr: { type: "button" }
+      });
+      TooltipHelper.set(todayBtn, this.plugin.translationManager.t("back_to_today"));
+      setIcon(todayBtn, "calendar-days");
+      todayBtn.createSpan({ cls: "dh-header-action-label", text: this.plugin.translationManager.t("today") });
       todayBtn.onclick = async () => {
-        this.initializeWeek();
-        await this.renderWeeklyGrid();
+        await this.goToCurrentWeek();
       };
 
-      // 2. حاوية التاريخ (الوسط)
-      const dateWrap = mainStage.createDiv({ cls: "dh-date-title-wrap" });
-
-      const prevBtn = dateWrap.createEl("button", { cls: "dh-btn dh-nav-arrow-btn mod-icon" });
+      const prevBtn = startZone.createEl("button", {
+        cls: "dh-nav-arrow-btn",
+        attr: { type: "button" }
+      });
+      TooltipHelper.set(prevBtn, this.plugin.translationManager.t("grid_previous_week"));
       setIcon(prevBtn, prevIcon);
       prevBtn.onclick = async () => {
         this.currentWeekStart.subtract(7, "days");
         await this.renderWeeklyGrid();
       };
 
+      // --- ZONE 2: CENTER DATE & MODE SWITCH (Flexible & Centered) ---
+      const dateWrap = mainStage.createDiv({ cls: "dh-date-title-wrap dh-nav-zone-center" });
       const textWrap = dateWrap.createDiv({ cls: "dh-date-text-wrap" });
+
       this.dateDisplayEl = textWrap.createSpan({ cls: "dh-date-text" });
       this.dateDisplayEl.setAttribute("data-date-display", "true");
       this.updateDateDisplay(this.dateDisplayEl, weekEnd);
 
       if (this.plugin.settings.showHijriDate) {
         const modeSwitch = textWrap.createSpan({ cls: "dh-date-mode-pill" });
-        modeSwitch.createSpan({ text: "[" });
-        const gregorianTab = modeSwitch.createSpan({ cls: "dh-mode-btn-mini", text: this.plugin.translationManager.t("gregorian_abbr") });
-        modeSwitch.createSpan({ text: " | " });
-        const hijriTab = modeSwitch.createSpan({ cls: "dh-mode-btn-mini", text: this.plugin.translationManager.t("hijri_abbr") });
-        modeSwitch.createSpan({ text: "]" });
+        const gregorianTab = modeSwitch.createEl("button", {
+          cls: "dh-mode-btn-mini",
+          text: this.plugin.translationManager.t("grid_gregorian_short"),
+          attr: {
+            type: "button",
+            "aria-label": this.plugin.translationManager.t("grid_gregorian_date"),
+            "aria-pressed": this.currentDateMode === "gregorian" ? "true" : "false"
+          }
+        });
+        const hijriTab = modeSwitch.createEl("button", {
+          cls: "dh-mode-btn-mini",
+          text: this.plugin.translationManager.t("grid_hijri_short"),
+          attr: {
+            type: "button",
+            "aria-label": this.plugin.translationManager.t("grid_hijri_date"),
+            "aria-pressed": this.currentDateMode === "hijri" ? "true" : "false"
+          }
+        });
 
         if (this.currentDateMode === "gregorian") {
           gregorianTab.addClass("active");
@@ -462,6 +609,8 @@ class WeeklyGridView extends ItemView {
             this.currentDateMode = "gregorian";
             gregorianTab.addClass("active");
             hijriTab.removeClass("active");
+            gregorianTab.setAttribute("aria-pressed", "true");
+            hijriTab.setAttribute("aria-pressed", "false");
             this.updateDateDisplay(this.dateDisplayEl, weekEnd);
           }
         };
@@ -471,27 +620,47 @@ class WeeklyGridView extends ItemView {
             this.currentDateMode = "hijri";
             hijriTab.addClass("active");
             gregorianTab.removeClass("active");
+            hijriTab.setAttribute("aria-pressed", "true");
+            gregorianTab.setAttribute("aria-pressed", "false");
             this.updateDateDisplay(this.dateDisplayEl, weekEnd);
           }
         };
       }
 
-      const nextBtn = dateWrap.createEl("button", { cls: "dh-btn dh-nav-arrow-btn mod-icon" });
+      // --- ZONE 3: END ACTIONS (Fixed position: Next Week + Refresh) ---
+      const endZone = mainStage.createDiv({ cls: "dh-nav-zone dh-nav-zone-end" });
+
+      const nextBtn = endZone.createEl("button", {
+        cls: "dh-nav-arrow-btn",
+        attr: { type: "button" }
+      });
+      TooltipHelper.set(nextBtn, this.plugin.translationManager.t("grid_next_week"));
       setIcon(nextBtn, nextIcon);
       nextBtn.onclick = async () => {
         this.currentWeekStart.add(7, "days");
         await this.renderWeeklyGrid();
       };
 
-      // 3. زر "تحديث" (اليسار في RTL)
-      const refreshBtn = mainStage.createEl("button", {
-        cls: "dh-btn dh-header-text-btn",
-        title: this.plugin.translationManager.t("refresh_title"),
+      const refreshBtn = endZone.createEl("button", {
+        cls: "dh-header-text-btn",
+        attr: { type: "button" },
       });
-      refreshBtn.createSpan({ text: this.plugin.translationManager.t("refresh") });
+      setIcon(refreshBtn, "rotate-cw");
+      refreshBtn.createSpan({ cls: "dh-header-action-label", text: this.plugin.translationManager.t("refresh") });
       refreshBtn.onclick = async () => {
-        await this.renderWeeklyGrid();
-        new Notice(this.plugin.translationManager.t("refreshed_success"));
+        if (this._isRefreshing) return;
+        this._isRefreshing = true;
+        refreshBtn.disabled = true;
+        try {
+          await this.renderWeeklyGrid();
+          NoticeService.success(this.plugin.translationManager.t("refreshed_success"), this.plugin);
+        } finally {
+          setTimeout(() => {
+            if (this._isClosed || this.plugin._isUnloading) return;
+            this._isRefreshing = false;
+            refreshBtn.disabled = false;
+          }, 300);
+        }
       };
     }
 
@@ -548,10 +717,6 @@ class WeeklyGridView extends ItemView {
     };
   }
 
-  getReflectionHeading() {
-    return this.plugin.settings.reflectionHeading || DEFAULT_REFLECTION_HEADING;
-  }
-
   getHabitNotesHeading() {
     return this.plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
   }
@@ -560,114 +725,83 @@ class WeeklyGridView extends ItemView {
     return Utils.extractSectionLines(content, heading);
   }
 
-  parseDailyReflectionEntries(content, dateMoment, path = "") {
-    const lines = this.extractSectionLines(content, this.getReflectionHeading());
-    const entries = [];
-    const dateKey = DateUtils.formatDateKey(dateMoment);
-
-    lines.forEach((line, index) => {
-      if (!line.startsWith("-")) return;
-
-      const match = line.match(/^-\s+(?:(\d{1,2}:\d{2})\s+)?(?:\[type::\s*([^\]]+)\]\s*)?(.*)$/);
-      if (!match) return;
-
-      const time = match[1] || "";
-      const type = normalizeReflectionType(match[2]);
-      const text = (match[3] || "").trim();
-      if (!text) return;
-
-      entries.push({
-        date: dateKey,
-        dateKey,
-        time,
-        type,
-        text,
-        path,
-        moment: dateMoment.clone(),
-        timestamp: dateMoment.clone().startOf("day").valueOf() + index,
-      });
-    });
-
-    return entries;
-  }
-
-
-
   openReflectionPopup(dayDate) {
     const dateKey = DateUtils.formatDateKey(dayDate);
     new ReflectionPopup(this.app, this.plugin, dayDate, async (text, type) => {
-      const savedFile = await this.plugin.habitCommentRepository.injectReflection(dayDate, text, type);
+      const savedFile = await this.plugin.habitJournalService.saveReflection(dayDate, text, type);
       this.dailyReflectionDays.add(dateKey);
-      setTimeout(() => this.renderWeeklyGrid(), 0);
+      if (!this._isClosed && !this.plugin._isUnloading) {
+        setTimeout(() => { if (!this._isClosed && !this.plugin._isUnloading) void this.renderWeeklyGrid(); }, 0);
+      }
       return savedFile;
     }).open();
   }
 
-  async loadWeekData() {
-    this.weeklyDiaryEntries = [];
-    this.dailyReflectionDays.clear();
-    this.activeFilePaths.clear();
-    this.weekContentCache = new Map();
-
-    const weekDayInfos = this.getWeekDayInfos();
+  async loadWeekData(weekStart = this.currentWeekStart.clone(), expectedToken = null) {
+    const generation = ++this._weekLoadGeneration;
+    const reflectionDays = new Set();
+    const activeFilePaths = new Set();
+    const weekContentCache = new Map();
+    const weekDayInfos = this.getWeekDayInfos(weekStart);
     const loadPromises = weekDayInfos.map(async ({ dayDate, dateKey }) => {
       const file = await getNoteByDate(this.app, dayDate, false, this.plugin.settings);
       if (file) {
-        this.activeFilePaths.add(file.path);
+        activeFilePaths.add(file.path);
         const content = await this.app.vault.cachedRead(file);
-        this.weekContentCache.set(dateKey, content);
+        weekContentCache.set(dateKey, content);
         
-        // Parse reflections
-        const dayEntries = this.parseDailyReflectionEntries(content, dayDate, file.path);
-        if (dayEntries.length > 0) {
-          this.dailyReflectionDays.add(dateKey);
-          this.weeklyDiaryEntries.push(...dayEntries);
+        if (this.plugin.diaryService?.parseDailyReflectionEntries(content, dayDate, file.path).length > 0) {
+          reflectionDays.add(dateKey);
         }
       } else {
-        this.weekContentCache.set(dateKey, "");
+        weekContentCache.set(dateKey, null);
       }
     });
     await Promise.all(loadPromises);
-
-    // Sort entries by timestamp (timeline order)
-    this.weeklyDiaryEntries.sort((a, b) => b.timestamp - a.timestamp);
-
-    // Calculate weekly stats
     const habits = this.plugin.habitManager.getActiveHabits();
-    this.dailyStats = await this.plugin.statsService.calculateWeeklyStats(
+    const dailyStats = await this.plugin.statsService.calculateWeeklyStats(
       habits,
-      this.currentWeekStart,
-      this.weekContentCache
+      weekStart,
+      weekContentCache
     );
+    if (this._isClosed || this.plugin._isUnloading || generation !== this._weekLoadGeneration ||
+        (expectedToken !== null && expectedToken !== this.renderToken) ||
+        DateUtils.formatDateKey(weekStart) !== DateUtils.formatDateKey(this.currentWeekStart)) return false;
+    this.dailyReflectionDays = reflectionDays;
+    this.activeFilePaths = activeFilePaths;
+    this.weekContentCache = weekContentCache;
+    this.dailyStats = dailyStats;
+    return true;
   }
 
   async toggleHabitCompletion(habit, date, targetState) {
+    const toggleKey = `${habit.id}:${DateUtils.formatDateKey(date)}`;
+    if (this._pendingToggles.has(toggleKey)) return null;
+    this._pendingToggles.add(toggleKey);
     this.isTogglingInProgress = true;
     try {
-      // Ensure habits checklist exists in the daily note BEFORE toggling
-      await this.plugin.habitManager.ensureHabitsInNote(date, habit, true);
-
-      const file = await getNoteByDate(this.app, date, true, this.plugin.settings);
-      if (!file) return false;
-
-      // Add to ignore modify list to prevent double rendering from live sync modify event
-      this.ignoreModifyFiles.add(file.path);
-
-      await this.plugin.habitManager.toggleHabitInNote(file, habit, targetState);
+      const wasMissingNote = this.weekContentCache?.get(DateUtils.formatDateKey(date)) === null;
+      const didToggle = await this.plugin.habitManager.toggleHabitForDate(date, habit, targetState);
+      if (!didToggle) return false;
 
       // Reload data to recalculate cache & stats
       await this.loadWeekData();
+      if (wasMissingNote && !this._isClosed && this.currentViewMode === "grid") {
+        await this.renderWeeklyGrid();
+      }
 
       return true;
     } catch (e) {
       console.error("[Core Habits] toggleHabitCompletion error:", e);
       return false;
     } finally {
-      this.isTogglingInProgress = false;
+      this._pendingToggles.delete(toggleKey);
+      this.isTogglingInProgress = this._pendingToggles.size > 0;
     }
   }
 
   async checkMilestone(dateKey) {
+    if (this._isClosed || this.plugin._isUnloading) return 0;
     const dailyStats = this.dailyStats;
     if (!dailyStats || !dailyStats[dateKey]) return 0;
     const { completed, total } = dailyStats[dateKey];
@@ -687,6 +821,7 @@ class WeeklyGridView extends ItemView {
 
     if (level === 100) {
       await this.plugin.audioEngine.playSound({ type: "milestone", level: "complete" });
+      if (this._isClosed || this.plugin._isUnloading) return level;
       this.showDayGlow(dateKey);
       this.showCompletionMessage();
     } else if (level === 75) {
@@ -728,29 +863,23 @@ class WeeklyGridView extends ItemView {
   showCompletionMessage() {
     const keys = ["completion_msg_1", "completion_msg_2", "completion_msg_3"];
     const randomKey = keys[Math.floor(Math.random() * keys.length)];
-    new Notice(this.plugin.translationManager.t(randomKey), 3000);
-  }
-
-  getWeeklyDiaryEntries() {
-    return this.weeklyDiaryEntries || [];
+    NoticeService.success(this.plugin.translationManager.t(randomKey), 3000, this.plugin);
   }
 
   openEditHabitModal(habit) {
-    new AddHabitModal(
-      this.app,
-      this.plugin,
+    this.plugin.openEditHabit(
+      habit,
       async (updatedData) => {
-        try {
-          if (updatedData.levelData) updatedData.currentLevel = calculateCurrentLevel(updatedData.levelData);
-          await this.plugin.habitManager.updateHabit(habit.id, updatedData);
-          await this.renderWeeklyGrid();
-          new Notice(this.plugin.translationManager.t("success_updated", { name: updatedData.name }));
-        } catch (e) {
-          new Notice(`❌ Error: ${e.message}`);
-        }
-      },
-      habit
-    ).open();
+        const merged = { ...habit, ...updatedData };
+        const effectiveLevel = updatedData.currentLevel
+          || ProgressionEngine.calculateLevel(merged, null, updatedData.levelData);
+        updatedData.currentLevel = Math.max(habit.currentLevel || 1, effectiveLevel);
+        await this.plugin.habitManager.updateHabit(habit.id, updatedData);
+        try { await this.renderWeeklyGrid(); }
+        catch (error) { console.warn("[Core Habits] Habit updated, but the weekly view could not refresh:", error); }
+        NoticeService.success(this.plugin.translationManager.t("success_updated", { name: updatedData.name }), this.plugin);
+      }
+    );
   }
 
   openCommentPopup(habit, date) {
@@ -760,7 +889,7 @@ class WeeklyGridView extends ItemView {
       habit,
       date,
       async (comment) => {
-        await this.plugin.habitCommentRepository.upsertCommentForHabitDate(habit, date, comment);
+        await this.plugin.habitJournalService.saveHabitComment(habit, date, comment);
         await this.loadWeekData();
         await this.renderWeeklyGrid();
       }
@@ -774,7 +903,7 @@ class WeeklyGridView extends ItemView {
       const leaf = this.app.workspace.getLeaf(false);
       await leaf.openFile(file);
     } else {
-      new Notice(this.plugin.translationManager.t("error_habit_file_not_found"));
+      NoticeService.error(this.plugin.translationManager.t("error_habit_file_not_found"), this.plugin);
     }
   }
 
@@ -787,23 +916,17 @@ class WeeklyGridView extends ItemView {
   }
 
   toggleGroupCollapse(pid, collapsed) {
-    if (collapsed) {
-      if (!this.plugin.settings.collapsedGroups.includes(pid)) {
-        this.plugin.settings.collapsedGroups.push(pid);
-      }
-    } else {
-      this.plugin.settings.collapsedGroups = this.plugin.settings.collapsedGroups.filter(id => id !== pid);
-    }
-    this.plugin.saveSettings({ silent: true });
+    return this.toggleAllGroupsCollapse([pid], collapsed);
+  }
+
+  async toggleAllGroupsCollapse(parentIds, collapsed) {
+    await GroupCollapseController.persist(this.plugin, parentIds, collapsed);
   }
 
   async dismissGridHint() {
     this.plugin.settings.hasSeenGridHint = true;
     await this.plugin.saveSettings();
   }
-
-
-
 }
 
 export { WeeklyGridView };

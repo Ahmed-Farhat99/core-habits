@@ -1,0 +1,111 @@
+/* =============================================================================
+   CORE HABITS — NOTICES & TOASTS
+   Unified notice styles for plugin notifications, action toasts, and undo alerts.
+   ============================================================================= */
+
+/* Ensure notice container stays above active modals, overlays, and sidebars */
+.notice-container {
+  z-index: var(--dh-z-notice, 2000);
+}
+
+/* Notice Host & Direction Scope */
+.notice.daily-habits-plugin.dh-notice {
+  font-family: inherit;
+  font-size: var(--dh-font-sm);
+  color: var(--text-normal);
+  border-radius: var(--dh-radius-lg);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--dh-shadow-md);
+  padding: var(--dh-space-sm) var(--dh-space-md);
+  transition: transform var(--dh-transition-fast), opacity var(--dh-transition-fast);
+}
+
+.notice.daily-habits-plugin.dh-notice.dh-notice-success {
+  border-inline-start: 3px solid var(--dh-brand-success);
+}
+
+.notice.daily-habits-plugin.dh-notice.dh-notice-warning {
+  border-inline-start: 3px solid var(--dh-brand-warning);
+}
+
+.notice.daily-habits-plugin.dh-notice.dh-notice-error {
+  border-inline-start: 3px solid var(--dh-brand-critical);
+}
+
+/* Notice Content Layout */
+.daily-habits-plugin .dh-notice-content,
+.dh-notice-wrapper,
+.dh-undo-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dh-space-md);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Text and Count Group */
+.daily-habits-plugin .dh-notice-text-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dh-space-xs);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.daily-habits-plugin .dh-notice-icon {
+  font-size: 1.1em;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-notice-count {
+  font-weight: var(--dh-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+  padding-inline-end: 2px;
+}
+
+.daily-habits-plugin .dh-notice-message {
+  font-size: var(--dh-font-sm);
+  font-weight: var(--dh-weight-medium);
+  color: var(--text-normal);
+  line-height: 1.35;
+}
+
+/* Action Button Group */
+.daily-habits-plugin .dh-notice-actions,
+.dh-undo-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dh-space-xs);
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-notice-action-btn,
+.dh-notice-btn,
+.dh-undo-btn {
+  padding: 4px 12px;
+  font-size: var(--dh-font-xs);
+  font-weight: var(--dh-weight-semibold);
+  border-radius: var(--dh-radius-md);
+  white-space: nowrap;
+}
+
+.daily-habits-plugin .dh-notice-close-btn,
+.dh-close-btn {
+  padding: 2px 6px;
+  font-size: var(--dh-font-xs);
+  color: var(--text-muted);
+  border-radius: var(--dh-radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--dh-transition-fast), color var(--dh-transition-fast);
+}
+
+.daily-habits-plugin .dh-notice-close-btn:hover,
+.dh-close-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}

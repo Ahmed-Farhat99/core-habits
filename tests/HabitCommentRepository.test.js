@@ -159,4 +159,73 @@ describe("HabitCommentRepository Tests", () => {
     expect(history.length).toBe(3);
     expect(history[0].text).toBe("Read 25 pages");
   });
+
+  it("should resolve habit via findHabitByNameOrAlias without inspecting habitsMap directly", async () => {
+    const resolvedHabit = {
+      id: "habit-resolved",
+      name: "Meditation",
+      linkText: "[[Meditation]]",
+      nameHistory: []
+    };
+
+    const mockFind = vi.fn().mockReturnValue(resolvedHabit);
+    mockPlugin.habitManager = {
+      findHabitByNameOrAlias: mockFind
+    };
+
+    const mockFile = new TFile("Daily/2026-06-22.md");
+    helpers.getNoteByDate.mockResolvedValue(mockFile);
+    mockApp.vault.cachedRead.mockResolvedValue("## 📖 Habit Log\n- 09:00 [habit-id:: habit-resolved] [habit-note:: Meditation] Meditation - 10 mins\n");
+
+    const history = await repository.getCommentHistoryByName("Meditation", 1);
+    expect(mockFind).toHaveBeenCalledWith("Meditation");
+    expect(history.length).toBe(1);
+    expect(history[0].text).toBe("10 mins");
+  });
+
+  it("should reuse existing habit log section from history without injecting duplicate heading", async () => {
+    mockPlugin.settings.habitLogHeading = "### 💬 New Log Heading";
+    mockPlugin.settings.habitLogHeadingHistory = ["### 📝 Old Log Heading"];
+
+    const habit = { id: "habit-abc", name: "Reading", linkText: "Reading" };
+    const targetDate = window.moment("2026-06-22");
+    const mockFile = new TFile("Daily/2026-06-22.md");
+    helpers.getNoteByDate.mockResolvedValue(mockFile);
+
+    const originalContent = `### 📝 Old Log Heading\n- 08:00 [habit-id:: habit-abc] [habit-note:: Reading] Reading - First comment\n`;
+    let processedContent = "";
+    mockApp.vault.process.mockImplementation(async (file, callback) => {
+      processedContent = callback(originalContent);
+      return file;
+    });
+
+    await repository.upsertCommentForHabitDate(habit, targetDate, "Updated comment");
+
+    expect(processedContent).toContain("### 📝 Old Log Heading");
+    expect(processedContent).not.toContain("### 💬 New Log Heading");
+    expect(processedContent).toContain("Updated comment");
+  });
+
+  it("should reuse existing reflection section from history without injecting duplicate heading", async () => {
+    mockPlugin.settings.reflectionHeading = "### 📝 New Reflections";
+    mockPlugin.settings.reflectionHeadingHistory = ["### 💭 Old Reflections"];
+
+    const targetDate = window.moment("2026-06-22");
+    const mockFile = new TFile("Daily/2026-06-22.md");
+    helpers.getNoteByDate.mockResolvedValue(mockFile);
+
+    const originalContent = `### 💭 Old Reflections\n- 08:00 [type:: Idea] Old thought\n`;
+    let processedContent = "";
+    mockApp.vault.process.mockImplementation(async (file, callback) => {
+      processedContent = callback(originalContent);
+      return file;
+    });
+
+    await repository.injectReflection(targetDate, "New thought", "Lesson");
+
+    expect(processedContent).toContain("### 💭 Old Reflections");
+    expect(processedContent).not.toContain("### 📝 New Reflections");
+    expect(processedContent).toContain("[type:: Lesson] New thought");
+  });
 });
+

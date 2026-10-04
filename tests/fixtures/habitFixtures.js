@@ -1,4 +1,5 @@
 export const canonicalHabit = {
+  schemaVersion: 2,
   id: "habit-1234567890",
   name: "Reading Books",
   linkText: "[[Reading Books]]",

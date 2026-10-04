@@ -1,0 +1,185 @@
+/* =============================================================================
+   CORE HABITS — DESIGN TOKENS
+   Unified single source of truth for colors, typography, spacing, radius,
+   elevations, transitions, and z-indices.
+   ============================================================================= */
+
+:root,
+.daily-habits-plugin {
+  /* ---------- Brand Colors ---------- */
+  --dh-brand-primary: var(--interactive-accent);
+  --dh-brand-success: var(--color-green, #10b981);
+  --dh-brand-warning: var(--color-yellow, #f59e0b);
+  --dh-brand-danger: var(--color-orange, #f97316);
+  --dh-brand-info: var(--color-blue, #3b82f6);
+  --dh-brand-skipped: #b08d57;
+  --dh-brand-critical: var(--color-red, #f43f5e);
+  --dh-brand-error: var(--dh-brand-critical);
+  --dh-brand-teal: #14b8a6;
+
+  /* ---------- Semantic Dark Variants ---------- */
+  --dh-brand-success-dark: #059669;
+  --dh-brand-warning-dark: #c2600a;
+  --dh-brand-danger-dark: #c2410c;
+  --dh-brand-skipped-dark: #8b6914;
+
+  /* ---------- Cell State Colors ---------- */
+  --dh-state-completed-bg: color-mix(in srgb, var(--dh-brand-success) 15%, transparent);
+  --dh-state-completed-text: var(--dh-brand-success-dark);
+  --dh-state-completed-border: color-mix(in srgb, var(--dh-brand-success) 30%, transparent);
+  --dh-state-missed-bg: color-mix(in srgb, var(--dh-brand-danger) 10%, transparent);
+  --dh-state-missed-text: var(--dh-brand-warning-dark);
+  --dh-state-missed-border: color-mix(in srgb, var(--dh-brand-danger) 20%, transparent);
+  --dh-state-skipped-bg: color-mix(in srgb, var(--dh-brand-skipped) 15%, transparent);
+  --dh-state-skipped-text: var(--dh-brand-skipped-dark);
+  --dh-state-skipped-border: color-mix(in srgb, var(--dh-brand-skipped) 30%, transparent);
+  --dh-state-pending-bg: color-mix(in srgb, var(--dh-brand-warning) 4%, transparent);
+  --dh-state-pending-border: color-mix(in srgb, var(--dh-brand-warning) 12%, transparent);
+  --dh-state-today-bg: color-mix(in srgb, var(--dh-brand-primary) 8%, transparent);
+  --dh-state-today-border: color-mix(in srgb, var(--dh-brand-primary) 20%, transparent);
+
+  /* ---------- Theme Aliases ---------- */
+  --dh-bg-primary: var(--background-primary);
+  --dh-bg-secondary: var(--background-secondary);
+  --dh-border: var(--background-modifier-border);
+  --dh-text-normal: var(--text-normal);
+  --dh-text-muted: var(--text-muted);
+  --dh-accent: var(--interactive-accent);
+  --dh-surface: var(--background-primary);
+  --dh-surface-muted: var(--background-secondary);
+  --dh-surface-hover: var(--background-modifier-hover);
+  --dh-outline: var(--background-modifier-border);
+
+  /* ---------- Habit Row Semantic Hierarchy Tokens ---------- */
+  --dh-child-indent-padding: 16px;
+  --dh-parent-dot-size: 8px;
+  --dh-child-dot-size: 5px;
+  --dh-child-dot-opacity: 0.55;
+  --dh-family-rail-width: 3px;
+  --dh-family-rail-child-opacity: 0.45;
+
+  /* ---------- View & Content Container Width Contract ---------- */
+  --dh-view-max-width: 880px;
+
+  /* ---------- Grid Layout & Sizing ---------- */
+  --dh-grid-min-width: 600px;
+  --dh-grid-index-width: 32px;
+  --dh-grid-name-min-width: 180px;
+  --dh-grid-name-max-width: 360px;
+  --dh-grid-day-min-width: 55px;
+  --dh-day-cell-size: 32px;
+  --dh-day-cell-font-size: 0.95em;
+  --dh-day-stat-badge-padding: 2px 6px;
+  --dh-day-stat-badge-font-size: 0.7rem;
+
+  /* ---------- Streak Badge ---------- */
+  --dh-streak-color: #fb923c;
+  --dh-streak-bg: color-mix(in srgb, var(--dh-brand-warning) 12%, transparent);
+
+  /* ---------- Progress Colors (Semantic) ---------- */
+  --dh-progress-critical: #f97316;
+  --dh-progress-low: #fbbf24;
+  --dh-progress-medium: #eab308;
+  --dh-progress-good: #22c55e;
+  --dh-progress-excellent: var(--dh-brand-success);
+
+  /* ---------- Typography Scale ---------- */
+  --dh-font-2xs: 0.625rem;
+  --dh-font-xs: 0.7rem;
+  --dh-font-sm: 0.8rem;
+  --dh-font-base: 0.875rem;
+  --dh-font-md: 0.95rem;
+  --dh-font-lg: 1.05rem;
+  --dh-font-xl: 1.2rem;
+  --dh-font-2xl: 1.5rem;
+  --dh-font-3xl: 1.75rem;
+
+  /* ---------- Font Weights ---------- */
+  --dh-weight-normal: 400;
+  --dh-weight-medium: 500;
+  --dh-weight-semibold: 600;
+  --dh-weight-bold: 700;
+  --dh-weight-extrabold: 800;
+
+  /* ---------- Spacing Scale ---------- */
+  --dh-space-2xs: 0.125rem;
+  --dh-space-xs: 0.25rem;
+  --dh-space-sm: 0.375rem;
+  --dh-space-md: 0.5rem;
+  --dh-space-lg: 0.75rem;
+  --dh-space-xl: 1rem;
+  --dh-space-2xl: 1.25rem;
+  --dh-space-3xl: 1.5rem;
+  --dh-space-4xl: 2rem;
+
+  /* ---------- Border Radius ---------- */
+  --dh-radius-xs: 2px;
+  --dh-radius-sm: 4px;
+  --dh-radius-md: 6px;
+  --dh-radius-lg: 8px;
+  --dh-radius-xl: 12px;
+  --dh-radius-2xl: 16px;
+  --dh-radius-full: 9999px;
+
+  /* ---------- Shadows ---------- */
+  --dh-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --dh-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.08);
+  --dh-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.12);
+
+  /* ---------- Transitions ---------- */
+  --dh-transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --dh-transition-normal: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --dh-transition-bounce: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---------- Z-Index Scale ---------- */
+  --dh-z-base: 1;
+  --dh-z-step: 5;
+  --dh-z-sticky: 10;
+  --dh-z-modal: 100;
+  --dh-z-popover: 200;
+  --dh-z-tooltip: 300;
+  --dh-z-notice: 2000;
+
+  /* ---------- Level Badge Colors ---------- */
+  --dh-badge-level-1-color: #cd7f32;
+  --dh-badge-level-2-color: #94a3b8;
+  --dh-badge-level-3-color: #eab308;
+  --dh-badge-level-4-color: #06b6d4;
+
+  /* ---------- Responsive Breakpoints ---------- */
+  --dh-breakpoint-compact: 580px;
+  --dh-breakpoint-condensed: 440px;
+  --dh-breakpoint-minimal: 340px;
+
+  /* ---------- Direction Token ---------- */
+  --dh-direction-sign: 1;
+  --dh-icon-control-size: 28px;
+  --dh-nav-control-size: 28px;
+  --dh-status-control-size: 36px;
+  --dh-collapse-control-size: 24px;
+  --dh-tab-control-size: 34px;
+  --dh-touch-control-min: 0px;
+  --dh-status-touch-min: 0px;
+  --dh-collapse-touch-min: 0px;
+  --dh-page-touch-min: 0px;
+}
+
+/* RTL Direction Mirroring */
+:root[dir="rtl"],
+[dir="rtl"],
+.daily-habits-plugin[dir="rtl"],
+[dir="rtl"] .daily-habits-plugin {
+  --dh-direction-sign: -1;
+}
+
+/* Dark Theme Overrides */
+.theme-dark,
+.theme-dark .daily-habits-plugin {
+  --dh-brand-danger: #f97316;
+  --dh-state-missed-text: #fb923c;
+  --dh-progress-critical: #f97316;
+  --dh-progress-low: #fbbf24;
+  --dh-progress-medium: #f59e0b;
+  --dh-progress-good: #10b981;
+  --dh-progress-excellent: var(--dh-brand-success);
+}

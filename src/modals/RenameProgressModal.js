@@ -1,4 +1,6 @@
 import { BaseHabitModal } from './BaseHabitModal.js';
+import { Utils } from '../utils/Utils.js';
+import { NoticeService } from '../services/NoticeService.js';
 
 class RenameProgressModal extends BaseHabitModal {
   constructor(app, plugin, totalFiles, onCancel) {
@@ -33,10 +35,11 @@ class RenameProgressModal extends BaseHabitModal {
     });
 
     // Cancel Button
-    const footer = contentEl.createDiv({ cls: "modal-button-container" });
+    const footer = contentEl.createDiv({ cls: "dh-modal-actions dh-popup-footer-right" });
     const cancelBtn = footer.createEl("button", {
       text: t("cancel"),
-      cls: "dh-btn mod-warning",
+      cls: "dh-btn mod-cancel",
+      type: "button"
     });
     cancelBtn.onclick = () => {
       this.cancelled = true;
@@ -59,6 +62,64 @@ class RenameProgressModal extends BaseHabitModal {
   }
 
   onClose() {
+    super.onClose();
+  }
+
+  /**
+   * Encapsulates the UI confirmation, progress modal, and notices for batch renaming.
+   */
+  static async runBatchRenameWorkflow(app, plugin, { oldName, newName, prep, execute }) {
+    const t = (key, params) => plugin.translationManager ? plugin.translationManager.t(key, params) : key;
+    if (!prep.needsConfirmation) {
+      NoticeService.info(t("rename_no_files_notice"), { plugin });
+      return;
+    }
+
+    const confirmed = await new Promise((resolve) => {
+      Utils.confirmDialog(
+        app,
+        plugin,
+        t("rename_confirm_desc", { oldName, newName, count: prep.fileCount }),
+        {
+          dialogTitle: t("rename_confirm_title"),
+          confirmText: t("rename_confirm_btn_all"),
+          cancelText: t("cancel"),
+          isDanger: true,
+          icon: "⚠️",
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false)
+        }
+      );
+    });
+
+    if (confirmed) {
+      let cancelRequested = false;
+      const progressModal = new RenameProgressModal(
+        app, plugin, prep.fileCount, () => { cancelRequested = true; }
+      );
+      if (progressModal.contentEl) {
+        progressModal.open();
+      }
+
+      try {
+        const result = await execute(
+          (curr, total) => {
+            if (progressModal.updateProgress) progressModal.updateProgress(curr, total);
+          },
+          () => cancelRequested
+        );
+        if (progressModal.close) progressModal.close();
+        if (cancelRequested) {
+          NoticeService.warning(t("rename_cancelled_notice", { count: result?.updated || 0 }), { plugin });
+        } else {
+          NoticeService.success(t("rename_success_notice", { count: result?.updated || 0 }), { plugin });
+        }
+      } catch (err) {
+        if (progressModal.close) progressModal.close();
+        console.error(err);
+        NoticeService.error(t("rename_error_notice"), { plugin });
+      }
+    }
   }
 }
 

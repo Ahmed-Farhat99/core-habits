@@ -1,21 +1,16 @@
-# Core Habits v3.4.0 🚀
+# Core Habits 3.5.0
 
-This release introduces critical synchronization fixes, a redesigned mobile workflow with live statistics, robust clean code improvements, and modern security provenance:
+This release focuses on safer vault writes, consistent state and statistics, and a more maintainable codebase.
 
-### ⚙️ Startup Sync Cooldown (Race Condition Fix)
-- **Startup Protection**: Introduced a configurable cooldown delay (default 15 seconds, adjustable via slider under Advanced Settings) that blocks auto-writing default templates on startup. This gives Obsidian sync services (e.g. Remotely Save) ample time to fetch/download newer cloud files, resolving the bug where checked habits disappeared.
-- **Improved Settings Tab**: Added an interactive slider control conditional on enabling `autoWriteHabits` with dynamic tooltips and instant configuration updates.
+## Changes
 
-### 📱 Premium 7-Day Week Picker Strip on Mobile
-- **Interactive Week Strip**: Replaced the clunky `<` and `>` navigation in the compact layout with a highly responsive, clickable 7-day horizontal calendar strip for phones and sidebars.
-- **Live Daily Completion Rates**: Displays the name abbreviation, day number, and **live daily completion statistics** (`💯`, `80%`, etc.) for all 7 days of the active week.
-- **Visual Today Indicator**: Highlighted today's date with a subtle accent-colored dot at the top of the pill card, mimicking premium native calendars (like Google and Apple Calendar).
-- **Instant List Loading**: Tapping any day in the strip instantly renders its specific habits list and updates percentage badges dynamically upon toggling.
+- Habit note changes preserve the existing body and update owned frontmatter fields through Obsidian's file manager. Migration backs up affected notes before changing them and retains readers for older data formats.
+- Daily checklist, comment, and reflection writes use the current Daily Note content. Date detection respects the configured Daily Notes folder and format.
+- Statistics and cache invalidation share the same Daily Note detection path and rebuild from vault files after restart.
+- Pending renders, timers, and service resources are guarded during view close and plugin unload. Disabling the plugin no longer detaches the user's open weekly view.
+- The codebase now has narrower UI contexts, a centralized journal service, focused statistics modules, and incremental `checkJs` coverage.
+- The release workflow runs tests, lint, type checking, build, and metadata and asset validation before creating a draft release.
 
-### 🛡️ Clean Code & Failure Notifications
-- **Clean Exception Handling**: Conducted a deep code quality audit (`$clean-code-guard`). Removed silent UI toggle failures by integrating visual warnings (`new Notice`) if a habit update transaction fails.
-- **Removed Specificity Hacks**: Cleaned up the CSS stylesheet by completely eliminating the use of `!important`, relying on precise CSS Specificity hierarchies.
-- **Upgraded Platform Target**: Bumped minimum supported Obsidian version to `1.5.0` to utilize native CSS Grid Subgrid safely, resolving legacy browser compatibility warnings.
+## Before publishing
 
-### 🔒 Build Provenance & Security
-- **GitHub Artifact Attestations**: Integrated cryptographic build provenance signing for release assets (`main.js` and `styles.css`) using GitHub Actions, ensuring that the released binaries match the public source repository.
+Verify in a backed-up test vault on desktop and mobile: existing habit migrations, custom Daily Notes templates and folders, habit toggles and comments, statistics after restart, audio recording, and plugin disable/re-enable. The automated suite cannot replace these Obsidian runtime checks.
