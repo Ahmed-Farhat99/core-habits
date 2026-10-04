@@ -1,4 +1,4 @@
-# Core Habits 3.5.1
+# Core Habits 3.5.2
 
 This maintenance and quality release addresses Obsidian automated review requirements, improves link integration, and refines reflection modals with native Wikilink autocomplete.
 
