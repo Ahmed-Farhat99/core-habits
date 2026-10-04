@@ -5,10 +5,10 @@
  * provides audio playback with Chromium duration fixes and mutual pause exclusion,
  * and allows instant note/voice recording via HabitCommentPopup.
  */
-import { setIcon } from 'obsidian';
+import { setIcon, MarkdownRenderer } from 'obsidian';
 import { HabitCommentPopup } from '../../modals/HabitCommentPopup.js';
 import { Utils } from '../../utils/Utils.js';
-import { getNoteByDate } from '../../utils/helpers.js';
+import { getNoteByDate, getDailyNotesInfo, getDailyNotePath } from '../../utils/helpers.js';
 import { TooltipHelper } from '../../utils/TooltipHelper.js';
 
 export class HabitJourneyPanel {
@@ -284,83 +284,63 @@ export class HabitJourneyPanel {
       }
     };
 
-    // Comment body wrapper
-    const commentBody = contentWrapper.createDiv({ cls: "dh-journey-entry-text" });
+    const rawText = entry.text || "";
+    const audioRegex = /!\[\[([^\]]+\.(?:webm|mp4|m4a|ogg|wav|mp3))\]\]/gi;
+    const allAudioMatches = [...rawText.matchAll(audioRegex)];
+    const remainingText = rawText.replace(audioRegex, "").trim();
+    const audioList = allAudioMatches.map(m => m[1]);
 
-    let rawText = entry.text || "";
-    const tokens = [];
+    const sourcePath = entry.path || (entry.date ? getDailyNotePath(entry.date, getDailyNotesInfo(this.app, this.plugin?.settings)) : "");
 
-    // Process audio voice notes first: ![[*.webm]]
-    rawText = rawText.replace(/!\[\[([^\]]+\.webm)\]\]/gi, (match, filename) => {
-      tokens.push({ type: 'audio', text: filename });
-      return `__TOKEN_${tokens.length - 1}__`;
-    });
+    if (remainingText) {
+      const commentBody = contentWrapper.createDiv({ cls: "dh-journey-entry-text" });
+      this.renderMarkdown(remainingText, commentBody, sourcePath);
+    }
 
-    // Process wiki links: [[...]]
-    rawText = rawText.replace(/\[\[(.*?)\]\]/g, (match, linkText) => {
-      tokens.push({ type: 'link', text: linkText });
-      return `__TOKEN_${tokens.length - 1}__`;
-    });
+    audioList.forEach(fileName => {
+      const audioFile = this.app?.metadataCache?.getFirstLinkpathDest(fileName, sourcePath);
+      if (audioFile && this.app?.vault) {
+        const src = this.app.vault.getResourcePath(audioFile);
+        const audioContainer = contentWrapper.createDiv({ cls: "dh-journey-audio-container" });
+        const audioEl = audioContainer.createEl("audio", {
+          cls: "dh-diary-audio",
+          attr: { controls: "true", src, preload: "metadata", dir: "ltr" }
+        });
 
-    // Process ratings: [Rate:: ...]
-    rawText = rawText.replace(/\[Rate:: (.*?)\]/g, (match, rate) => {
-      tokens.push({ type: 'rate', text: rate });
-      return `__TOKEN_${tokens.length - 1}__`;
-    });
+        Utils.fixAudioDuration(audioEl);
+        audioEl.onclick = (e) => e.stopPropagation();
 
-    // Process bold: **...**
-    rawText = rawText.replace(/\*\*(.*?)\*\*/g, (match, bold) => {
-      tokens.push({ type: 'bold', text: bold });
-      return `__TOKEN_${tokens.length - 1}__`;
-    });
-
-    // Append structured nodes securely
-    const parts = rawText.split(/(__TOKEN_\d+__)/);
-    parts.forEach(part => {
-      const tokenMatch = part.match(/__TOKEN_(\d+)__/);
-      if (tokenMatch) {
-        const token = tokens[parseInt(tokenMatch[1])];
-        if (token.type === 'link') {
-          commentBody.createSpan({ cls: "dh-log-link", text: token.text });
-        } else if (token.type === 'audio') {
-          const audioFile = this.app?.metadataCache?.getFirstLinkpathDest(token.text, "");
-          if (audioFile && this.app?.vault) {
-            const src = this.app.vault.getResourcePath(audioFile);
-            const audioContainer = contentWrapper.createDiv({ cls: "dh-journey-audio-container" });
-            const audioEl = audioContainer.createEl("audio", {
-              cls: "dh-diary-audio",
-              attr: { controls: true, src: src }
-            });
-
-            Utils.fixAudioDuration(audioEl);
-            audioEl.onclick = (e) => e.stopPropagation();
-
-            // Mutual pause listener: only 1 audio plays at a time
-            audioEl.addEventListener('play', () => {
-              this.audioElements.forEach(a => {
-                if (a !== audioEl && !a.paused) a.pause();
-              });
-            });
-            this.audioElements.push(audioEl);
-          } else {
-            const audioSpan = commentBody.createSpan({ cls: "dh-audio-token-wrap" });
-            const micIcon = audioSpan.createSpan({ cls: "dh-audio-token-icon" });
-            try { setIcon(micIcon, "mic"); } catch { /* ignore */ }
-            audioSpan.createSpan({ text: ` ${token.text}` });
-          }
-        } else if (token.type === 'rate') {
-          commentBody.createSpan({ cls: "dh-log-rate-badge", text: token.text });
-        } else if (token.type === 'bold') {
-          commentBody.createEl("strong", { text: token.text });
-        }
-      } else if (part && part.trim()) {
-        commentBody.appendChild(document.createTextNode(part));
+        // Mutual pause listener: only 1 audio plays at a time
+        audioEl.addEventListener('play', () => {
+          this.audioElements.forEach(a => {
+            if (a !== audioEl && !a.paused) a.pause();
+          });
+        });
+        this.audioElements.push(audioEl);
+      } else {
+        const audioSpan = contentWrapper.createSpan({ cls: "dh-audio-token-wrap" });
+        const micIcon = audioSpan.createSpan({ cls: "dh-audio-token-icon" });
+        try { setIcon(micIcon, "mic"); } catch { /* ignore */ }
+        audioSpan.createSpan({ text: ` ${fileName}` });
       }
     });
+  }
 
-    if (!commentBody.textContent.trim() && !contentWrapper.querySelector("audio")) {
-      commentBody.remove();
+  /**
+   * Renders Markdown safely using Obsidian modern API with backwards-compatible fallback
+   * @param {string} markdown
+   * @param {HTMLElement} container
+   * @param {string} sourcePath
+   */
+  renderMarkdown(markdown, container, sourcePath = "") {
+    if (!markdown) return;
+    const comp = this.plugin || null;
+    if (MarkdownRenderer.render) {
+      MarkdownRenderer.render(this.app, markdown, container, sourcePath, comp);
+    } else if (MarkdownRenderer.renderMarkdown) {
+      MarkdownRenderer.renderMarkdown(markdown, container, sourcePath, comp);
     }
+    Utils.hookUpMarkdownLinks(container, this.app, sourcePath, "tab");
   }
 
   cleanupAudio() {

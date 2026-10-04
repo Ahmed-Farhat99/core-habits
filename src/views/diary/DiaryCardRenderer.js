@@ -151,5 +151,6 @@ export class DiaryCardRenderer {
     } else if (MarkdownRenderer.renderMarkdown) {
       MarkdownRenderer.renderMarkdown(markdown, container, sourcePath || "", comp);
     }
+    Utils.hookUpMarkdownLinks(container, this.app, sourcePath || "", false);
   }
 }

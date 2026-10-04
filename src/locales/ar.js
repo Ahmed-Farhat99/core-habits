@@ -522,6 +522,7 @@ export const ar = {
     "custom_range_error_invalid": "التواريخ المحددة غير صالحة",
     "notice_plugin_updated": "تم تحديث Core Habits إلى الإصدار v{version}",
     "error_invalid_habit_note": "ملاحظة عادة غير صالحة. معرّف habit_id مفقود من الخصائص.",
-    "error_habit_not_found": "لم يتم العثور على العادة في مدير العادات."
+    "error_habit_not_found": "لم يتم العثور على العادة في مدير العادات.",
+    "wikilink_no_results": "لا توجد ملفات مطابقة"
 };
 export default ar;

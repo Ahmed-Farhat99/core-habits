@@ -152,7 +152,6 @@
 
   font-style: italic;
   text-decoration: line-through;
-  text-decoration-color: var(--text-faint);
 }
 .daily-habits-plugin .dh-col-id {
 
@@ -746,8 +745,7 @@
     grid-template-columns: auto auto 1fr auto;
     grid-template-rows: auto auto;
     align-items: center;
-    row-gap: var(--dh-space-xs);
-    column-gap: var(--dh-space-sm);
+    gap: var(--dh-space-xs) var(--dh-space-sm);
     padding: var(--dh-space-sm) var(--dh-space-md);
     min-height: 48px;
     margin-bottom: var(--dh-space-xs);

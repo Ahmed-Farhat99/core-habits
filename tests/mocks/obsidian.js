@@ -146,12 +146,48 @@ export const Platform = { isMobile: false };
 export const normalizePath = (path) => String(path || "").replace(/\\/g, "/").replace(/\/+/g, "/");
 export const debounce = (fn) => fn;
 export const setIcon = () => {};
+export const Keymap = {
+  isModEvent: (evt) => Boolean(evt && (evt.ctrlKey || evt.metaKey))
+};
 
 export class MarkdownRenderer {
   static async render(app, markdown, el) {
-    if (el) el.textContent = markdown;
+    if (!el) return;
+    if (markdown) {
+      let html = markdown;
+      html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/\[\[(.*?)\]\]/g, (match, linkText) => {
+        const parts = linkText.split("|");
+        const target = parts[0].trim();
+        const display = parts[1] ? parts[1].trim() : target;
+        return `<a class="internal-link" data-href="${target}" href="${target}">${display}</a>`;
+      });
+      el.innerHTML = html;
+    } else {
+      el.textContent = "";
+    }
   }
   static async renderMarkdown(markdown, el) {
-    if (el) el.textContent = markdown;
+    return this.render(null, markdown, el);
   }
 }
+
+export const prepareFuzzySearch = (query) => {
+  const lowerQuery = (query || "").toLowerCase();
+  return (text) => {
+    const lowerText = (text || "").toLowerCase();
+    const idx = lowerText.indexOf(lowerQuery);
+    if (idx === -1) return null;
+    return {
+      score: -idx,
+      matches: [[idx, idx + lowerQuery.length]]
+    };
+  };
+};
+
+export const sortSearchResults = (results) => {
+  results.sort((a, b) => ((b.score ?? b.match?.score) || 0) - ((a.score ?? a.match?.score) || 0));
+};
+
+export const getLanguage = () => "en";
+

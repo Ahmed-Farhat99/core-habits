@@ -45,8 +45,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: npm run release:check -- "$RELEASE_TAG"
 
-      - name: Attest release assets
-        uses: actions/attest@v4
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             main.js

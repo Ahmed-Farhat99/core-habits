@@ -1,16 +1,26 @@
-# Core Habits 3.5.0
+# Core Habits 3.5.1
 
-This release focuses on safer vault writes, consistent state and statistics, and a more maintainable codebase.
+This maintenance and quality release addresses Obsidian automated review requirements, improves link integration, and refines reflection modals with native Wikilink autocomplete.
 
-## Changes
+## Key Highlights & Improvements
 
-- Habit note changes preserve the existing body and update owned frontmatter fields through Obsidian's file manager. Migration backs up affected notes before changing them and retains readers for older data formats.
-- Daily checklist, comment, and reflection writes use the current Daily Note content. Date detection respects the configured Daily Notes folder and format.
-- Statistics and cache invalidation share the same Daily Note detection path and rebuild from vault files after restart.
-- Pending renders, timers, and service resources are guarded during view close and plugin unload. Disabling the plugin no longer detaches the user's open weekly view.
-- The codebase now has narrower UI contexts, a centralized journal service, focused statistics modules, and incremental `checkJs` coverage.
-- The release workflow runs tests, lint, type checking, build, and metadata and asset validation before creating a draft release.
+### 🔗 Wikilink Autocomplete & Note Linking
+- **Inline Note Autocomplete**: Typing `[[` in reflection popups and comment textareas now opens an accessible autocomplete popover powered by Obsidian's native fuzzy search and aliases.
+- **Interactive Markdown Links**: Internal and external links rendered in Diary and Habit Journey views now support Obsidian's native click actions, modifier keys (Ctrl/Cmd-click for new tab, Shift-click for new window), and page hover-previews.
+- **Accurate Prefix Parsing**: Comment prefixes and habit names with markdown links are cleanly parsed without mangling subsequent markdown content.
 
-## Before publishing
+### 🛡️ Compliance, Security & Obsidian Review Hardening
+- **Official Obsidian API for Language**: Replaced web storage access with the official `getLanguage()` API from `obsidian`, removing all `localStorage` usage.
+- **Cryptographic Build Provenance**: Configured GitHub Actions release workflow with official `actions/attest-build-provenance@v2` to generate verifiable cryptographic SLSA artifact attestations for release assets.
+- **Strict Lockfile Parity**: Synchronized `package.json` and `package-lock.json` to guarantee reproducible dependency resolution across automated build runners.
+- **CSS Modernization**: Streamlined grid gap declarations and text decoration rules, ensuring full compatibility with Obsidian's style guidelines.
+- **Community Hygiene**: Added comprehensive `CONTRIBUTING.md` guide with development setup, testing commands, and PR guidelines.
 
-Verify in a backed-up test vault on desktop and mobile: existing habit migrations, custom Daily Notes templates and folders, habit toggles and comments, statistics after restart, audio recording, and plugin disable/re-enable. The automated suite cannot replace these Obsidian runtime checks.
+## Verification Checklist
+
+1. `npm ci` completes cleanly with exact lockfile resolution.
+2. `npm run lint` and `npm run typecheck` pass with zero errors.
+3. `npm run ui:check` confirms CSS ownership, token references, and no duplicate declarations.
+4. All 50 test files in `npm run test:run` pass.
+5. `npm run build` bundles `main.js` and `styles.css`.
+6. `npm run release:check` validates metadata coherence across `manifest.json`, `package.json`, `package-lock.json`, and `versions.json`.

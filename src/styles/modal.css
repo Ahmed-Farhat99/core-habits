@@ -552,6 +552,104 @@ body .daily-habits-plugin textarea.dh-auto-textarea {
   display: flex;
   flex-direction: column;
   margin-bottom: var(--dh-space-md);
+  position: relative;
+}
+
+/* Wikilink Autocomplete Popover */
+.daily-habits-plugin .dh-wikilink-suggest-container {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  inset-inline-end: 0;
+  max-height: min(200px, 35vh);
+  overflow-y: auto;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  box-shadow: var(--dh-shadow-md);
+  z-index: var(--dh-z-popover);
+  padding: var(--dh-space-2xs);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-container.is-flipped {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: var(--dh-space-sm);
+  padding: var(--dh-space-xs) var(--dh-space-sm);
+  border-radius: var(--dh-radius-sm);
+  cursor: pointer;
+  color: var(--text-normal);
+  font-size: var(--dh-font-sm);
+  transition: background var(--dh-transition-fast), color var(--dh-transition-fast);
+  user-select: none;
+  text-align: start;
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-item:hover,
+.daily-habits-plugin .dh-wikilink-suggest-item.is-selected {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dh-space-xs);
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: var(--dh-weight-medium);
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-highlight {
+  color: var(--text-accent, var(--interactive-accent));
+  font-weight: var(--dh-weight-bold);
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-path {
+  font-size: var(--dh-font-2xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
+.daily-habits-plugin .dh-wikilink-suggest-empty {
+  padding: var(--dh-space-sm) var(--dh-space-md);
+  color: var(--text-muted);
+  font-size: var(--dh-font-xs);
+  text-align: center;
+  user-select: none;
 }
 .daily-habits-plugin .dh-popup-input {
   width: 100%;
@@ -1215,6 +1313,25 @@ body .daily-habits-plugin textarea.dh-auto-textarea {
   color: var(--text-normal);
   line-height: 1.5;
   word-break: break-word;
+}
+
+.daily-habits-plugin .dh-journey-entry-text > :first-child {
+  margin-block-start: 0;
+}
+
+.daily-habits-plugin .dh-journey-entry-text > :last-child {
+  margin-block-end: 0;
+}
+
+.daily-habits-plugin .dh-journey-entry-text p {
+  margin: 0;
+}
+
+.daily-habits-plugin .dh-journey-entry-text a.internal-link,
+.daily-habits-plugin .dh-journey-entry-text a.external-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .daily-habits-plugin .dh-log-rate-badge {

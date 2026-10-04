@@ -1,6 +1,6 @@
 {
   "name": "core-habits",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "type": "module",
   "description": "Track habits visually in a weekly grid, reflect in daily notes, and build your core identity.",
   "main": "main.js",

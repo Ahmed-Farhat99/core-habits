@@ -211,4 +211,11 @@ describe("Localization System Hardening", () => {
       expect(title).toBe("عنوان افتراضي");
     });
   });
+
+  describe("detectInitialLanguage", () => {
+    it("should return en by default without using localStorage", async () => {
+      const { detectInitialLanguage } = await import("../src/config/defaultSettings.js");
+      expect(detectInitialLanguage()).toBe("en");
+    });
+  });
 });

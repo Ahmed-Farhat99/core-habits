@@ -522,6 +522,7 @@ export const en = {
     "custom_range_error_invalid": "Invalid dates selected",
     "notice_plugin_updated": "Core Habits updated to v{version}",
     "error_invalid_habit_note": "Not a valid habit note. Missing habit_id in properties.",
-    "error_habit_not_found": "Habit not found in HabitManager."
+    "error_habit_not_found": "Habit not found in HabitManager.",
+    "wikilink_no_results": "No matching files"
 };
 export default en;

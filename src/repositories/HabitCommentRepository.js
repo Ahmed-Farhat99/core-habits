@@ -217,7 +217,7 @@ export class HabitCommentRepository {
       for (const line of lines) {
         if (HabitCommentRepository.isCommentLineForHabit(line, habit)) {
           const cleanText = this._cleanCommentText(line, habit.name, habit.nameHistory || []);
-          entries.push({ date: targetDate, text: cleanText });
+          entries.push({ date: targetDate, text: cleanText, path: file.path });
         }
       }
     }
@@ -373,14 +373,18 @@ export class HabitCommentRepository {
     cleanLine = cleanLine.replace(/\[habit-note::.*?\]\s*/gi, "");
 
     // 4. Remove habit link/name label prefixes (e.g. "[[Reading]] - " or "Reading - ")
-    const escapedName = Utils.escapeRegExp(habitName);
-    const nameRegex = new RegExp(`^(?:\\[\\[)?${escapedName}(?:\\]\\])?\\s*-\\s*`, "i");
-    cleanLine = cleanLine.replace(nameRegex, "");
+    const cleanCand = (str) => Utils.escapeRegExp(String(str || "").replace(/^\[\[|\]\]$/g, "").trim());
+    const candidates = [habitName, ...(Array.isArray(nameHistory) ? nameHistory : [])].filter(Boolean);
 
-    for (const hist of nameHistory) {
-      const escHist = Utils.escapeRegExp(hist.replace(/\[\[|\]\]/g, ""));
-      const histRegex = new RegExp(`^(?:\\[\\[)?${escHist}(?:\\]\\])?\\s*-\\s*`, "i");
-      cleanLine = cleanLine.replace(histRegex, "");
+    for (const cand of candidates) {
+      const esc = cleanCand(cand);
+      if (!esc) continue;
+      // Symmetrical matching: only matches "[[Habit]] - " or "[[Habit|Alias]] - " or "Habit - " at start of line
+      const regex = new RegExp(`^(?:\\[\\[${esc}(?:\\|[^\\]]+)?\\]\\]|${esc})\\s*-\\s*`, "i");
+      if (regex.test(cleanLine)) {
+        cleanLine = cleanLine.replace(regex, "");
+        break; // Once habit label prefix is removed, preserve the entire comment content
+      }
     }
 
     return cleanLine.trim();

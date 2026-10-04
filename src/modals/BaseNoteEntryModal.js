@@ -1,8 +1,9 @@
 import { Platform, setIcon } from 'obsidian';
 import { BaseHabitModal } from './BaseHabitModal.js';
-import { autoResizeTextarea } from '../utils/helpers.js';
+import { autoResizeTextarea, getDailyNotesInfo, getDailyNotePath } from '../utils/helpers.js';
 import { VoiceRecorderComponent } from '../components/VoiceRecorderComponent.js';
 import { NoticeService } from '../services/NoticeService.js';
+import { WikilinkSuggestComponent } from '../components/WikilinkSuggestComponent.js';
 
 /**
  * Base modal class for single-note entry popups (HabitCommentPopup, ReflectionPopup).
@@ -16,14 +17,17 @@ export class BaseNoteEntryModal extends BaseHabitModal {
    * @param {Object} [options]
    * @param {Object} [options.date]
    * @param {Function} [options.onSave]
+   * @param {string} [options.sourcePath]
    */
-  constructor(app, plugin, { date = null, onSave = null } = {}) {
+  constructor(app, plugin, { date = null, onSave = null, sourcePath = "" } = {}) {
     super(app, plugin);
     this.date = date;
     this.onSave = onSave;
+    this.sourcePath = sourcePath;
     this.initialValue = "";
     this.inputEl = null;
     this.voiceRecorder = null;
+    this.wikilinkSuggest = null;
     this.saveBtn = null;
     this.cancelBtn = null;
     this._categoryButtons = null;
@@ -56,6 +60,27 @@ export class BaseNoteEntryModal extends BaseHabitModal {
     if (!this.date) return "";
     const lang = this.plugin?.settings?.language || "ar";
     return this.date.clone().locale(lang).format(this.t(formatKey));
+  }
+
+  /**
+   * Returns the active source path for link resolution, prioritizing explicit sourcePath,
+   * daily note path for modal's date, or active workspace file path.
+   * @returns {string}
+   */
+  getSourcePath() {
+    if (this.sourcePath) return this.sourcePath;
+    if (this.date) {
+      try {
+        const info = getDailyNotesInfo(this.app, this.plugin?.settings);
+        const path = getDailyNotePath(this.date, info);
+        if (path) return path;
+      } catch {
+        // Fallback gracefully
+      }
+    }
+    const activeFile = this.app?.workspace?.getActiveFile?.();
+    if (activeFile?.path) return activeFile.path;
+    return "";
   }
 
   /**
@@ -150,11 +175,24 @@ export class BaseNoteEntryModal extends BaseHabitModal {
     });
     this.inputEl = input;
 
+    // Initialize Wikilink Autocomplete
+    this.wikilinkSuggest = new WikilinkSuggestComponent({
+      app: this.app,
+      plugin: this.plugin,
+      inputEl: input,
+      containerEl: inputWrapper,
+      getSourcePath: () => this.getSourcePath()
+    });
+
     const autoResize = () => autoResizeTextarea(input);
     input.oninput = autoResize;
     setTimeout(autoResize, 0);
 
     input.addEventListener("keydown", (e) => {
+      // Guard: If wikilink autocomplete is open, do not submit modal
+      if (this.wikilinkSuggest?.isOpen) {
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         this.submit();
@@ -302,6 +340,10 @@ export class BaseNoteEntryModal extends BaseHabitModal {
   }
 
   onClose() {
+    if (this.wikilinkSuggest && typeof this.wikilinkSuggest.destroy === "function") {
+      this.wikilinkSuggest.destroy();
+      this.wikilinkSuggest = null;
+    }
     if (this.voiceRecorder && typeof this.voiceRecorder.cleanup === "function") {
       this.voiceRecorder.cleanup();
     }

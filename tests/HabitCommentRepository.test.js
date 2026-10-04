@@ -227,5 +227,49 @@ describe("HabitCommentRepository Tests", () => {
     expect(processedContent).not.toContain("### 📝 New Reflections");
     expect(processedContent).toContain("[type:: Lesson] New thought");
   });
+
+  it("should preserve wikilinks that start with the habit name in _cleanCommentText", () => {
+    const habitName = "سلوك - نافع - بعد الإستيقاظ";
+    const lineWithLongLink = `- 12:30 [habit-id:: habit-123] [habit-note:: سلوك - نافع - بعد الإستيقاظ] [[سلوك - نافع - بعد الإستيقاظ]] - [[سلوك - نافع - بعد الإستيقاظ - تلك عشرة نافعة 2 - إيقاظ الوعي]]`;
+    const clean = repository._cleanCommentText(lineWithLongLink, habitName, []);
+    expect(clean).toBe("[[سلوك - نافع - بعد الإستيقاظ - تلك عشرة نافعة 2 - إيقاظ الوعي]]");
+  });
+
+  it("should preserve wikilinks starting with habit name when no prefix is present", () => {
+    const habitName = "سلوك - نافع - بعد الإستيقاظ";
+    const rawLine = `- 12:30 [habit-id:: habit-123] [habit-note:: سلوك - نافع - بعد الإستيقاظ] [[سلوك - نافع - بعد الإستيقاظ - تلك عشرة نافعة 2 - إيقاظ الوعي]]`;
+    const clean = repository._cleanCommentText(rawLine, habitName, []);
+    expect(clean).toBe("[[سلوك - نافع - بعد الإستيقاظ - تلك عشرة نافعة 2 - إيقاظ الوعي]]");
+  });
+
+  it("should preserve [[Note]], [[Note|Alias]], and #Heading in _cleanCommentText", () => {
+    const habitName = "Reading";
+    const line = `- 14:15 [habit-id:: h-read] [habit-note:: Reading] [[Reading]] - Read [[Books/Atomic Habits#Chapter 1|Atomic Habits Ch 1]]`;
+    const clean = repository._cleanCommentText(line, habitName, []);
+    expect(clean).toBe("Read [[Books/Atomic Habits#Chapter 1|Atomic Habits Ch 1]]");
+    expect(clean).not.toContain("habit-id::");
+    expect(clean).not.toContain("habit-note::");
+  });
+
+  it("should include file path as path on history entries in getCommentHistoryForHabit", async () => {
+    const habit = {
+      id: "habit-abc",
+      name: "Reading",
+      linkText: "Reading",
+      nameHistory: []
+    };
+    const mockFile = new TFile("Daily Notes/2026-06-22.md");
+    helpers.getNoteByDate.mockResolvedValue(mockFile);
+
+    const fileContent = `## 📖 Habit Log
+- 08:30 [habit-id:: habit-abc] [habit-note:: Reading] Reading - Read 25 pages
+`;
+    mockApp.vault.cachedRead.mockResolvedValue(fileContent);
+
+    const history = await repository.getCommentHistoryForHabit(habit, 1);
+    expect(history.length).toBe(1);
+    expect(history[0].path).toBe("Daily Notes/2026-06-22.md");
+    expect(history[0].text).toBe("Read 25 pages");
+  });
 });
 

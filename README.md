@@ -6,9 +6,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Obsidian-v1.7.0%2B-blueviolet?style=flat-square" alt="Obsidian Version" />
-  <img src="https://img.shields.io/badge/Release-v3.5.0-success?style=flat-square" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v3.5.1-success?style=flat-square" alt="Release Version" />
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" />
-  <img src="https://img.shields.io/badge/Tests-48%20passed-brightgreen?style=flat-square" alt="Test Status" />
+  <img src="https://img.shields.io/badge/Tests-50%20passed-brightgreen?style=flat-square" alt="Test Status" />
   <img src="https://img.shields.io/badge/Privacy-100%25%20Local-purple?style=flat-square" alt="100% Local Privacy" />
 </p>
 

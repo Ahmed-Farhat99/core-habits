@@ -1,3 +1,4 @@
+import { getLanguage } from 'obsidian';
 import {
   DEFAULT_MARKER,
   DEFAULT_PARENT_HEADING,
@@ -7,16 +8,16 @@ import {
 } from './headings.js';
 
 /**
- * Safely inspects the host environment or Obsidian to detect user's interface language.
- * Falls back to "en" for international/English environments or "ar" when Arabic is active.
+ * Safely detects the user's Obsidian interface language using the official Obsidian API.
+ * Falls back to moment locale and navigator.language if getLanguage is unavailable.
  * @returns {"ar" | "en"}
  */
 export function detectInitialLanguage() {
   try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      const stored = window.localStorage.getItem("language");
-      if (stored) {
-        return stored.toLowerCase().startsWith("ar") ? "ar" : "en";
+    if (typeof getLanguage === "function") {
+      const lang = getLanguage();
+      if (lang) {
+        return String(lang).toLowerCase().startsWith("ar") ? "ar" : "en";
       }
     }
     const momentFactory = typeof window !== "undefined" ? window.moment : globalThis.moment;

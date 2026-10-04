@@ -1,3 +1,4 @@
+import { Keymap } from 'obsidian';
 import { BaseHabitModal } from "../modals/BaseHabitModal.js";
 
 export class Utils {
@@ -22,6 +23,85 @@ export class Utils {
           audioEl.currentTime = 0;
           audioEl.removeEventListener('timeupdate', f);
         });
+      }
+    });
+  }
+
+  /**
+   * Binds click, middle-click, and hover-preview events to rendered internal and external links.
+   * Ensures Obsidian native link behaviors (hover preview, open in new tab/window) work
+   * in custom containers and modals.
+   * @param {HTMLElement} container
+   * @param {import('obsidian').App} app
+   * @param {string} sourcePath
+   * @param {boolean|string} [defaultNewLeaf="tab"]
+   */
+  static hookUpMarkdownLinks(container, app, sourcePath = "", defaultNewLeaf = "tab") {
+    if (!container || !app?.workspace) return;
+
+    // 1. Hover Preview (Page Preview on hover / Ctrl-hover according to user Obsidian settings)
+    container.addEventListener("mouseover", (evt) => {
+      const anchor = evt.target?.closest ? evt.target.closest("a.internal-link") : null;
+      if (!anchor) return;
+      const linkText = anchor.getAttribute("data-href") || anchor.getAttribute("href");
+      if (linkText && app?.workspace?.trigger) {
+        app.workspace.trigger("hover-link", {
+          event: evt,
+          source: "preview",
+          hoverParent: { hoverPopover: null },
+          targetEl: anchor,
+          linktext: linkText,
+          sourcePath
+        });
+      }
+    });
+
+    // 2. Click Handling (Standard click, Ctrl/Cmd click, Shift click)
+    container.addEventListener("click", async (evt) => {
+      const anchor = evt.target?.closest ? evt.target.closest("a") : null;
+      if (!anchor) return;
+
+      if (anchor.classList.contains("internal-link") || anchor.hasAttribute("data-href")) {
+        evt.preventDefault();
+        evt.stopPropagation();
+
+        const linkText = anchor.getAttribute("data-href") || anchor.getAttribute("href");
+        if (!linkText) return;
+
+        const isMod = Keymap?.isModEvent ? Keymap.isModEvent(evt) : Boolean(evt.ctrlKey || evt.metaKey);
+        const newLeaf = evt.shiftKey ? "window" : (isMod ? "tab" : defaultNewLeaf);
+
+        try {
+          await app.workspace.openLinkText(linkText, sourcePath, newLeaf);
+        } catch (err) {
+          console.warn("[Core Habits] Failed to open internal link:", linkText, err);
+        }
+      } else if (anchor.classList.contains("external-link") || anchor.getAttribute("href")?.startsWith("http")) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        const url = anchor.getAttribute("href");
+        if (url) {
+          window.open(url, "_blank");
+        }
+      }
+    });
+
+    // 3. Middle-click (Auxclick) for opening in a new tab
+    container.addEventListener("auxclick", async (evt) => {
+      if (evt.button !== 1) return;
+      const anchor = evt.target?.closest ? evt.target.closest("a.internal-link") : null;
+      if (!anchor) return;
+
+      evt.preventDefault();
+      evt.stopPropagation();
+
+      const linkText = anchor.getAttribute("data-href") || anchor.getAttribute("href");
+      if (linkText) {
+        try {
+          await app.workspace.openLinkText(linkText, sourcePath, "tab");
+        } catch (err) {
+          console.warn("[Core Habits] Failed to open link on middle click:", linkText, err);
+        }
       }
     });
   }
