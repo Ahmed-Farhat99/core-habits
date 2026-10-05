@@ -14,6 +14,7 @@ import { HabitJournalService } from './services/HabitJournalService.js';
 import { StreakCalculator } from './services/StreakCalculator.js';
 import { VoiceRecorderUtility } from './services/VoiceRecorderUtility.js';
 import { NoticeService } from './services/NoticeService.js';
+import { VaultSourceStore } from './services/VaultSourceStore.js';
 
 // CSS Styling Modules
 import './styles/tokens.css';
@@ -62,6 +63,7 @@ import { HabitEditView } from './views/HabitEditView.js';
 import { DailyHabitsSettingTab } from './views/DailyHabitsSettingTab.js';
 import { OnboardingModal } from './modals/OnboardingModal.js';
 import { EditHabitModal } from './modals/EditHabitModal.js';
+import { AddHabitModal } from './modals/AddHabitModal.js';
 import './modals/ConfirmModal.js'; // Registers the discard confirmation used by BaseHabitModal.
 
 export default class CoreHabitsPlugin extends Plugin {
@@ -90,6 +92,7 @@ export default class CoreHabitsPlugin extends Plugin {
     this.audioEngine = new AudioEngine(this);
 
     // Initialize Core Managers
+    this.vaultSourceStore = new VaultSourceStore(this.app, this);
     this.translationManager = new TranslationManager(this);
     this.habitNoteManager = new HabitNoteManager(this.app, this);
     this.habitRepository = new HabitRepository(this.app, this);
@@ -106,57 +109,10 @@ export default class CoreHabitsPlugin extends Plugin {
     // === DATA MIGRATION v3.0 & startup initialization ===
     // Will run after layout ready to ensure vault files are accessible
     this.app.workspace.onLayoutReady(async () => {
-      try {
-        // Load persisted state before migrations that depend on it.
-        await this.habitManager.initialize();
-        if (this._isUnloading) return;
-        const didMigrateV3 = await this.migrationManager.migrateV3Data();
-        if (this._isUnloading) return;
-        const didMigrateSchema = await this.migrationManager.runMigrations();
-        if (this._isUnloading) return;
-        const didMigrateSchemaV3 = await this.migrationManager.runSchemaV3Migration();
-        if (this._isUnloading) return;
-        if (didMigrateV3 || didMigrateSchema || didMigrateSchemaV3) {
-          await this.habitManager.initialize();
-        }
-        if (this._isUnloading) return;
-        const lifetimeTotal = await this.statsService.initLifetimeIndex();
-        if (lifetimeTotal === null) throw new Error("Lifetime statistics index failed to initialize");
-        if (this._isUnloading) return;
-      } catch (error) {
-        if (this._isUnloading) return;
-        this.startupError = error;
-        console.error("[Core Habits] Startup or migration failed; automatic writes remain disabled:", error);
-        NoticeService.error("Core Habits could not load its data safely. Check the console and backup before retrying.", 15000, this);
-        this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
-          if (leaf.view?.refresh) void leaf.view.refresh();
-        });
-        return;
-      }
-      
-      this.isFullyLoaded = true;
+      await this.initializePluginState();
 
-      // Refresh Weekly View if it was opened before habits were loaded
-      this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
-        if (leaf.view && leaf.view.refresh) leaf.view.refresh();
-      });
-
-      // Show Onboarding only on fresh install; show subtle notice on version upgrade
-      if (!this.settings.lastSeenVersion) {
-        new OnboardingModal(this.app, this).open();
-        this.settings.lastSeenVersion = this.manifest.version;
-        this.saveSettings();
-      } else if (this.settings.lastSeenVersion !== this.manifest.version) {
-        const updateMsg = this.translationManager.t("notice_plugin_updated", { version: this.manifest.version });
-        if (updateMsg) {
-          NoticeService.info(updateMsg, 5000, this);
-        }
-        this.settings.lastSeenVersion = this.manifest.version;
-        this.saveSettings();
-      }
-
-      // 6. Show Startup Notices (Open Reminder, Daily Notes warning, and Missed Days)
-      if (this.settings.enableOpenReminder) {
+      // Show Startup Notices (Open Reminder, Daily Notes warning, and Missed Days)
+      if (this.isFullyLoaded && this.settings.enableOpenReminder) {
         try {
           const count = await this.getIncompleteHabitsCountForToday();
           if (count > 0) {
@@ -176,7 +132,7 @@ export default class CoreHabitsPlugin extends Plugin {
       }
 
       const dnInfo = getDailyNotesInfo(this.app, this.settings);
-      if (dnInfo.source === "defaults" && !this._defaultsWarningShown) {
+      if (!this._isFirstRunOnboarding && dnInfo.source === "defaults" && !this._defaultsWarningShown) {
         const isAr = this.settings.language === "ar";
         const noticeMsg = this.translationManager?.t("notice_daily_notes_missing")
           || (isAr
@@ -230,6 +186,12 @@ export default class CoreHabitsPlugin extends Plugin {
       id: "open-weekly-habits",
       name: "Open Weekly View",
       callback: () => this.activateWeeklyView(),
+    });
+
+    this.addCommand({
+      id: "add-habit",
+      name: "Add New Habit",
+      callback: () => this.openAddHabit(),
     });
 
     this.addCommand({
@@ -388,6 +350,160 @@ export default class CoreHabitsPlugin extends Plugin {
     }
     StreakCalculator.invalidateAll();
     VoiceRecorderUtility.cancelRecording();
+  }
+
+  /**
+   * Initializes the plugin state safely: runs migrations, initializes habitManager,
+   * checks for conflicts/malformed notes, and initializes stats index.
+   * Isolates failures and exposes mobile-friendly recovery.
+   * @returns {Promise<boolean>} True if startup was successful
+   */
+  async initializePluginState() {
+    this.startupError = null;
+    try {
+      // 1. Initialize VaultSourceStore (Portable SSOT) before domain resolution, habits, or stats
+      await this.vaultSourceStore.initialize();
+      if (this._isUnloading) return false;
+
+      // 2. Run data migrations FIRST on disk files/settings before interpreting into domain state.
+      // File-level failures are isolated so a single corrupt or legacy note never halts startup.
+      try {
+        await this.migrationManager.migrateV3Data({ throwOnFailure: false });
+      } catch (err) {
+        console.error("[Core Habits] Non-fatal error during v3 data migration:", err);
+      }
+      if (this._isUnloading) return false;
+
+      try {
+        await this.migrationManager.runMigrations({ throwOnFailure: false });
+      } catch (err) {
+        console.error("[Core Habits] Non-fatal error during schema v2 migration:", err);
+      }
+      if (this._isUnloading) return false;
+
+      try {
+        await this.migrationManager.runSchemaV3Migration({ throwOnFailure: false });
+      } catch (err) {
+        console.error("[Core Habits] Non-fatal error during schema v3 migration:", err);
+      }
+      if (this._isUnloading) return false;
+
+      // 3. Load persisted state on clean, migrated notes
+      await this.habitManager.initialize();
+      if (this._isUnloading) return false;
+
+      // 3b. Check for repository conflicts and malformed notes to notify user gently
+      const conflicts = this.habitManager.getConflicts?.() || [];
+      const malformed = this.habitManager.getMalformedNotes?.() || [];
+
+      if (conflicts.length > 0) {
+        console.warn(
+          `[Core Habits] Quarantined ${conflicts.length} conflicting habit(s) to protect your data:\n` +
+          conflicts.map((c) => `  - [${c.type}] Habit ID: "${c.habitId}"\n    Files: ${c.paths.join("\n           ")}`).join("\n")
+        );
+        const conflictMsg = this.translationManager?.t("warning_duplicate_habits_quarantined", { count: conflicts.length })
+          || `Core Habits: ${conflicts.length} conflicting habit(s) were quarantined to protect your data. Both copies were kept untouched. See console or settings for details.`;
+        NoticeService.warning(conflictMsg, 10000, this);
+      }
+
+      if (malformed.length > 0) {
+        console.warn(
+          `[Core Habits] Skipped ${malformed.length} malformed note(s):\n` +
+          malformed.map((m) => `  - [${m.reason}] ${m.path}: ${m.message}`).join("\n")
+        );
+        const malformedMsg = this.translationManager?.t("warning_malformed_habits", { count: malformed.length })
+          || `Core Habits: ${malformed.length} habit note(s) are missing habit_id or unreadable and were skipped.`;
+        NoticeService.warning(malformedMsg, 8000, this);
+      }
+
+      // 4. Ensure collapsed groups semantic migration completes once habits are loaded
+      await this.migrationManager.migrateCollapsedGroupsSemantic();
+      if (this._isUnloading) return false;
+
+      // 5. Initialize stats index safely
+      try {
+        await this.statsService.initLifetimeIndex();
+      } catch (statsErr) {
+        console.error("[Core Habits] Non-fatal error initializing stats index:", statsErr);
+      }
+      if (this._isUnloading) return false;
+
+      // 5b. Check if stats index is in degraded state and warn gently
+      if (this.statsService?.isDegraded) {
+        const degradedCount = this.statsService.getDegradedDates?.()?.length || 1;
+        console.warn(`[Core Habits] Statistics index initialized in degraded state (${degradedCount} note(s) could not be read safely).`);
+        const degradedMsg = this.translationManager?.t("warning_stats_degraded", { count: degradedCount })
+          || `Core Habits: Statistics are partial. ${degradedCount} daily note(s) could not be read safely.`;
+        NoticeService.warning(degradedMsg, 7000, this);
+      }
+
+      // 6. Check for partial migration failures to inform user gently without crashing
+      const totalFailures = [
+        ...(this.migrationManager?.lastMigrationFailures || []),
+        ...(this.migrationManager?.lastV3MigrationFailures || []),
+        ...(this.migrationManager?.lastV3DataFailures || [])
+      ];
+      if (totalFailures.length > 0) {
+        console.warn(`[Core Habits] Plugin started, but ${totalFailures.length} item(s) could not be migrated automatically.`);
+        const warnMsg = this.translationManager?.t("warning_migration_partial", { count: totalFailures.length })
+          || `Core Habits: ${totalFailures.length} habit note(s) could not be migrated automatically. Safe backups preserved.`;
+        NoticeService.warning(warnMsg, 8000, this);
+      }
+
+      this.isFullyLoaded = true;
+
+      // Refresh Weekly View if it was opened before habits were loaded
+      this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
+        if (leaf.view && leaf.view.refresh) leaf.view.refresh();
+      });
+
+      // Check if user is an existing user with pre-existing habits
+      const hasExistingHabits = (Array.isArray(this.settings.habits) && this.settings.habits.length > 0) ||
+        (this.habitManager && typeof this.habitManager.getHabits === 'function' && this.habitManager.getHabits().length > 0);
+
+      // Show Onboarding only on fresh install; show subtle notice on version upgrade
+      if (!this.settings.lastSeenVersion) {
+        if (hasExistingHabits) {
+          this.settings.lastSeenVersion = this.manifest.version;
+          void this.saveSettings();
+        } else {
+          this._isFirstRunOnboarding = true;
+          new OnboardingModal(this.app, this).open();
+          this.settings.lastSeenVersion = this.manifest.version;
+          void this.saveSettings();
+        }
+      } else if (this.settings.lastSeenVersion !== this.manifest.version) {
+        const updateMsg = this.translationManager.t("notice_plugin_updated", { version: this.manifest.version });
+        if (updateMsg) {
+          NoticeService.info(updateMsg, 5000, this);
+        }
+        this.settings.lastSeenVersion = this.manifest.version;
+        void this.saveSettings();
+      }
+
+      return true;
+    } catch (error) {
+      if (this._isUnloading) return false;
+      this.startupError = error;
+      this.isFullyLoaded = false;
+      console.error("[Core Habits] Startup or migration failed; automatic writes remain disabled:", error);
+      NoticeService.error("Core Habits could not load its data safely. Check the recovery screen or backups before retrying.", 15000, this);
+      this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKLY).forEach((leaf) => {
+        if (leaf.view?.refresh) void leaf.view.refresh();
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Retries plugin startup initialization safely after a failure.
+   * Can be invoked from the Mobile/Desktop recovery UI.
+   * @returns {Promise<boolean>} True if startup succeeded
+   */
+  async retryStartup() {
+    this.startupError = null;
+    this.isFullyLoaded = false;
+    return await this.initializePluginState();
   }
 
   async activateWeeklyView() {
@@ -656,5 +772,21 @@ export default class CoreHabitsPlugin extends Plugin {
     } else {
       new EditHabitModal(this.app, this, habit, onSubmit).open();
     }
+  }
+
+  /**
+   * Centralized new habit modal launcher.
+   * @param {Function} [onSubmit]
+   */
+  openAddHabit(onSubmit) {
+    new AddHabitModal(
+      this.app,
+      this,
+      onSubmit || (async (habitData) => {
+        await this.habitManager.addHabit(habitData);
+        this.refreshWeeklyViews();
+        NoticeService.success(this.translationManager.t("success_added", { habit: habitData.name }), this);
+      })
+    ).open();
   }
 }

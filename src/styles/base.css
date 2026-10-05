@@ -218,6 +218,86 @@
   color: var(--text-error, var(--dh-brand-danger));
 }
 
+/* Startup Failure & Recovery UX */
+.daily-habits-plugin .dh-startup-failure-state {
+  max-width: 580px;
+  margin: var(--dh-space-2xl) auto;
+  padding: var(--dh-space-xl);
+  text-align: center;
+}
+
+.daily-habits-plugin .dh-recovery-actions {
+  display: flex;
+  gap: var(--dh-space-sm);
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--dh-space-lg);
+  margin-bottom: var(--dh-space-md);
+}
+
+.daily-habits-plugin .dh-recovery-retry-btn {
+  min-height: 42px;
+  padding: 0 var(--dh-space-xl);
+  font-weight: var(--dh-weight-bold);
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-recovery-copy-btn {
+  min-height: 42px;
+  padding: 0 var(--dh-space-lg);
+  cursor: pointer;
+}
+
+.daily-habits-plugin .dh-recovery-backup-notice {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-top: var(--dh-space-sm);
+  margin-bottom: var(--dh-space-md);
+  padding: var(--dh-space-xs) var(--dh-space-sm);
+  background: var(--background-secondary-alt);
+  border-radius: var(--dh-radius-sm);
+  word-break: break-all;
+}
+
+.daily-habits-plugin .dh-recovery-details {
+  width: 100%;
+  margin-top: var(--dh-space-md);
+  text-align: start;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-md);
+  padding: var(--dh-space-sm) var(--dh-space-md);
+}
+
+.daily-habits-plugin .dh-recovery-details summary {
+  cursor: pointer;
+  font-weight: var(--dh-weight-medium);
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  outline: none;
+  user-select: none;
+}
+
+.daily-habits-plugin .dh-recovery-details summary:hover {
+  color: var(--text-normal);
+}
+
+.daily-habits-plugin .dh-recovery-stack {
+  margin-top: var(--dh-space-sm);
+  padding: var(--dh-space-sm);
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--dh-radius-sm);
+  user-select: all;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* Loading States */
 .daily-habits-plugin .dh-loading-spinner {
   display: flex;

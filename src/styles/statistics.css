@@ -1147,3 +1147,42 @@
   color: var(--dh-brand-warning-dark, #c2600a);
   background: color-mix(in srgb, var(--dh-brand-danger) 14%, transparent);
 }
+
+/* ==========================================================================
+   11. DEGRADED / PARTIAL STATS BANNER & BADGE
+   ========================================================================== */
+.daily-habits-plugin .dh-stats-degraded-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--dh-space-sm, 8px);
+  padding: 10px 14px;
+  border-radius: var(--dh-radius-md, 8px);
+  background-color: rgba(var(--color-yellow-rgb, 224, 160, 48), 0.12);
+  border: 1px solid rgba(var(--color-yellow-rgb, 224, 160, 48), 0.35);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller, 0.84rem);
+  line-height: 1.4;
+  margin-bottom: var(--dh-space-xs, 4px);
+}
+
+.daily-habits-plugin .dh-stats-degraded-icon {
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.daily-habits-plugin .dh-stats-degraded-text {
+  flex: 1;
+}
+
+.daily-habits-plugin .dh-stats-degraded-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--dh-radius-xs, 4px);
+  font-size: var(--font-ui-micro, 0.72rem);
+  font-weight: 500;
+  background-color: rgba(var(--color-yellow-rgb, 224, 160, 48), 0.15);
+  color: var(--text-warning, #d97706);
+  border: 1px solid rgba(var(--color-yellow-rgb, 224, 160, 48), 0.3);
+}

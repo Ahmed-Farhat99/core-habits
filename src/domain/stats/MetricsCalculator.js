@@ -367,6 +367,8 @@ export class MetricsCalculator {
       topHabit,
       lowestHabit,
       dailySeries,
+      isDegraded: !!currentAggregation?.isDegraded,
+      degradedDaysCount: currentAggregation?.degradedDaysCount || 0,
       allHabits: habitList.sort((a, b) => (b.scheduledCount || 0) - (a.scheduledCount || 0)),
     };
   }

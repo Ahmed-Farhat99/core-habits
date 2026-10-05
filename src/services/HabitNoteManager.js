@@ -204,6 +204,8 @@ export class HabitNoteManager {
 
   /**
    * Reads the raw Frontmatter from a habit note file.
+   * Uses metadataCache for O(1) performance when available, with a resilient
+   * direct file parser fallback for cold start / mobile indexing scenarios.
    * @param {string} filePath
    * @returns {Promise<object|null>} Parsed properties or null if file missing
    */
@@ -211,8 +213,166 @@ export class HabitNoteManager {
     const file = this.app.vault.getAbstractFileByPath(filePath);
     if (!file || !(file instanceof TFile)) return null;
 
-    const metadata = this.app.metadataCache.getFileCache(file);
-    return metadata?.frontmatter || null;
+    const metadata = this.app.metadataCache?.getFileCache?.(file);
+    if (metadata?.frontmatter) {
+      return metadata.frontmatter;
+    }
+
+    // Safe fallback from file content when metadataCache is not yet ready (e.g. mobile startup)
+    try {
+      const content = typeof this.app.vault.cachedRead === "function"
+        ? await this.app.vault.cachedRead(file)
+        : await this.app.vault.read(file);
+      const parsed = HabitNoteManager.parseFrontmatterFromContent(content);
+      if (parsed && typeof parsed === "object") {
+        return parsed;
+      }
+    } catch (err) {
+      console.warn(`[Core Habits] Failed to fallback-read habit note frontmatter for "${filePath}":`, err);
+    }
+
+    return null;
+  }
+
+  /**
+   * Parses YAML frontmatter directly from file content without metadataCache dependency.
+   * Safe for cold starts and environments where metadataCache hasn't indexed yet.
+   * @param {string} content
+   * @returns {object|null}
+   */
+  static parseFrontmatterFromContent(content) {
+    if (!content || typeof content !== "string") return null;
+    const clean = content.replace(/^\uFEFF/, "").trimStart();
+    if (!clean.startsWith("---")) return null;
+
+    const endIdx = clean.indexOf("\n---", 3);
+    if (endIdx === -1) return null;
+
+    const fmText = clean.slice(3, endIdx).trim();
+    if (!fmText) return {};
+
+    // 1. Try Obsidian native YAML parser if available in runtime
+    if (typeof window !== "undefined" && typeof window.parseYaml === "function") {
+      try {
+        const parsed = window.parseYaml(fmText);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {
+        // Fall back to custom parser below
+      }
+    }
+
+    // 2. Resilient fallback parser
+    const result = {};
+    const lines = fmText.split(/\r?\n/);
+    let currentKey = null;
+    let inList = false;
+
+    for (let rawLine of lines) {
+      const commentIdx = rawLine.indexOf("#");
+      let line = rawLine;
+      if (commentIdx !== -1) {
+        const beforeHash = rawLine.slice(0, commentIdx);
+        const singleQuotes = (beforeHash.match(/'/g) || []).length;
+        const doubleQuotes = (beforeHash.match(/"/g) || []).length;
+        if (singleQuotes % 2 === 0 && doubleQuotes % 2 === 0) {
+          line = beforeHash;
+        }
+      }
+
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (inList && currentKey && trimmed.startsWith("-")) {
+        let itemVal = trimmed.replace(/^-\s*/, "").trim();
+        if ((itemVal.startsWith('"') && itemVal.endsWith('"')) || (itemVal.startsWith("'") && itemVal.endsWith("'"))) {
+          itemVal = itemVal.slice(1, -1);
+        } else if (!isNaN(itemVal) && itemVal !== "") {
+          itemVal = Number(itemVal);
+        } else if (itemVal.toLowerCase() === "true") {
+          itemVal = true;
+        } else if (itemVal.toLowerCase() === "false") {
+          itemVal = false;
+        }
+        if (Array.isArray(result[currentKey])) {
+          result[currentKey].push(itemVal);
+        }
+        continue;
+      }
+
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) {
+        inList = false;
+        continue;
+      }
+
+      const key = line.slice(0, colonIdx).trim();
+      if (!key) continue;
+
+      let rawVal = line.slice(colonIdx + 1).trim();
+
+      if (!rawVal) {
+        currentKey = key;
+        inList = true;
+        result[key] = [];
+        continue;
+      }
+
+      inList = false;
+      currentKey = key;
+
+      if (rawVal.startsWith("[") && rawVal.endsWith("]")) {
+        const inner = rawVal.slice(1, -1).trim();
+        if (!inner) {
+          result[key] = [];
+        } else {
+          result[key] = inner.split(",").map((s) => {
+            let item = s.trim();
+            if ((item.startsWith('"') && item.endsWith('"')) || (item.startsWith("'") && item.endsWith("'"))) {
+              return item.slice(1, -1);
+            }
+            if (!isNaN(item) && item !== "") return Number(item);
+            if (item.toLowerCase() === "true") return true;
+            if (item.toLowerCase() === "false") return false;
+            return item;
+          });
+        }
+        continue;
+      }
+
+      if ((rawVal.startsWith('"') && rawVal.endsWith('"')) || (rawVal.startsWith("'") && rawVal.endsWith("'"))) {
+        result[key] = rawVal.slice(1, -1);
+        continue;
+      }
+
+      if (rawVal.toLowerCase() === "true") {
+        result[key] = true;
+        continue;
+      }
+      if (rawVal.toLowerCase() === "false") {
+        result[key] = false;
+        continue;
+      }
+
+      if (rawVal.toLowerCase() === "null" || rawVal === "~") {
+        result[key] = null;
+        continue;
+      }
+
+      if (!isNaN(rawVal) && rawVal !== "") {
+        result[key] = Number(rawVal);
+        continue;
+      }
+
+      result[key] = rawVal;
+    }
+
+    for (const [k, v] of Object.entries(result)) {
+      if (Array.isArray(v) && v.length === 0 && !["name_history", "days"].includes(k)) {
+        result[k] = "";
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -251,10 +411,6 @@ export class HabitNoteManager {
       // Apply only the supplied managed properties; preserve user properties.
       for (const [key, value] of Object.entries(propsToUpdate)) {
         if (value === null || value === undefined || value === "") {
-          if (key === "notes" && value === "") {
-            frontmatter.notes = "";
-            continue;
-          }
           if (OPTIONAL_HABIT_KEYS.includes(key)) {
             delete frontmatter[key];
             continue;
@@ -557,8 +713,8 @@ export class HabitNoteManager {
       if (indexedPath) {
         const file = this.app.vault.getAbstractFileByPath(indexedPath);
         if (file && file instanceof TFile) {
-          const fileId = this.app.metadataCache.getFileCache(file)?.frontmatter?.habit_id;
-          if (fileId === habit.id) return file;
+          const fileId = this.app.metadataCache?.getFileCache?.(file)?.frontmatter?.habit_id;
+          if (fileId === habit.id || (!fileId && this.getHabitIdByPath(file.path) === habit.id)) return file;
         }
       }
     }
@@ -577,8 +733,8 @@ export class HabitNoteManager {
         const path = this.getHabitFilePath(name, archived);
         const file = this.app.vault.getAbstractFileByPath(path);
         if (file && file instanceof TFile) {
-          const fileId = this.app.metadataCache.getFileCache(file)?.frontmatter?.habit_id;
-          if (!habit.id || fileId === habit.id) {
+          const fileId = this.app.metadataCache?.getFileCache?.(file)?.frontmatter?.habit_id;
+          if (!habit.id || fileId === habit.id || !fileId) {
             if (habit.id) this.indexHabitFile(habit.id, file.path);
             return file;
           }
@@ -602,15 +758,16 @@ export class HabitNoteManager {
     if (indexedPath) {
       const file = this.app.vault.getAbstractFileByPath(indexedPath);
       if (file && file instanceof TFile) {
-        const cache = this.app.metadataCache.getFileCache(file);
-        if (cache?.frontmatter?.habit_id === habitId) return file;
+        const cache = this.app.metadataCache?.getFileCache?.(file);
+        const fileId = cache?.frontmatter?.habit_id;
+        if (fileId === habitId || (!fileId && this.getHabitIdByPath(file.path) === habitId)) return file;
       }
     }
 
     // Scoped search in Active and Archive only
     const files = Utils.getHabitNoteFiles(this.app.vault, this);
     for (const file of files) {
-      const cache = this.app.metadataCache.getFileCache(file);
+      const cache = this.app.metadataCache?.getFileCache?.(file);
       if (cache?.frontmatter?.habit_id === habitId) {
         this.indexHabitFile(habitId, file.path);
         return file;
@@ -651,7 +808,8 @@ export class HabitNoteManager {
       const destPath = this.getHabitFilePath(habit.name, toArchived);
 
       let file = this.app.vault.getAbstractFileByPath(sourcePath);
-      if (file && this.app.metadataCache.getFileCache(file)?.frontmatter?.habit_id !== habit.id) file = null;
+      const cachedHabitId = this.app.metadataCache?.getFileCache?.(file)?.frontmatter?.habit_id;
+      if (file && cachedHabitId && cachedHabitId !== habit.id) file = null;
 
       // Fallback: find by id if name-based lookup fails
       if (!file) file = this._findFileByHabitId(habit.id);

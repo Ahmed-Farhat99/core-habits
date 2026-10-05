@@ -281,7 +281,9 @@ describe("StatsService Tests", () => {
       expect(await stats.initLifetimeIndex()).toBe(1);
       mockPlugin.app.vault.cachedRead = vi.fn().mockRejectedValue(new Error("disk read failed"));
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      expect(await stats.initLifetimeIndex(true)).toBeNull();
+      const result = await stats.initLifetimeIndex(true);
+      expect(result).toBe(1);
+      expect(stats.isDegraded).toBe(true);
       expect(stats.dailyCompletions.get("2026-09-09")).toBe(1);
       expect(mockPlugin.settings.lifetimeCompleted).toBe(1);
       errorSpy.mockRestore();

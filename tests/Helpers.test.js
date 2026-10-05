@@ -112,6 +112,43 @@ describe("Daily Note Helper Tests", () => {
       expect(mockDailyPlugin.instance.createDailyNote).toHaveBeenCalledWith(testDate);
     });
 
+    it("should return created file from daily-notes even if its path differs from primaryPath without calling manual create", async () => {
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
+      mockApp.vault.create.mockClear();
+      const mockCustomPathFile = { path: "Custom/Subfolder/2026-06-27.md" };
+      const mockDailyPlugin = {
+        enabled: true,
+        instance: {
+          createDailyNote: vi.fn().mockResolvedValue(mockCustomPathFile),
+          options: { folder: "Daily", format: "YYYY-MM-DD" },
+        },
+      };
+      mockApp.internalPlugins.getPluginById.mockReturnValue(mockDailyPlugin);
+
+      const file = await getNoteByDate(mockApp, testDate, true, null);
+      expect(file).toBe(mockCustomPathFile);
+      expect(mockDailyPlugin.instance.createDailyNote).toHaveBeenCalledWith(testDate);
+      expect(mockApp.vault.create).not.toHaveBeenCalled();
+    });
+
+    it("should return existing file during manual fallback if it already exists without throwing duplicate error", async () => {
+      // First call in getAllNotesByDate returns null, but by step 3 it exists
+      const existingFile = { path: "Daily/2026-06-27.md" };
+      let callCount = 0;
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path) => {
+        callCount++;
+        if (callCount > 1 && path === "Daily/2026-06-27.md") return existingFile;
+        return null;
+      });
+      mockApp.vault.create.mockClear();
+      mockApp.internalPlugins.getPluginById.mockReturnValue(null);
+      mockApp.plugins.getPlugin.mockReturnValue(null);
+
+      const file = await getNoteByDate(mockApp, testDate, true, { dailyNotesFolder: "Daily" });
+      expect(file).toBe(existingFile);
+      expect(mockApp.vault.create).not.toHaveBeenCalled();
+    });
+
     it("should fallback to manual creation if daily-notes creation fails", async () => {
       mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
       

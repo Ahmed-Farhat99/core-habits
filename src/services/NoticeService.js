@@ -149,6 +149,17 @@ export class NoticeService {
   }
 
   /**
+   * Alias for warning notice to guarantee API resilience.
+   * @param {string} message
+   * @param {number|Object} [durationOrOptions=6000]
+   * @param {Object} [plugin=null]
+   * @returns {Notice}
+   */
+  static warn(message, durationOrOptions = 6000, plugin = null) {
+    return NoticeService.warning(message, durationOrOptions, plugin);
+  }
+
+  /**
    * Shows an error notice with danger accent indicator.
    * @param {string} message
    * @param {number|Object} [durationOrOptions=8000]

@@ -70,6 +70,21 @@ body.is-mobile .daily-habits-plugin .dh-nav-tab {
 
 /* --- 3. MODALS & FORMS --- */
 
+/* Onboarding Modal Mobile */
+body.is-mobile :is(.modal.dh-onboarding-modal, .daily-habits-plugin.dh-onboarding-modal) {
+  width: calc(100vw - 24px);
+  max-width: 100%;
+  margin: 12px auto;
+}
+
+body.is-mobile .daily-habits-plugin .dh-onboarding-container {
+  padding: var(--dh-space-xl) var(--dh-space-lg) var(--dh-space-md) var(--dh-space-lg);
+}
+
+body.is-mobile .daily-habits-plugin .dh-onboarding-body {
+  min-height: auto;
+}
+
 /* Modal actions footer */
 body.is-mobile .daily-habits-plugin :is(.dh-modal-actions, .dh-modal-footer) {
   display: flex;

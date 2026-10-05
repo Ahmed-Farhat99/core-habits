@@ -14,6 +14,15 @@ export class DailyNotesPanel {
   async saveAndRefresh(settingsKey, value, container, t, reRenderSettings = false) {
     try {
       await persistSetting(this.plugin, settingsKey, value);
+      if (this.plugin?.vaultSourceStore) {
+        await this.plugin.vaultSourceStore.recordActiveSource();
+      }
+      if (["dailyNotesSource", "dailyNotesFolder", "dateFormat"].includes(settingsKey)) {
+        if (this.plugin?.statsService) {
+          this.plugin.statsService.invalidateCache();
+          void this.plugin.statsService.initLifetimeIndex(true);
+        }
+      }
     } catch (error) {
       this.render(container, t);
       NoticeService.error(this.plugin.translationManager.t("notice_error_prefix", { message: error.message }), this.plugin);
@@ -34,6 +43,15 @@ export class DailyNotesPanel {
       if (value === previous) return;
       try {
         await persistSetting(this.plugin, key, value, { historyKey });
+        if (this.plugin?.vaultSourceStore) {
+          await this.plugin.vaultSourceStore.recordActiveSource();
+        }
+        if (["dailyNotesSource", "dailyNotesFolder", "dateFormat"].includes(key)) {
+          if (this.plugin?.statsService) {
+            this.plugin.statsService.invalidateCache();
+            void this.plugin.statsService.initLifetimeIndex(true);
+          }
+        }
         this.plugin.refreshWeeklyViews();
       } catch (error) {
         text.setValue(previous ?? "");

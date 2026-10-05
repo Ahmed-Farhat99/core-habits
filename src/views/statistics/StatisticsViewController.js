@@ -99,6 +99,18 @@ export class StatisticsViewController {
       const { metrics } = statsData;
 
       this.headerComponent.render(container, period);
+
+      if (metrics.isDegraded || this.plugin?.statsService?.isDegraded) {
+        const degradedCount = metrics.degradedDaysCount || this.plugin?.statsService?.getDegradedDates?.()?.length || 1;
+        const banner = container.createDiv({ cls: "dh-stats-degraded-banner" });
+        banner.createSpan({ cls: "dh-stats-degraded-icon", text: "⚠️" });
+        banner.createSpan({
+          cls: "dh-stats-degraded-text",
+          text: t("stats_partial_banner", { count: degradedCount })
+            || `Partial statistics: ${degradedCount} daily note(s) could not be read safely.`,
+        });
+      }
+
       this.scoreRingComponent.render(container, metrics);
       this.metricCardsComponent.render(container, metrics);
       this.trendChartComponent.render(container, metrics);

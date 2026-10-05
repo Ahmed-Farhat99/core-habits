@@ -95,18 +95,28 @@ export class StreakCalculator {
           content = cachedEntry.content;
           parsedHabits = cachedEntry.parsedHabits;
         } else {
-          const dailyNote = await getNoteByDate(this.plugin.app, date, false, this.plugin.settings);
-          if (dailyNote) {
-            if (i === 0) {
-              content = await this.plugin.app.vault.read(dailyNote);
-            } else {
-              content = await this.plugin.app.vault.cachedRead(dailyNote);
+          try {
+            const dailyNote = await getNoteByDate(this.plugin.app, date, false, this.plugin.settings);
+            if (dailyNote) {
+              if (i === 0) {
+                content = await this.plugin.app.vault.read(dailyNote);
+              } else {
+                content = await this.plugin.app.vault.cachedRead(dailyNote);
+              }
             }
+          } catch (readErr) {
+            console.warn(`[Core Habits] Failed to read note for streak at ${dateKey}:`, readErr);
+            content = null;
           }
         }
 
         if (content !== null && !parsedHabits) {
-          parsedHabits = this.plugin.habitScanner.scan(content, this.plugin.settings.marker);
+          try {
+            parsedHabits = this.plugin.habitScanner.scan(content, this.plugin.settings?.marker);
+          } catch (scanErr) {
+            console.warn(`[Core Habits] Failed to scan note for streak at ${dateKey}:`, scanErr);
+            parsedHabits = null;
+          }
         }
 
         if (this.contentCache) {
@@ -116,7 +126,19 @@ export class StreakCalculator {
           StreakCalculator.#dailyNotesCache.set(dateKey, { content, parsedHabits });
         }
 
-        const status = await this.plugin.statsService.getHabitStatus(habit, date, parsedHabits || content);
+        let status;
+        try {
+          status = await this.plugin.statsService.getHabitStatus(habit, date, parsedHabits !== null ? parsedHabits : content);
+        } catch (err) {
+          console.warn(`[Core Habits] Failed to get habit status at ${dateKey}:`, err);
+          status = "unknown";
+        }
+
+        if (status === "unknown") {
+          // Degraded/unreadable note does not count as a missed completion and does not break streak
+          if (i < HISTORY_WINDOW) dailyHistoryMap.set(i, { date: dateKey, status: "unknown", dayOfWeek });
+          continue;
+        }
 
         if (status === "ignored") {
           if (i < HISTORY_WINDOW) dailyHistoryMap.set(i, { date: dateKey, status: "unscheduled", dayOfWeek });
@@ -328,7 +350,7 @@ export class StreakCalculator {
   }
 
   getConsistencyLabel(score) {
-    const t = (k) => this.plugin.translationManager.t(k);
+    const t = (k) => this.plugin.translationManager?.t ? this.plugin.translationManager.t(k) : k;
     if (score === null) return null;
     if (score >= 85) return t("consistency_excellent");
     if (score >= 65) return t("consistency_good");

@@ -1,4 +1,4 @@
-import { getNoteByDate, TextUtils, getDailyNotesInfo, getDailyNotePath } from "../utils/helpers.js";
+import { getNoteByDate, getAllNotesByDate, TextUtils, getDailyNotesInfo, getDailyNotePath } from "../utils/helpers.js";
 import { 
   DEFAULT_HABIT_NOTES_HEADING,
   DEFAULT_REFLECTION_HEADING,
@@ -176,18 +176,23 @@ export class HabitCommentRepository {
    * @returns {Promise<string>} The comment content (with timestamp stripped) or empty string
    */
   async getCommentForHabitDate(habit, date) {
-    const dailyNote = await getNoteByDate(this.app, date, false, this.plugin.settings);
-    if (!dailyNote) return "";
+    const candidateNotes = getAllNotesByDate(this.app, date, this.plugin?.settings, this.plugin?.vaultSourceStore);
+    if (!candidateNotes || candidateNotes.length === 0) {
+      const fallback = await getNoteByDate(this.app, date, false, this.plugin?.settings, this.plugin?.vaultSourceStore);
+      if (fallback) candidateNotes.push(fallback);
+    }
+    if (candidateNotes.length === 0) return "";
 
-    const content = await this.app.vault.cachedRead(dailyNote);
-    const subHeading = this.plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
+    const subHeading = this.plugin?.settings?.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
 
-    // Extract subheading section lines
-    const lines = this._extractSectionLines(content, subHeading);
+    for (const note of candidateNotes) {
+      const content = await this.app.vault.cachedRead(note);
+      const lines = this._extractSectionLines(content, subHeading);
 
-    for (const line of lines) {
-      if (HabitCommentRepository.isCommentLineForHabit(line, habit)) {
-        return this._cleanCommentText(line, habit.name, habit.nameHistory || []);
+      for (const line of lines) {
+        if (HabitCommentRepository.isCommentLineForHabit(line, habit)) {
+          return this._cleanCommentText(line, habit.name, habit.nameHistory || []);
+        }
       }
     }
 
@@ -197,27 +202,45 @@ export class HabitCommentRepository {
   /**
    * Reads comment history for a habit from the last X Daily Notes.
    * Checks habit_id first, falling back to name/history matching.
+   * Deduplicates comments only when confirmed event identity matches.
    * @param {object} habit - The habit object
    * @param {number} [daysToLookBack=30] - Number of days to check
-   * @returns {Promise<Array<{date: moment.Moment, text: string}>>}
+   * @returns {Promise<Array<{date: moment.Moment, text: string, path: string}>>}
    */
   async getCommentHistoryForHabit(habit, daysToLookBack = 30) {
     const entries = [];
     const now = window.moment();
-    const subHeading = this.plugin.settings.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
+    const subHeading = this.plugin?.settings?.habitLogHeading || DEFAULT_HABIT_NOTES_HEADING;
+    const seenEventKeys = new Set();
 
     for (let i = 0; i < daysToLookBack; i++) {
       const targetDate = now.clone().subtract(i, "days");
-      const file = await getNoteByDate(this.app, targetDate, false, this.plugin.settings);
-      if (!file) continue;
+      const candidateNotes = getAllNotesByDate(this.app, targetDate, this.plugin?.settings, this.plugin?.vaultSourceStore);
+      if (!candidateNotes || candidateNotes.length === 0) {
+        const fallback = await getNoteByDate(this.app, targetDate, false, this.plugin?.settings, this.plugin?.vaultSourceStore);
+        if (fallback) candidateNotes.push(fallback);
+      }
+      if (candidateNotes.length === 0) continue;
 
-      const content = await this.app.vault.cachedRead(file);
-      const lines = this._extractSectionLines(content, subHeading);
+      for (const file of candidateNotes) {
+        const content = await this.app.vault.cachedRead(file);
+        const lines = this._extractSectionLines(content, subHeading);
 
-      for (const line of lines) {
-        if (HabitCommentRepository.isCommentLineForHabit(line, habit)) {
-          const cleanText = this._cleanCommentText(line, habit.name, habit.nameHistory || []);
-          entries.push({ date: targetDate, text: cleanText, path: file.path });
+        for (const line of lines) {
+          if (HabitCommentRepository.isCommentLineForHabit(line, habit)) {
+            const timeMatch = line.match(/^-\s*(\d{1,2}:\d{2})/);
+            const timeStr = timeMatch ? timeMatch[1] : "";
+            const cleanText = this._cleanCommentText(line, habit.name, habit.nameHistory || []);
+
+            // Confirmed event identity: habitId + dateKey + timeStr + cleanText
+            const dateKey = targetDate.format("YYYY-MM-DD");
+            const eventKey = `${habit.id}::${dateKey}::${timeStr}::${cleanText}`;
+
+            if (!seenEventKeys.has(eventKey)) {
+              seenEventKeys.add(eventKey);
+              entries.push({ date: targetDate, text: cleanText, path: file.path });
+            }
+          }
         }
       }
     }

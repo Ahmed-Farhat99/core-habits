@@ -49,6 +49,13 @@ export class StatsHabitsList {
       text: `${habits.length}`,
     });
 
+    if (metrics.isDegraded || this.plugin?.statsService?.isDegraded) {
+      titleGroup.createSpan({
+        cls: "dh-stats-degraded-badge",
+        text: `⚠️ ${t("stats_partial_indicator") || (isAr ? "بيانات جزئية" : "Partial data")}`,
+      });
+    }
+
     // ── 2. Collapsible Body ──────────────────────────────────────────────────
     const bodyEl = section.createDiv({
       cls: `dh-habits-collapsible-body ${this.isExpanded ? "is-expanded" : "is-collapsed"}`,

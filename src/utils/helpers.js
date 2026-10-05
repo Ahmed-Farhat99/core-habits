@@ -1,94 +1,144 @@
 import { NoticeService } from '../services/NoticeService.js';
 import { TRANSLATIONS } from '../locales/index.js';
 
-async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSettings = null) {
-  const info = getDailyNotesInfo(app, pluginSettings);
-  const format = info.format;
-  const templatePath = info.template;
+function getCandidateDailyNoteSources(app, pluginSettings = null, vaultSourceStore = null) {
+  if (vaultSourceStore && typeof vaultSourceStore.getCandidateSources === "function") {
+    return vaultSourceStore.getCandidateSources();
+  }
+  const active = getDailyNotesInfo(app, pluginSettings);
+  const activeTuple = {
+    folder: normalizeDailyFolder(active.folder || ""),
+    format: (active.format || "YYYY-MM-DD").trim(),
+    source: active.source || "manual"
+  };
+  const history = Array.isArray(pluginSettings?.dailyNoteSourcesHistory)
+    ? pluginSettings.dailyNoteSourcesHistory
+    : [];
 
-  // The previous call to .locale('ar') mutated the shared moment object, causing this to be Arabic.
-  // We clone it and force english for the filename generation.
-  const fileName = dateMoment.clone().locale("en").format(format);
+  const map = new Map();
+  map.set(`${activeTuple.folder}::${activeTuple.format}`, activeTuple);
 
-  const normalizedPath = getDailyNotePath(dateMoment, info);
+  for (const h of history) {
+    if (!h) continue;
+    const folder = normalizeDailyFolder(h.folder || "");
+    const format = (h.format || "YYYY-MM-DD").trim();
+    const key = `${folder}::${format}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        folder,
+        format,
+        source: h.source || "manual"
+      });
+    }
+  }
+  return Array.from(map.values());
+}
 
-  let file = app.vault.getAbstractFileByPath(normalizedPath);
-  if (!file && createIfNeeded) {
+function getAllNotesByDate(app, dateMoment, pluginSettings = null, vaultSourceStore = null) {
+  if (!dateMoment) return [];
+  if (typeof app?.vault?.getAbstractFileByPath !== "function") return [];
+  const candidateSources = getCandidateDailyNoteSources(app, pluginSettings, vaultSourceStore);
+  const files = [];
+  const seenPaths = new Set();
+
+  for (const src of candidateSources) {
+    const path = getDailyNotePath(dateMoment, src);
+    if (!path || seenPaths.has(path)) continue;
+    seenPaths.add(path);
+    const file = app.vault.getAbstractFileByPath(path);
+    if (file) {
+      files.push(file);
+    }
+  }
+  return files;
+}
+
+async function getNoteByDate(app, dateMoment, createIfNeeded = false, pluginSettings = null, vaultSourceStore = null) {
+  const existingNotes = getAllNotesByDate(app, dateMoment, pluginSettings, vaultSourceStore);
+  if (existingNotes.length > 0) {
+    return existingNotes[0];
+  }
+
+  if (createIfNeeded) {
+    const primaryInfo = getDailyNotesInfo(app, pluginSettings);
+    const primaryPath = getDailyNotePath(dateMoment, primaryInfo);
+    if (!primaryPath) return null;
+    const format = primaryInfo.format || "YYYY-MM-DD";
+    const templatePath = primaryInfo.template;
+    const fileName = dateMoment.clone().locale("en").format(format);
+
     try {
       // 1. Try internal daily-notes plugin
-      const dnPlugin = info.source === "daily-notes" && typeof app.internalPlugins?.getPluginById === "function" 
+      const dnPlugin = primaryInfo.source === "daily-notes" && typeof app.internalPlugins?.getPluginById === "function" 
         ? app.internalPlugins.getPluginById("daily-notes") 
         : null;
       if (dnPlugin && dnPlugin.enabled && dnPlugin.instance && typeof dnPlugin.instance.createDailyNote === "function") {
         const created = await dnPlugin.instance.createDailyNote(dateMoment);
-        if (created?.path === normalizedPath) file = created;
-        else if (created) console.warn("[Core Habits] Daily Notes returned an unexpected path:", created.path);
+        if (created) return created;
       }
     } catch (e) {
       console.warn("[Core Habits] Failed to create daily note using daily-notes plugin:", e);
     }
 
-    if (!file) {
-      // 2. Try periodic-notes plugin
-      try {
-        const pnPlugin = info.source === "periodic-notes" ? app.plugins?.getPlugin("periodic-notes") : null;
-        if (pnPlugin && typeof pnPlugin.createDailyNote === "function") {
-          const created = await pnPlugin.createDailyNote(dateMoment);
-          if (created?.path === normalizedPath) file = created;
-          else if (created) console.warn("[Core Habits] Periodic Notes returned an unexpected path:", created.path);
-        }
-      } catch (e) {
-        console.warn("[Core Habits] Failed to create daily note using periodic-notes plugin:", e);
+    // 2. Try periodic-notes plugin
+    try {
+      const pnPlugin = primaryInfo.source === "periodic-notes" ? app.plugins?.getPlugin("periodic-notes") : null;
+      if (pnPlugin && typeof pnPlugin.createDailyNote === "function") {
+        const created = await pnPlugin.createDailyNote(dateMoment);
+        if (created) return created;
       }
+    } catch (e) {
+      console.warn("[Core Habits] Failed to create daily note using periodic-notes plugin:", e);
     }
 
-    if (!file) {
-      // 3. Fallback: manual creation
-      try {
-        const parentPath = normalizedPath.includes("/") ? normalizedPath.slice(0, normalizedPath.lastIndexOf("/")) : "";
-        if (parentPath) {
-          let current = "";
-          for (const part of parentPath.split("/")) {
-            current = current ? `${current}/${part}` : part;
-            if (!app.vault.getAbstractFileByPath(current)) await app.vault.createFolder(current);
-          }
+    // 3. Fallback: manual creation at primaryPath
+    try {
+      const existing = app.vault.getAbstractFileByPath(primaryPath);
+      if (existing) return existing;
+
+      const parentPath = primaryPath.includes("/") ? primaryPath.slice(0, primaryPath.lastIndexOf("/")) : "";
+      if (parentPath) {
+        let current = "";
+        for (const part of parentPath.split("/")) {
+          current = current ? `${current}/${part}` : part;
+          if (!app.vault.getAbstractFileByPath(current)) await app.vault.createFolder(current);
         }
-
-        let content = "";
-        if (templatePath) {
-          // Normalize template path
-          let templateFilePath = templatePath;
-          if (!templateFilePath.endsWith(".md")) {
-            templateFilePath += ".md";
-          }
-
-          const templateFile = app.vault.getAbstractFileByPath(templateFilePath);
-          if (templateFile) {
-            try {
-              content = await app.vault.read(templateFile);
-              content = content.replace(/\{\{date\}\}/g, fileName);
-              content = content.replace(/\{\{title\}\}/g, fileName);
-              content = content.replace(/\{\{date:([^}]+)\}\}/g, (match, fmt) => {
-                return dateMoment.clone().locale("en").format(fmt);
-              });
-            } catch (e) {
-              console.warn("[Core Habits] Could not read template:", e);
-            }
-          }
-        }
-
-        file = await app.vault.create(normalizedPath, content);
-      } catch (err) {
-        console.error("[Core Habits] Failed to create daily note manually:", err);
-        const lang = pluginSettings?.language || "ar";
-        const msg = TRANSLATIONS[lang]?.notice_could_not_create_daily_note
-          || (lang === "ar" ? "تعذر إنشاء الملاحظة اليومية" : "Could not create daily note");
-        NoticeService.error(msg, { plugin: { settings: pluginSettings } });
-        return null;
       }
+
+      let content = "";
+      if (templatePath) {
+        let templateFilePath = templatePath;
+        if (!templateFilePath.endsWith(".md")) {
+          templateFilePath += ".md";
+        }
+
+        const templateFile = app.vault.getAbstractFileByPath(templateFilePath);
+        if (templateFile) {
+          try {
+            content = await app.vault.read(templateFile);
+            content = content.replace(/\{\{date\}\}/g, fileName);
+            content = content.replace(/\{\{title\}\}/g, fileName);
+            content = content.replace(/\{\{date:([^}]+)\}\}/g, (match, fmt) => {
+              return dateMoment.clone().locale("en").format(fmt);
+            });
+          } catch (e) {
+            console.warn("[Core Habits] Could not read template:", e);
+          }
+        }
+      }
+
+      return await app.vault.create(primaryPath, content);
+    } catch (err) {
+      console.error("[Core Habits] Failed to create daily note manually:", err);
+      const lang = pluginSettings?.language || "ar";
+      const msg = TRANSLATIONS[lang]?.notice_could_not_create_daily_note
+        || (lang === "ar" ? "تعذر إنشاء الملاحظة اليومية" : "Could not create daily note");
+      NoticeService.error(msg, { plugin: { settings: pluginSettings } });
+      return null;
     }
   }
-  return file;
+
+  return null;
 }
 
 function normalizeDailyFolder(folder) {
@@ -109,17 +159,26 @@ function getDailyNotePath(dateMoment, info) {
   return `${folder ? `${folder}/` : ""}${name}.md`.replace(/\/+/g, "/");
 }
 
-function getDailyNoteDate(file, app, pluginSettings = null) {
+function getDailyNoteDate(file, app, pluginSettings = null, vaultSourceStore = null) {
   if (!file?.path?.endsWith(".md")) return null;
-  const info = getDailyNotesInfo(app, pluginSettings);
-  const folder = normalizeDailyFolder(info.folder);
-  const prefix = folder ? `${folder}/` : "";
-  if (!file.path.startsWith(prefix)) return null;
-  const relative = file.path.slice(prefix.length, -3);
-  if (!folder && relative.includes("/") && !(info.format || "").includes("/")) return null;
+  const candidateSources = getCandidateDailyNoteSources(app, pluginSettings, vaultSourceStore);
   const momentFactory = window.moment || globalThis.moment;
-  const date = momentFactory(relative, info.format || "YYYY-MM-DD", true);
-  return date.isValid() && getDailyNotePath(date, info) === file.path ? date : null;
+
+  for (const src of candidateSources) {
+    const folder = normalizeDailyFolder(src.folder);
+    const prefix = folder ? `${folder}/` : "";
+    if (!file.path.startsWith(prefix)) continue;
+
+    const relative = file.path.slice(prefix.length, -3);
+    if (!folder && relative.includes("/") && !(src.format || "").includes("/")) continue;
+
+    const date = momentFactory(relative, src.format || "YYYY-MM-DD", true);
+    if (date.isValid() && getDailyNotePath(date, src) === file.path) {
+      return date;
+    }
+  }
+
+  return null;
 }
 
 
@@ -472,6 +531,9 @@ function showAnchoredMenu(menu, triggerEl, isRTL = false, options = {}) {
 
 export {
   getNoteByDate,
+  getAllNotesByDate,
+  normalizeDailyFolder,
+  getCandidateDailyNoteSources,
   TextUtils,
   findHabitEntry,
   buildHierarchyLabels,

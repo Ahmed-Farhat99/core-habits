@@ -66,6 +66,31 @@ export class HabitManager {
   }
 
   /**
+   * Returns list of currently quarantined conflicting habits.
+   * @returns {Array<object>}
+   */
+  getConflicts() {
+    return this.repository?.getConflicts?.() || [];
+  }
+
+  /**
+   * Returns list of notes skipped due to malformed metadata or errors.
+   * @returns {Array<object>}
+   */
+  getMalformedNotes() {
+    return this.repository?.getMalformedNotes?.() || [];
+  }
+
+  /**
+   * Checks whether a habit ID is quarantined due to conflict.
+   * @param {string} habitId
+   * @returns {boolean}
+   */
+  isHabitQuarantined(habitId) {
+    return this.repository?.isQuarantined?.(habitId) || false;
+  }
+
+  /**
    * Reconciles habit ordering using VaultOrderStore (_order.md) as the Single Source of Truth,
    * with data.json as a fast runtime cache and deterministic fallback reconstruction.
    */
@@ -74,6 +99,7 @@ export class HabitManager {
 
     const loadedHabits = Array.from(this.habitsMap.values());
     const validIds = new Set(loadedHabits.map((h) => h.id));
+    const conflictedIds = new Set((this.getConflicts() || []).map((c) => c.habitId));
 
     // 1. Read portable persistent source of truth from Vault (_order.md)
     let vaultOrderData = null;
@@ -113,8 +139,8 @@ export class HabitManager {
       mustWriteVault = true;
     }
 
-    // 3. Prune IDs that no longer exist in loaded habit files
-    let reconciled = baseOrder.filter((id) => validIds.has(id));
+    // 3. Prune IDs that no longer exist in loaded habit files (protecting quarantined habits from destructive pruning)
+    let reconciled = baseOrder.filter((id) => validIds.has(id) || conflictedIds.has(id));
     if (reconciled.length !== baseOrder.length) {
       mustWriteVault = true;
     }
@@ -174,7 +200,33 @@ export class HabitManager {
 
     if (isInsideActive || isInsideArchive) {
       const habit = await this.repository.loadFile(file);
+      if (!habit) {
+        for (const id of this.habitsMap.keys()) {
+          if (this.isHabitQuarantined(id)) {
+            this.habitsMap.delete(id);
+            this.invalidateCaches();
+          }
+        }
+        return;
+      }
       if (habit && habit.id) {
+          if (this.isHabitQuarantined(habit.id)) {
+            this.habitsMap.delete(habit.id);
+            this.invalidateCaches();
+            return;
+          }
+
+          const existingPath = this.plugin.habitNoteManager?.getFilePathByHabitId?.(habit.id);
+          if (existingPath && existingPath !== file.path) {
+            console.warn(`[Core Habits] Runtime duplicate conflict detected for habit "${habit.id}" between "${existingPath}" and "${file.path}". Quarantining.`);
+            this.habitsMap.delete(habit.id);
+            this.plugin.habitNoteManager?.unindexHabitFile?.(habit.id);
+            this.plugin.habitNoteManager?.unindexHabitFile?.(file.path);
+            this.plugin.habitNoteManager?.unindexHabitFile?.(existingPath);
+            this.repository.registerConflict?.(habit.id, [existingPath, file.path]);
+            return;
+          }
+
           const needsMoveToArchive = habit.archived && isInsideActive;
           const needsMoveToActive = !habit.archived && isInsideArchive;
 
@@ -1249,7 +1301,14 @@ export class HabitManager {
     const archiveFolder = `${this.plugin.habitNoteManager.getArchiveFolder()}/`;
     const insideHabitFolder = (path) => path.startsWith(activeFolder) || path.startsWith(archiveFolder);
     if (!insideHabitFolder(file.path) || !insideHabitFolder(oldPath)) return;
-    const habitId = this.plugin.app.metadataCache.getFileCache(file)?.frontmatter?.habit_id;
+    let habitId = this.plugin.app.metadataCache?.getFileCache?.(file)?.frontmatter?.habit_id;
+    if (!habitId) {
+      habitId = this.plugin.habitNoteManager?.getHabitIdByPath?.(oldPath);
+    }
+    if (!habitId) {
+      const props = await this.plugin.habitNoteManager?.readHabitNoteProps?.(file.path);
+      habitId = props?.habit_id;
+    }
     if (!habitId) return;
     // 1. Detect manual move between Active/ and Archive/
     const moveType = this.plugin.habitNoteManager.detectManualMove(file.path, oldPath);

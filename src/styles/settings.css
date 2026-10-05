@@ -928,3 +928,47 @@
 
 /* Mobile settings overrides have been centralized in mobile.css */
 
+/* Quarantined Conflicts & Fault Isolation Banner */
+.daily-habits-plugin .dh-conflict-banner {
+  margin: 0 0 var(--dh-space-md) 0;
+  padding: var(--dh-space-md) var(--dh-space-lg);
+  border: 1px solid var(--dh-brand-warning);
+  border-radius: var(--dh-radius-md);
+  background: color-mix(in srgb, var(--dh-brand-warning) 8%, var(--background-secondary));
+}
+.daily-habits-plugin .dh-conflict-header {
+  display: flex;
+  align-items: center;
+  gap: var(--dh-space-sm);
+  margin-bottom: var(--dh-space-xs);
+  color: var(--dh-brand-warning);
+}
+.daily-habits-plugin .dh-conflict-count-badge {
+  background: var(--dh-brand-warning);
+  color: var(--text-on-accent, #fff);
+  border-radius: 9999px;
+  font-size: var(--dh-font-xs);
+  padding: 1px 6px;
+  font-weight: 600;
+}
+.daily-habits-plugin .dh-conflict-desc {
+  margin: 0 0 var(--dh-space-xs) 0;
+  font-size: var(--dh-font-sm);
+  color: var(--text-muted);
+}
+.daily-habits-plugin .dh-conflict-list {
+  margin: var(--dh-space-xs) 0;
+  padding-inline-start: var(--dh-space-lg);
+  font-size: var(--dh-font-xs);
+}
+.daily-habits-plugin .dh-conflict-item {
+  margin-bottom: var(--dh-space-xs);
+  word-break: break-all;
+}
+.daily-habits-plugin .dh-conflict-tip {
+  display: block;
+  margin-top: var(--dh-space-xs);
+  font-size: var(--dh-font-xs);
+  color: var(--text-faint);
+}
+

@@ -101,6 +101,9 @@ export class HabitsPanel {
       searchInput.focus();
     };
 
+    // ─── 3. Quarantined Conflicts & Issues Banner ───
+    this.renderQuarantineBanner(container, t);
+
     // ─── 4. Habits List Container ───
     this.habitsContainer = container.createDiv({ cls: "dh-habits-grid-settings" });
     const listContainer = this.habitsContainer;
@@ -114,6 +117,54 @@ export class HabitsPanel {
     // ─── 6. Recoverable bulk removal ───
     this.dangerSection = container.createDiv();
     this.renderDangerZone(this.dangerSection, t);
+  }
+
+  renderQuarantineBanner(container, t) {
+    const conflicts = this.plugin?.habitManager?.getConflicts?.() || [];
+    const malformed = this.plugin?.habitManager?.getMalformedNotes?.() || [];
+
+    if (conflicts.length === 0 && malformed.length === 0) return;
+
+    const banner = container.createDiv({ cls: "dh-conflict-banner" });
+    const header = banner.createDiv({ cls: "dh-conflict-header" });
+    header.createEl("strong", {
+      text: `⚠️ ${t("conflicts_banner_title") || "Quarantined Notes & Conflicts"}`
+    });
+    header.createSpan({
+      cls: "dh-conflict-count-badge",
+      text: `${conflicts.length + malformed.length}`
+    });
+
+    banner.createEl("p", {
+      cls: "dh-conflict-desc",
+      text: t("conflicts_banner_desc") || "The following notes have duplicate IDs or formatting issues and were isolated to protect your data. Your files have not been modified or deleted."
+    });
+
+    const list = banner.createEl("ul", { cls: "dh-conflict-list" });
+
+    for (const conflict of conflicts) {
+      const item = list.createEl("li", { cls: "dh-conflict-item" });
+      const typeLabel = conflict.type === "sync_conflict"
+        ? (t("conflicts_type_sync") || "Sync Conflict")
+        : conflict.type === "active_archive_duplicate"
+        ? (t("conflicts_type_active_archive") || "Active vs Archive Duplicate")
+        : (t("conflicts_type_duplicate_id") || "Duplicate Habit ID");
+
+      item.createEl("strong", { text: `[${typeLabel}] ` });
+      item.createSpan({ text: `ID: "${conflict.habitId}" — ` });
+      item.createEl("code", { text: conflict.paths.join("  |  ") });
+    }
+
+    for (const item of malformed) {
+      const li = list.createEl("li", { cls: "dh-conflict-item" });
+      li.createEl("strong", { text: `[${t("conflicts_type_malformed") || "Malformed Note"}] ` });
+      li.createSpan({ text: `${item.path}: ${item.message}` });
+    }
+
+    banner.createEl("small", {
+      cls: "dh-conflict-tip",
+      text: t("conflicts_resolution_tip") || "To resolve: open your vault folder and delete or rename the redundant file, then reload Obsidian."
+    });
   }
 
   renderDangerZone(container, t) {

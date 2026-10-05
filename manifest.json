@@ -1,7 +1,7 @@
 {
   "id": "core-habits",
   "name": "Core Habits",
-  "version": "3.5.2",
+  "version": "3.5.3",
   "minAppVersion": "1.7.0",
   "description": "Track habits visually in a weekly grid, reflect in daily notes, and build your core identity.",
   "author": "Ahmed Farhat",

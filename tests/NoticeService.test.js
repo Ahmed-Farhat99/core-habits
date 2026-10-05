@@ -105,4 +105,15 @@ describe("NoticeService", () => {
     expect(customNotice.duration).toBe(3000);
     expect(customNotice.noticeEl.classList.contains("dh-notice-warning")).toBe(true);
   });
+
+  it("provides warn as a safe alias for warning", () => {
+    const fakePlugin = { translationManager: { isRTL: () => false } };
+    const aliasNotice = NoticeService.warn("Warning via alias", 5000, fakePlugin);
+    expect(typeof aliasNotice.duration).toBe("number");
+    expect(aliasNotice.duration).toBe(5000);
+    expect(aliasNotice.noticeEl.classList.contains("dh-notice-warning")).toBe(true);
+    expect(aliasNotice.noticeEl.classList.contains("daily-habits-plugin")).toBe(true);
+    expect(aliasNotice.noticeEl.getAttribute("dir")).toBe("ltr");
+  });
 });
+

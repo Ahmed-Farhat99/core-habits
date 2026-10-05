@@ -1,5 +1,5 @@
 import { normalizeReflectionType, DEFAULT_REFLECTION_HEADING, KNOWN_REFLECTION_HEADINGS } from '../constants.js';
-import { DateUtils, TextUtils, getNoteByDate, getDailyNoteDate } from '../utils/helpers.js';
+import { DateUtils, TextUtils, getNoteByDate, getAllNotesByDate, getDailyNoteDate } from '../utils/helpers.js';
 
 import { DiaryParser } from './DiaryParser.js';
 
@@ -266,31 +266,44 @@ export class DiaryService {
    * Returns list of { file, dateMoment, dateKey }
    */
   async discoverDailyNotes(startDate, endDate) {
-
-    // 1. If range is small (<= 14 days) and not "ALL", direct lookup is fast and accurate
+    // 1. If range is small (<= 14 days) and not "ALL", direct candidate lookup is fast and avoids broad checks
     if (startDate && endDate && endDate.diff(startDate, "days") <= 14 && this.periodType !== DIARY_PERIODS.ALL) {
       const daysCount = endDate.diff(startDate, "days") + 1;
       const discovered = [];
       for (let i = 0; i < daysCount; i++) {
         const d = startDate.clone().add(i, "days");
-        const file = await getNoteByDate(this.app, d, false, this.plugin?.settings);
-        if (file) {
-          discovered.push({
-            file,
-            dateMoment: d,
-            dateKey: DateUtils.formatDateKey(d)
-          });
+        const candidateNotes = getAllNotesByDate(this.app, d, this.plugin?.settings, this.plugin?.vaultSourceStore);
+        if (candidateNotes.length > 0) {
+          for (const file of candidateNotes) {
+            discovered.push({
+              file,
+              dateMoment: d,
+              dateKey: DateUtils.formatDateKey(d)
+            });
+          }
+        } else {
+          // Fallback if getNoteByDate was mocked directly
+          const file = await getNoteByDate(this.app, d, false, this.plugin?.settings, this.plugin?.vaultSourceStore);
+          if (file) {
+            discovered.push({
+              file,
+              dateMoment: d,
+              dateKey: DateUtils.formatDateKey(d)
+            });
+          }
         }
       }
       return discovered;
     }
 
-    // 2. For longer ranges or ALL notes, scan Markdown files in vault/folder
-    const allFiles = this.app.vault.getMarkdownFiles ? this.app.vault.getMarkdownFiles() : [];
+    // 2. For longer ranges or ALL notes, collect candidate files without generic recursion or full vault scan
+    const allFiles = (this.plugin?.vaultSourceStore && typeof this.plugin.vaultSourceStore.collectCandidateFiles === "function")
+      ? this.plugin.vaultSourceStore.collectCandidateFiles()
+      : (this.app.vault.getMarkdownFiles ? this.app.vault.getMarkdownFiles() : []);
     const discovered = [];
 
     for (const file of allFiles) {
-      const d = getDailyNoteDate(file, this.app, this.plugin?.settings);
+      const d = getDailyNoteDate(file, this.app, this.plugin?.settings, this.plugin?.vaultSourceStore);
       if (!d) continue;
 
       if (startDate && endDate) {
@@ -354,9 +367,26 @@ export class DiaryService {
         }
       }
 
+      // Deduplicate only on confirmed duplicate event identity (same date, time, type, text)
+      const uniqueEntries = [];
+      const seenEventIds = new Set();
+
+      for (const entry of allEntries) {
+        const dateStr = entry.dateKey || (typeof entry.date === "string" ? entry.date : (entry.date?.format ? entry.date.format("YYYY-MM-DD") : ""));
+        const timeStr = entry.time || "";
+        const typeStr = entry.type || "";
+        const textStr = (entry.text || "").trim();
+        const eventId = `${dateStr}::${timeStr}::${typeStr}::${textStr}`;
+
+        if (!seenEventIds.has(eventId)) {
+          seenEventIds.add(eventId);
+          uniqueEntries.push(entry);
+        }
+      }
+
       // Sort entries descending by timestamp
-      allEntries.sort((a, b) => b.timestamp - a.timestamp);
-      return allEntries;
+      uniqueEntries.sort((a, b) => b.timestamp - a.timestamp);
+      return uniqueEntries;
     } finally {
       this._isLoading = false;
     }

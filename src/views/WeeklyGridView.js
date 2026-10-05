@@ -350,7 +350,18 @@ class WeeklyGridView extends ItemView {
 
     if (!this.plugin.isFullyLoaded) {
       if (this.plugin.startupError) {
-        StatusView.renderError(container, "Core Habits could not initialize safely. Check the console and reload after fixing the error.");
+        StatusView.renderStartupFailure(container, {
+          error: this.plugin.startupError,
+          onRetry: async () => {
+            const success = await this.plugin.retryStartup();
+            if (success && this.refresh) {
+              this.refresh();
+            }
+          },
+          t: (k, p) => this.t(k, p),
+          isAr: (this.plugin.settings?.language || "en") === "ar",
+          backupFolder: `${this.plugin.habitNoteManager?.getRootFolder?.() || "Core Habits"}/.backups`
+        });
         this._isRendering = false;
         return;
       }

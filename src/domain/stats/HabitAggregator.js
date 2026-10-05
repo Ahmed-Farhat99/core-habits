@@ -76,6 +76,11 @@ export class HabitAggregator {
       return "ignored";
     }
 
+    // Scan failure / unreadable note handling
+    if (scannedEntries === null) {
+      return "unknown";
+    }
+
     // Entry matching
     const entry = scannedEntries ? findHabitEntry(scannedEntries, habit.linkText, habit.nameHistory, habit.id) : null;
 
@@ -138,6 +143,7 @@ export class HabitAggregator {
         scheduledCount: 0,
         completedCount: 0,
         skippedCount: 0,
+        unknownCount: 0,
         rate: 0,
         dailyHistory: [], // array of { dateKey, status }
       });
@@ -153,6 +159,7 @@ export class HabitAggregator {
     let activeDaysCount = 0;
     let perfectDaysCount = 0;
     let lowDaysCount = 0; // days with rate < 50%
+    let degradedDaysCount = 0;
 
     while (currentDay.isSameOrBefore(endLimit)) {
       // NEVER count future days in calculations
@@ -174,11 +181,12 @@ export class HabitAggregator {
       }
 
       const hasNote = dayData ? !!dayData.hasNote : false;
-      const scanned = dayData ? (dayData.scanned || []) : [];
+      const scanned = dayData ? (dayData.scanned ?? null) : null;
 
       let dayScheduled = 0;
       let dayCompleted = 0;
       let daySkipped = 0;
+      let dayUnknown = 0;
 
       for (const habit of habits) {
         const status = this.resolveHabitStatus(habit, currentDay, scanned, hasNote, settings, habitManager);
@@ -189,6 +197,12 @@ export class HabitAggregator {
         }
 
         if (status === "ignored") {
+          continue;
+        }
+
+        if (status === "unknown") {
+          dayUnknown++;
+          if (hStat) hStat.unknownCount = (hStat.unknownCount || 0) + 1;
           continue;
         }
 
@@ -209,16 +223,22 @@ export class HabitAggregator {
       }
 
       const dayRate = dayScheduled > 0 ? Math.round((dayCompleted / dayScheduled) * 100) : 0;
+      const isDayDegraded = dayUnknown > 0 || (hasNote && scanned === null) || Boolean(dayData?.isDegraded);
+      if (isDayDegraded) degradedDaysCount++;
 
       dailyStats.set(dateKey, {
         date: currentDay.clone(),
         dateKey,
         dayOfWeek,
         scheduled: dayScheduled,
+        total: dayScheduled,
         completed: dayCompleted,
         skipped: daySkipped,
+        unknown: dayUnknown,
+        dayUnknown: dayUnknown > 0,
         rate: dayRate,
         hasNote,
+        isDegraded: isDayDegraded,
       });
 
       if (dayCompleted > 0) {
@@ -269,6 +289,8 @@ export class HabitAggregator {
       dailyStats,
       habitStats,
       weekdayStats,
+      isDegraded: degradedDaysCount > 0,
+      degradedDaysCount,
       summary: {
         totalScheduled: totalScheduledSum,
         totalCompleted: totalCompletedSum,
@@ -277,6 +299,8 @@ export class HabitAggregator {
         activeDaysCount,
         perfectDaysCount,
         lowDaysCount,
+        degradedDaysCount,
+        isDegraded: degradedDaysCount > 0,
       },
     };
   }

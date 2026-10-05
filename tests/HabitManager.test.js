@@ -460,6 +460,95 @@ describe("HabitManager CRUD Transactional Tests", () => {
     );
   });
 
+  it("should successfully sync rename using oldPath fallback when metadataCache is unindexed", async () => {
+    const habit = {
+      schemaVersion: 1,
+      id: "habit-cache-lag",
+      name: "Old Gym",
+      linkText: "[[Old Gym]]",
+      createdAt: Date.now(),
+      order: 0,
+      archived: false,
+      nameHistory: []
+    };
+    habitManager.habitsMap.set(habit.id, habit);
+
+    const mockFile = {
+      path: "Core Habits/Active/New Gym.md",
+      basename: "New Gym"
+    };
+
+    mockPlugin.habitNoteManager = {
+      detectManualMove: vi.fn().mockReturnValue(null),
+      getActiveFolder: () => "Core Habits/Active",
+      getArchiveFolder: () => "Core Habits/Archive",
+      getHabitIdByPath: vi.fn((path) => path === "Core Habits/Active/Old Gym.md" ? "habit-cache-lag" : null),
+      readHabitNoteProps: vi.fn().mockResolvedValue(null),
+      indexHabitFile: vi.fn()
+    };
+
+    // metadataCache returns null/empty because it hasn't indexed the renamed file yet
+    mockPlugin.app = {
+      metadataCache: { getFileCache: () => null },
+      workspace: { getLeavesOfType: () => [] }
+    };
+
+    await habitManager.handleVaultRename(mockFile, "Core Habits/Active/Old Gym.md");
+
+    const updated = habitManager.getHabitById("habit-cache-lag");
+    expect(updated.name).toBe("New Gym");
+    expect(updated.linkText).toBe("[[New Gym]]");
+    expect(updated.nameHistory).toContain("[[Old Gym]]");
+    expect(mockPlugin.habitNoteManager.indexHabitFile).toHaveBeenCalledWith("habit-cache-lag", "Core Habits/Active/New Gym.md");
+    expect(mockRepository.updateFileProps).toHaveBeenCalledWith(
+      mockFile, expect.objectContaining({ name: "New Gym" })
+    );
+  });
+
+  it("should successfully sync rename using readHabitNoteProps disk fallback when metadataCache is null", async () => {
+    const habit = {
+      schemaVersion: 1,
+      id: "habit-disk-read",
+      name: "Old Read",
+      linkText: "[[Old Read]]",
+      createdAt: Date.now(),
+      order: 0,
+      archived: false,
+      nameHistory: []
+    };
+    habitManager.habitsMap.set(habit.id, habit);
+
+    const mockFile = {
+      path: "Core Habits/Active/New Read.md",
+      basename: "New Read"
+    };
+
+    mockPlugin.habitNoteManager = {
+      detectManualMove: vi.fn().mockReturnValue(null),
+      getActiveFolder: () => "Core Habits/Active",
+      getArchiveFolder: () => "Core Habits/Archive",
+      getHabitIdByPath: vi.fn().mockReturnValue(null),
+      readHabitNoteProps: vi.fn().mockResolvedValue({ habit_id: "habit-disk-read" }),
+      indexHabitFile: vi.fn()
+    };
+
+    mockPlugin.app = {
+      metadataCache: { getFileCache: () => null },
+      workspace: { getLeavesOfType: () => [] }
+    };
+
+    await habitManager.handleVaultRename(mockFile, "Core Habits/Active/Old Read.md");
+
+    const updated = habitManager.getHabitById("habit-disk-read");
+    expect(updated.name).toBe("New Read");
+    expect(updated.linkText).toBe("[[New Read]]");
+    expect(updated.nameHistory).toContain("[[Old Read]]");
+    expect(mockPlugin.habitNoteManager.readHabitNoteProps).toHaveBeenCalledWith("Core Habits/Active/New Read.md");
+    expect(mockRepository.updateFileProps).toHaveBeenCalledWith(
+      mockFile, expect.objectContaining({ name: "New Read" })
+    );
+  });
+
   it("ignores a rename outside the habit folders even if the basename matches", async () => {
     const habit = { id: "one", name: "Read", linkText: "[[Read]]", nameHistory: [] };
     habitManager.habitsMap.set(habit.id, habit);

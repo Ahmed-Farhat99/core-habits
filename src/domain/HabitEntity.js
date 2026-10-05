@@ -148,7 +148,11 @@ export class HabitEntity {
     }
 
     // Sparse properties: only serialize when present / meaningful
-    props.deleted = this.deleted ? "true" : "false";
+    if (this.deleted) {
+      props.deleted = "true";
+    } else if (!isV3) {
+      props.deleted = "false";
+    }
 
     if (this.parentId && String(this.parentId).trim()) {
       props.parent_id = String(this.parentId).trim();
@@ -183,8 +187,12 @@ export class HabitEntity {
       props.reward = ad.reward.trim();
     }
 
-    // General Notes
-    props.notes = this.notes ? this.notes.trim() : "";
+    // General Notes (sparse in v3: only serialize if non-empty)
+    if (this.notes && this.notes.trim()) {
+      props.notes = this.notes.trim();
+    } else if (!isV3) {
+      props.notes = "";
+    }
 
     // Legacy / Custom Level goals (sparse: only serialized for legacy schemas)
     if (!isV3 && this.levelData && this.levelData.length > 0) {
@@ -287,9 +295,23 @@ export class HabitEntity {
       }
     }
 
-    let notesValue = props.notes || "";
-    if (content && !Object.hasOwn(props, "notes")) {
-      notesValue = HabitEntity.extractNotesFromBody(content);
+    let notesValue = (props.notes && typeof props.notes === "string") ? props.notes.trim() : "";
+    if (content && !notesValue) {
+      const bodyNotes = HabitEntity.extractNotesFromBody(content);
+      if (bodyNotes && bodyNotes.trim()) {
+        const schemaVer = parseInt(props.schema_version, 10) || 0;
+        if (!Object.hasOwn(props, "notes")) {
+          // Sparse v3 contract: notes property omitted when empty; extract from body
+          notesValue = bodyNotes.trim();
+        } else if (schemaVer < 3) {
+          // Legacy schema: template wrote boilerplate notes: ""; preserve user body notes
+          const markerAr = TRANSLATIONS.ar?.habit_notes_free_space_marker || "> **مساحة حرة للتدوين:**";
+          const markerEn = TRANSLATIONS.en?.habit_notes_free_space_marker || "> **Free Space for Notes:**";
+          if (content.includes(markerAr) || content.includes(markerEn)) {
+            notesValue = bodyNotes.trim();
+          }
+        }
+      }
     }
 
     // Parse schedule

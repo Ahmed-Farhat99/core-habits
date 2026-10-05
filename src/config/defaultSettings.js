@@ -60,6 +60,7 @@ export const DEFAULT_SETTINGS = {
   dailyNotesFolder: "",
   dailyNotesSource: "auto",
   dateFormat: "YYYY-MM-DD",
+  dailyNoteSourcesHistory: [],
 
   language: "ar",
 
