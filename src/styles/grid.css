@@ -70,9 +70,9 @@
 .daily-habits-plugin .habits-thead,
 .daily-habits-plugin .habits-tbody,
 .daily-habits-plugin .habits-tfoot {
-
-
-  display: contents;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
 }
 .daily-habits-plugin .header-row-date .dh-grid-cell {
 

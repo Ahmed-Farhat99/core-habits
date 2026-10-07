@@ -409,6 +409,7 @@
     repeat(7, minmax(var(--dh-grid-day-min-width), 1fr));
 }
 
+.daily-habits-plugin.weekly-grid-container .habits-thead,
 .daily-habits-plugin.weekly-grid-container .header-row-date {
   position: sticky;
   top: 0;

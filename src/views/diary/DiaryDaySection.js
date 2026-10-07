@@ -90,8 +90,8 @@ export class DiaryDaySection {
       }
     }
 
-    // End Cluster: Add Action (isolated, single stable item)
-    const endCluster = summaryHeader.createDiv({ cls: "day-header-end" });
+    // End Cluster: Add Action (direct child of daySection details, outside <summary> to prevent disallowed interactive descendant)
+    const endCluster = daySection.createDiv({ cls: "day-header-end" });
 
     const addBtn = endCluster.createEl("button", {
       cls: "dh-btn mod-ghost dh-day-add-btn",
@@ -101,10 +101,8 @@ export class DiaryDaySection {
       }
     });
 
-    // Stop propagation so clicking "+ تدوينة" does not toggle the details accordion
     addBtn.onclick = (e) => {
       e.preventDefault();
-      e.stopPropagation();
       this.context.openReflectionPopup(dayMoment);
     };
 

@@ -1013,6 +1013,14 @@ body .daily-habits-plugin textarea.dh-auto-textarea {
   animation: dh-pulse-record 1.5s ease-in-out infinite;
 }
 
+.daily-habits-plugin .dh-popup-mic-btn.is-processing {
+  opacity: 0.7;
+  cursor: wait;
+  pointer-events: none;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+
 .daily-habits-plugin .dh-popup-mic-icon {
   display: inline-flex;
   align-items: center;

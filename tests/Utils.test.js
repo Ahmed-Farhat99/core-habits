@@ -335,4 +335,27 @@ Untouched`;
       showSpy.mockRestore();
     });
   });
+
+  describe("fixAudioDuration", () => {
+    it("should safely handle null or undefined elements without throwing", () => {
+      expect(() => Utils.fixAudioDuration(null)).not.toThrow();
+      expect(() => Utils.fixAudioDuration(undefined)).not.toThrow();
+    });
+
+    it("should NOT set currentTime to 1e101 or attach destructive listeners", () => {
+      const mockAudio = {
+        currentTime: 0,
+        duration: Infinity,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      };
+
+      Utils.fixAudioDuration(mockAudio);
+
+      // Verify currentTime remains untouched
+      expect(mockAudio.currentTime).toBe(0);
+      // Verify no loadedmetadata listener setting 1e101 was attached
+      expect(mockAudio.addEventListener).not.toHaveBeenCalled();
+    });
+  });
 });

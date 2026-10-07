@@ -60,7 +60,7 @@ export class HabitManager {
       }
     }
     this.habitsMap = loaded;
-    await this.reconcileHabitOrder();
+    await this.reconcileHabitOrder({ force: true });
     this.isInitialized = true;
     Utils.debugLog(this.plugin, `HabitManager initialized with ${this.habitsMap.size} habits.`);
   }
@@ -94,10 +94,13 @@ export class HabitManager {
    * Reconciles habit ordering using VaultOrderStore (_order.md) as the Single Source of Truth,
    * with data.json as a fast runtime cache and deterministic fallback reconstruction.
    */
-  async reconcileHabitOrder() {
+  async reconcileHabitOrder({ force = false } = {}) {
     if (!this.plugin?.settings) return;
+    if (!this.isInitialized && !force) return;
 
     const loadedHabits = Array.from(this.habitsMap.values());
+    if (loadedHabits.length === 0 && !force) return;
+
     const validIds = new Set(loadedHabits.map((h) => h.id));
     const conflictedIds = new Set((this.getConflicts() || []).map((c) => c.habitId));
 
@@ -150,7 +153,20 @@ export class HabitManager {
     if (unlisted.length > 0) {
       const sortedUnlisted = VaultOrderStore.sortHabitsDeterministically(unlisted);
       for (const h of sortedUnlisted) {
-        reconciled.push(h.id);
+        if (h.parentId && reconciled.includes(h.parentId)) {
+          let insertIdx = reconciled.indexOf(h.parentId);
+          for (let i = insertIdx + 1; i < reconciled.length; i++) {
+            const nextH = this.habitsMap.get(reconciled[i]);
+            if (nextH && nextH.parentId === h.parentId) {
+              insertIdx = i;
+            } else {
+              break;
+            }
+          }
+          reconciled.splice(insertIdx + 1, 0, h.id);
+        } else {
+          reconciled.push(h.id);
+        }
       }
       mustWriteVault = true;
     }
@@ -187,6 +203,7 @@ export class HabitManager {
 
   async syncFile(file) {
     if (this.vaultOrderStore && file.path === this.vaultOrderStore.getOrderFilePath()) {
+      if (!this.isInitialized) return;
       await this.reconcileHabitOrder();
       this.invalidateCaches();
       return;
@@ -274,7 +291,9 @@ export class HabitManager {
           this.plugin.habitNoteManager?.indexHabitFile?.(habit.id, file.path);
           if (this.plugin.settings?.habitOrder && Array.isArray(this.plugin.settings.habitOrder)) {
             if (!this.plugin.settings.habitOrder.includes(habit.id)) {
-              await this.persistHabitOrder([...this.plugin.settings.habitOrder, habit.id]);
+              if (this.isInitialized) {
+                await this.persistHabitOrder([...this.plugin.settings.habitOrder, habit.id]);
+              }
             } else {
               habit.order = this.plugin.settings.habitOrder.indexOf(habit.id);
             }
@@ -297,6 +316,7 @@ export class HabitManager {
    */
   async removeFile(file) {
     if (this.vaultOrderStore && file.path === this.vaultOrderStore.getOrderFilePath()) {
+      if (!this.isInitialized) return;
       await this.reconcileHabitOrder();
       this.invalidateCaches();
       return;
@@ -488,7 +508,30 @@ export class HabitManager {
           ? [...this.plugin.settings.habitOrder]
           : [];
         if (!currentOrder.includes(newHabit.id)) {
-          currentOrder.push(newHabit.id);
+          if (newHabit.parentId) {
+            const siblings = this.getActiveHabits().filter(
+              (h) => h.parentId === newHabit.parentId && h.id !== newHabit.id
+            );
+            const siblingIds = new Set(siblings.map((s) => s.id));
+            let insertIdx = -1;
+            for (let i = 0; i < currentOrder.length; i++) {
+              if (siblingIds.has(currentOrder[i])) {
+                insertIdx = i;
+              }
+            }
+            if (insertIdx !== -1) {
+              currentOrder.splice(insertIdx + 1, 0, newHabit.id);
+            } else {
+              const pIdx = currentOrder.indexOf(newHabit.parentId);
+              if (pIdx !== -1) {
+                currentOrder.splice(pIdx + 1, 0, newHabit.id);
+              } else {
+                currentOrder.push(newHabit.id);
+              }
+            }
+          } else {
+            currentOrder.push(newHabit.id);
+          }
           await this.persistHabitOrder(currentOrder);
         }
       }
@@ -659,9 +702,14 @@ export class HabitManager {
       };
 
       const siblings = this.getActiveHabits().filter(h => h.parentId === restoredHabit.parentId);
-      let maxOrder = -1;
-      siblings.forEach(h => { if (h.order > maxOrder) maxOrder = h.order; });
-      restoredHabit.order = maxOrder + 1;
+      const existingOrderIdx = this.plugin.settings?.habitOrder?.indexOf(restoredHabit.id) ?? -1;
+      if (existingOrderIdx !== -1) {
+        restoredHabit.order = existingOrderIdx;
+      } else {
+        let maxOrder = -1;
+        siblings.forEach(h => { if (h.order > maxOrder) maxOrder = h.order; });
+        restoredHabit.order = maxOrder + 1;
+      }
 
       try { await this.repository.restore(restoredHabit); }
       catch (error) { await this.initialize(); throw error; }
@@ -673,27 +721,38 @@ export class HabitManager {
         let currentOrder = Array.isArray(this.plugin.settings.habitOrder)
           ? [...this.plugin.settings.habitOrder]
           : [];
-        // Remove restoredHabit if already present to ensure clean repositioning
-        currentOrder = currentOrder.filter((habitId) => habitId !== restoredHabit.id);
 
-        if (siblings.length > 0) {
-          const siblingIds = new Set(siblings.map((s) => s.id));
-          let lastSiblingIdx = -1;
-          for (let i = 0; i < currentOrder.length; i++) {
-            if (siblingIds.has(currentOrder[i])) {
-              lastSiblingIdx = i;
+        if (currentOrder.includes(restoredHabit.id)) {
+          // The habit was already present in _order.md: preserve its exact original position!
+          await this.persistHabitOrder(currentOrder);
+        } else {
+          // Not yet in currentOrder: insert safely
+          if (siblings.length > 0) {
+            const siblingIds = new Set(siblings.map((s) => s.id));
+            let lastSiblingIdx = -1;
+            for (let i = 0; i < currentOrder.length; i++) {
+              if (siblingIds.has(currentOrder[i])) {
+                lastSiblingIdx = i;
+              }
             }
-          }
-          if (lastSiblingIdx !== -1) {
-            currentOrder.splice(lastSiblingIdx + 1, 0, restoredHabit.id);
+            if (lastSiblingIdx !== -1) {
+              currentOrder.splice(lastSiblingIdx + 1, 0, restoredHabit.id);
+            } else {
+              currentOrder.push(restoredHabit.id);
+            }
+          } else if (restoredHabit.parentId) {
+            const parentIdx = currentOrder.indexOf(restoredHabit.parentId);
+            if (parentIdx !== -1) {
+              currentOrder.splice(parentIdx + 1, 0, restoredHabit.id);
+            } else {
+              currentOrder.push(restoredHabit.id);
+            }
           } else {
             currentOrder.push(restoredHabit.id);
           }
-        } else {
-          currentOrder.push(restoredHabit.id);
-        }
 
-        await this.persistHabitOrder(currentOrder);
+          await this.persistHabitOrder(currentOrder);
+        }
       }
 
       this.invalidateCaches();
@@ -902,9 +961,102 @@ export class HabitManager {
     const siblings = this.getEffectiveSiblings(habit);
     const index = siblings.findIndex((item) => item.id === id);
     if (index + direction < 0 || index + direction >= siblings.length) return;
-    const ids = siblings.map((item) => item.id);
-    [ids[index], ids[index + direction]] = [ids[index + direction], ids[index]];
-    await this._persistOrders(ids, siblings.map((item) => item.id));
+
+    const effectiveParentId = this.getEffectiveParentId(id);
+
+    if (effectiveParentId !== null) {
+      // Child habit: reorder strictly among sibling children of the same parent
+      const ids = siblings.map((item) => item.id);
+      [ids[index], ids[index + direction]] = [ids[index + direction], ids[index]];
+      await this._persistOrders(ids, siblings.map((item) => item.id));
+      return;
+    }
+
+    // Top-level habit (Parent or standalone):
+    // Move the entire hierarchical block (parent + all children) together without separating them
+    const targetSibling = siblings[index + direction];
+    const orderPath = this.vaultOrderStore?.getOrderFilePath?.() || "_order.md";
+
+    return await this.runWithLock(async () => {
+      const previousOrder = Array.isArray(this.plugin.settings?.habitOrder)
+        ? [...this.plugin.settings.habitOrder]
+        : Array.from(this.habitsMap.keys());
+      const previousVersion = this.plugin.settings?.habitOrderVersion || 0;
+
+      // Group habits by top-level habit
+      // Any habit with a valid parent in habitsMap belongs to that parent's block.
+      const childrenMap = new Map();
+      const topLevelOrder = [];
+
+      for (const hId of previousOrder) {
+        const hObj = this.habitsMap.get(hId);
+        const pId = hObj?.parentId && this.habitsMap.has(hObj.parentId)
+          ? hObj.parentId
+          : null;
+
+        if (pId) {
+          if (!childrenMap.has(pId)) childrenMap.set(pId, []);
+          childrenMap.get(pId).push(hId);
+        } else {
+          topLevelOrder.push(hId);
+        }
+      }
+
+      // Ensure the moving habit and target sibling are properly positioned in topLevelOrder
+      const fromTopIdx = topLevelOrder.indexOf(id);
+      const toTopIdx = topLevelOrder.indexOf(targetSibling.id);
+
+      if (fromTopIdx !== -1 && toTopIdx !== -1) {
+        topLevelOrder.splice(fromTopIdx, 1);
+        const newTargetIdx = topLevelOrder.indexOf(targetSibling.id);
+        if (direction > 0) {
+          topLevelOrder.splice(newTargetIdx + 1, 0, id);
+        } else {
+          topLevelOrder.splice(newTargetIdx, 0, id);
+        }
+      }
+
+      // Rebuild the full canonical flat order block by block
+      const nextOrder = [];
+      for (const topId of topLevelOrder) {
+        nextOrder.push(topId);
+        const children = childrenMap.get(topId);
+        if (children && children.length > 0) {
+          nextOrder.push(...children);
+        }
+      }
+
+      // Defensive: preserve any remaining IDs from previousOrder (e.g. orphans)
+      const visited = new Set(nextOrder);
+      for (const hId of previousOrder) {
+        if (!visited.has(hId)) {
+          nextOrder.push(hId);
+          visited.add(hId);
+        }
+      }
+
+      // Rollback backup in case persistHabitOrder fails
+      const previousHabitOrders = new Map();
+      for (const h of this.habitsMap.values()) {
+        previousHabitOrders.set(h.id, h.order);
+      }
+
+      try {
+        await this.persistHabitOrder(nextOrder);
+      } catch (error) {
+        if (this.plugin.settings) {
+          this.plugin.settings.habitOrder = previousOrder;
+          this.plugin.settings.habitOrderVersion = previousVersion;
+        }
+        for (const [hId, prevOrder] of previousHabitOrders) {
+          const h = this.habitsMap.get(hId);
+          if (h) h.order = prevOrder;
+        }
+        throw error;
+      }
+
+      this.invalidateCaches();
+    }, orderPath);
   }
 
   async updateHabitsOrder(orderedIds) {

@@ -16,15 +16,13 @@ export class Utils {
   }
 
   static fixAudioDuration(audioEl) {
-    audioEl.addEventListener('loadedmetadata', () => {
-      if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
-        audioEl.currentTime = 1e101;
-        audioEl.addEventListener('timeupdate', function f() {
-          audioEl.currentTime = 0;
-          audioEl.removeEventListener('timeupdate', f);
-        });
-      }
-    });
+    if (!audioEl) return;
+    // Safely neutralized: New recordings have EBML duration metadata injected at recording time.
+    // The previous hack (audioEl.currentTime = 1e101) attempted to force Chromium to discover
+    // duration dynamically, but caused severe bugs on Android where it latched onto cluster
+    // timestamps / device uptime (displaying 18+ hours).
+    // For legacy recordings with duration === Infinity, avoiding the 1e101 seek hack
+    // preserves normal playback without corrupting the player timeline.
   }
 
   /**

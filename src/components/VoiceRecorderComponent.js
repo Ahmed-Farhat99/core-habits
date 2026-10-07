@@ -12,6 +12,7 @@ export class VoiceRecorderComponent {
     this.onSaveSuccess = options.onSaveSuccess;
 
     this.isRecording = false;
+    this._isBusy = false;
     this.recordTimer = null;
     this.seconds = 0;
     this.micBtn = null;
@@ -22,11 +23,15 @@ export class VoiceRecorderComponent {
   }
 
   render() {
-    const t = (k, params = {}) => this.plugin.translationManager.t(k, params);
+    const t = (k, params = {}) => this.plugin?.translationManager?.t(k, params) || k;
+    const label = t("reflection_mic_btn_voice");
 
     this.micBtn = this.parentEl.createEl("button", {
       cls: "dh-btn dh-popup-mic-btn",
-      type: "button"
+      type: "button",
+      attr: {
+        "aria-label": label
+      }
     });
 
     this.micIconEl = this.micBtn.createSpan({ cls: "dh-popup-mic-icon" });
@@ -36,11 +41,12 @@ export class VoiceRecorderComponent {
 
     this.micTextEl = this.micBtn.createSpan({
       cls: "dh-popup-mic-label",
-      text: t("reflection_mic_btn_voice")
+      text: label
     });
 
     this.micBtn.onclick = async (e) => {
       e.preventDefault();
+      if (this._isBusy) return;
       if (!this.isRecording) {
         await this.start();
       } else {
@@ -50,72 +56,110 @@ export class VoiceRecorderComponent {
   }
 
   async start() {
-    const t = (k, params = {}) => this.plugin.translationManager.t(k, params);
+    if (this.isRecording || this._isBusy) return;
+    this._isBusy = true;
+    this.micBtn.disabled = true;
+    const t = (k, params = {}) => this.plugin?.translationManager?.t(k, params) || k;
 
-    const started = await VoiceRecorderUtility.startRecording();
-    if (started) {
-      this.isRecording = true;
-      this.micBtn.addClass("is-recording");
-      if (typeof setIcon === "function") {
-        setIcon(this.micIconEl, "square");
-      }
-      this.micTextEl.textContent = t("reflection_mic_stop");
-
-      if (this.inputEl) {
-        this.inputEl.disabled = true;
-        this.inputEl.placeholder = t("reflection_mic_recording", { time: "00:00" });
-      }
-      this.seconds = 0;
-      this.recordTimer = setInterval(() => {
-        this.seconds++;
-        const mm = String(Math.floor(this.seconds / 60)).padStart(2, '0');
-        const ss = String(this.seconds % 60).padStart(2, '0');
-        if (this.inputEl) {
-          this.inputEl.placeholder = t("reflection_mic_recording", { time: `${mm}:${ss}` });
+    try {
+      const started = await VoiceRecorderUtility.startRecording();
+      if (started) {
+        this.isRecording = true;
+        this.micBtn.addClass("is-recording");
+        if (typeof setIcon === "function") {
+          setIcon(this.micIconEl, "square");
         }
-      }, 1000);
-    } else {
+        
+        const initialText = `${t("reflection_mic_stop")} (00:00)`;
+        this.micTextEl.textContent = initialText;
+        this.micBtn.setAttribute("aria-label", initialText);
+
+        if (this.inputEl) {
+          this.inputEl.disabled = true;
+          this.inputEl.placeholder = t("reflection_mic_recording", { time: "00:00" });
+        }
+        this.seconds = 0;
+        this.recordTimer = setInterval(() => {
+          this.seconds++;
+          const mm = String(Math.floor(this.seconds / 60)).padStart(2, '0');
+          const ss = String(this.seconds % 60).padStart(2, '0');
+          const timeStr = `${mm}:${ss}`;
+          const currentText = `${t("reflection_mic_stop")} (${timeStr})`;
+          this.micTextEl.textContent = currentText;
+          this.micBtn.setAttribute("aria-label", currentText);
+          if (this.inputEl) {
+            this.inputEl.placeholder = t("reflection_mic_recording", { time: timeStr });
+          }
+        }, 1000);
+      } else {
+        NoticeService.error(t("reflection_mic_failed"), { plugin: this.plugin });
+      }
+    } catch (e) {
+      console.error("[Core Habits] Error starting recording:", e);
       NoticeService.error(t("reflection_mic_failed"), { plugin: this.plugin });
+    } finally {
+      this._isBusy = false;
+      this.micBtn.disabled = false;
     }
   }
 
   async stop() {
-    const t = (k, params = {}) => this.plugin.translationManager.t(k, params);
+    if (!this.isRecording || this._isBusy) return;
+    this._isBusy = true;
+    this.micBtn.disabled = true;
+    this.micBtn.addClass("is-processing");
+    const t = (k, params = {}) => this.plugin?.translationManager?.t(k, params) || k;
 
     if (this.recordTimer) {
       clearInterval(this.recordTimer);
       this.recordTimer = null;
     }
 
+    const processingText = t("reflection_mic_processing");
+    this.micTextEl.textContent = processingText;
+    this.micBtn.setAttribute("aria-label", processingText);
     if (this.inputEl) {
-      this.inputEl.placeholder = t("reflection_mic_processing");
+      this.inputEl.placeholder = processingText;
     }
 
-    const fileName = await VoiceRecorderUtility.stopAndSaveRecording(this.app);
-    this.isRecording = false;
-    this.micBtn.removeClass("is-recording");
-    if (typeof setIcon === "function") {
-      setIcon(this.micIconEl, "mic");
-    }
-    this.micTextEl.textContent = t("reflection_mic_btn_voice");
+    try {
+      const durationMs = this.seconds > 0 ? this.seconds * 1000 : null;
+      const fileName = await VoiceRecorderUtility.stopAndSaveRecording(this.app, null, durationMs);
 
-    if (this.inputEl) {
-      this.inputEl.disabled = false;
-      this.inputEl.placeholder = this.placeholderDefault || "";
-    }
-
-    if (fileName) {
-      if (this.inputEl) {
-        const sep = this.inputEl.value ? "\n" : "";
-        this.inputEl.value += `${sep}![[${fileName}]]`;
-        this.inputEl.focus();
-        this.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      if (fileName) {
+        if (this.inputEl) {
+          const sep = this.inputEl.value ? "\n" : "";
+          this.inputEl.value += `${sep}![[${fileName}]]`;
+          this.inputEl.focus();
+          this.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        if (typeof this.onSaveSuccess === 'function') {
+          this.onSaveSuccess(fileName);
+        }
+      } else {
+        NoticeService.error(t("reflection_mic_save_failed"), { plugin: this.plugin });
       }
-      if (typeof this.onSaveSuccess === 'function') {
-        this.onSaveSuccess(fileName);
-      }
-    } else {
+    } catch (err) {
+      console.error("[Core Habits] Error saving recording:", err);
       NoticeService.error(t("reflection_mic_save_failed"), { plugin: this.plugin });
+    } finally {
+      this.isRecording = false;
+      this.seconds = 0;
+      this._isBusy = false;
+      this.micBtn.disabled = false;
+      this.micBtn.removeClass("is-recording");
+      this.micBtn.removeClass("is-processing");
+      if (typeof setIcon === "function") {
+        setIcon(this.micIconEl, "mic");
+      }
+      const defaultLabel = t("reflection_mic_btn_voice");
+      this.micTextEl.textContent = defaultLabel;
+      this.micBtn.setAttribute("aria-label", defaultLabel);
+
+      if (this.inputEl) {
+        this.inputEl.disabled = false;
+        this.inputEl.placeholder = this.placeholderDefault || "";
+      }
     }
   }
 
@@ -137,15 +181,29 @@ export class VoiceRecorderComponent {
       clearInterval(this.recordTimer);
       this.recordTimer = null;
     }
-    if (VoiceRecorderUtility.isRecording) {
-      if (VoiceRecorderUtility.stream) {
-        VoiceRecorderUtility.stream.getTracks().forEach(t => t.stop());
+    if (this.isRecording || VoiceRecorderUtility.isRecording) {
+      VoiceRecorderUtility.cancelRecording();
+      this.isRecording = false;
+      this.seconds = 0;
+      this._isBusy = false;
+      if (this.micBtn) {
+        this.micBtn.disabled = false;
+        this.micBtn.removeClass("is-recording");
+        this.micBtn.removeClass("is-processing");
+        if (typeof setIcon === "function") {
+          setIcon(this.micIconEl, "mic");
+        }
+        if (this.micTextEl) {
+          const t = (k, params = {}) => this.plugin?.translationManager?.t(k, params) || k;
+          const defaultLabel = t("reflection_mic_btn_voice");
+          this.micTextEl.textContent = defaultLabel;
+          this.micBtn.setAttribute("aria-label", defaultLabel);
+        }
       }
-      if (VoiceRecorderUtility.mediaRecorder && VoiceRecorderUtility.mediaRecorder.state !== "inactive") {
-        VoiceRecorderUtility.mediaRecorder.stop();
+      if (this.inputEl) {
+        this.inputEl.disabled = false;
+        this.inputEl.placeholder = this.placeholderDefault || "";
       }
-      VoiceRecorderUtility.isRecording = false;
-      VoiceRecorderUtility.chunks = [];
     }
   }
 }

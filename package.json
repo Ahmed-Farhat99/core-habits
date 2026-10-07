@@ -1,6 +1,6 @@
 {
   "name": "core-habits",
-  "version": "3.5.3",
+  "version": "3.5.4",
   "type": "module",
   "description": "Track habits visually in a weekly grid, reflect in daily notes, and build your core identity.",
   "main": "main.js",
@@ -34,5 +34,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.1.4",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "fix-webm-duration": "^1.0.6"
   }
 }

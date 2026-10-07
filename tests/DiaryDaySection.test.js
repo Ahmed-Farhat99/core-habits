@@ -141,6 +141,30 @@ describe("DiaryDaySection Tests", () => {
     expect(mockContext.openReflectionPopup).toHaveBeenCalledWith(testMoment);
   });
 
+  it("ensures summary element contains no interactive controls (accessibility compliance)", () => {
+    const container = document.createElement("div");
+    const testMoment = window.moment("2026-08-20");
+    const el = daySection.render(container, testMoment, []);
+
+    const summaryEl = el.querySelector("summary");
+    expect(summaryEl).not.toBeNull();
+
+    // Summary must NOT have any buttons, links, or inputs (W3C / axe-core disallowed descendant rule)
+    const interactiveInsideSummary = summaryEl.querySelectorAll("button, a, input, select, textarea");
+    expect(interactiveInsideSummary.length).toBe(0);
+
+    // The add button must be outside summary but inside day section
+    const addBtn = el.querySelector(".dh-day-add-btn");
+    expect(addBtn).not.toBeNull();
+    expect(summaryEl.contains(addBtn)).toBe(false);
+    expect(el.contains(addBtn)).toBe(true);
+
+    // Clicking the add button must not toggle details open state
+    const initialOpen = el.open;
+    addBtn.click();
+    expect(el.open).toBe(initialOpen);
+  });
+
   it("should render compact empty day row with action button", () => {
     const container = document.createElement("div");
     const testMoment = window.moment("2026-08-20");

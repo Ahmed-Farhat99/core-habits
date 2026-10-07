@@ -157,15 +157,38 @@ export class VaultOrderStore {
   }
 
   /**
-   * Basic frontmatter parser fallback for non-cached files.
+   * Robust frontmatter parser fallback for non-cached files.
+   * Handles BOM, window.parseYaml (Obsidian runtime), block arrays, and flow arrays.
    * @private
    */
   _parseFrontmatterFromContent(content) {
-    if (!content || !content.startsWith("---")) return null;
-    const endIdx = content.indexOf("\n---", 3);
+    if (!content || typeof content !== "string") return null;
+    const clean = content.replace(/^\uFEFF/, "").trimStart();
+    if (!clean.startsWith("---")) return null;
+    const endIdx = clean.indexOf("\n---", 3);
     if (endIdx === -1) return null;
 
-    const fmText = content.slice(3, endIdx).trim();
+    const fmText = clean.slice(3, endIdx).trim();
+    if (!fmText) return null;
+
+    // 1. Try native Obsidian YAML parser if available in runtime
+    if (typeof window !== "undefined" && typeof window.parseYaml === "function") {
+      try {
+        const parsed = window.parseYaml(fmText);
+        if (parsed && typeof parsed === "object") {
+          return {
+            schema_version: Number.isInteger(parsed.schema_version) ? parsed.schema_version : parseInt(parsed.schema_version, 10) || 3,
+            order_version: Number.isInteger(parsed.order_version) ? parsed.order_version : parseInt(parsed.order_version, 10) || 0,
+            habit_order: Array.isArray(parsed.habit_order) ? parsed.habit_order.map(String).filter(Boolean) : [],
+            updated_at: typeof parsed.updated_at === "string" ? parsed.updated_at : null
+          };
+        }
+      } catch (yamlErr) {
+        console.warn("[Core Habits] Native parseYaml failed for _order.md, using regex fallback:", yamlErr);
+      }
+    }
+
+    // 2. Robust line/regex fallback for non-browser/test environments
     const lines = fmText.split(/\r?\n/);
     const result = { habit_order: [] };
 
@@ -182,7 +205,14 @@ export class VaultOrderStore {
         inOrderList = false;
         result.schema_version = parseInt(line.split(":")[1].trim(), 10) || 3;
       } else if (line.startsWith("habit_order:")) {
-        inOrderList = true;
+        const afterColon = line.slice("habit_order:".length).trim();
+        if (afterColon.startsWith("[") && afterColon.endsWith("]")) {
+          const items = afterColon.slice(1, -1).split(",").map(s => s.replace(/["']/g, "").trim()).filter(Boolean);
+          result.habit_order.push(...items);
+          inOrderList = false;
+        } else {
+          inOrderList = true;
+        }
       } else if (inOrderList && line.startsWith("-")) {
         const id = line.replace(/^-\s*["']?/, "").replace(/["']?$/, "").trim();
         if (id) result.habit_order.push(id);

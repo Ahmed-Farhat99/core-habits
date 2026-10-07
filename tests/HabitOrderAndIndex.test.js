@@ -567,5 +567,256 @@ describe("Phase 1: HabitOrder and Scoped Index Tests", () => {
       const readOrder = await manager.vaultOrderStore.readOrder();
       expect(readOrder.habitOrder).toEqual(["h-1"]);
     });
+
+    it("correctly parses _order.md with UTF-8 BOM, flow array style, and block array style", () => {
+      const store = habitManager.vaultOrderStore;
+
+      // 1. Block array with BOM
+      const yamlBOM = '\uFEFF---\nschema_version: 3\norder_version: 5\nhabit_order:\n  - "h-1"\n  - "h-2"\nupdated_at: "2026-10-06T10:00:00.000Z"\n---\n';
+      const parsedBOM = store._parseFrontmatterFromContent(yamlBOM);
+      expect(parsedBOM).toEqual({
+        schema_version: 3,
+        order_version: 5,
+        habit_order: ["h-1", "h-2"],
+        updated_at: "2026-10-06T10:00:00.000Z"
+      });
+
+      // 2. Flow array style
+      const yamlFlow = '---\nschema_version: 3\norder_version: 12\nhabit_order: ["h-alpha", "h-beta"]\nupdated_at: "2026-10-06T10:00:00.000Z"\n---\n';
+      const parsedFlow = store._parseFrontmatterFromContent(yamlFlow);
+      expect(parsedFlow).toEqual({
+        schema_version: 3,
+        order_version: 12,
+        habit_order: ["h-alpha", "h-beta"],
+        updated_at: "2026-10-06T10:00:00.000Z"
+      });
+
+      // 3. Native parseYaml integration
+      const originalParseYaml = window.parseYaml;
+      try {
+        window.parseYaml = vi.fn().mockReturnValue({
+          schema_version: 3,
+          order_version: 22,
+          habit_order: ["habit-1", "habit-2"],
+          updated_at: "2026-10-06T07:37:45.862Z"
+        });
+        const parsedNative = store._parseFrontmatterFromContent(yamlFlow);
+        expect(window.parseYaml).toHaveBeenCalled();
+        expect(parsedNative.order_version).toBe(22);
+        expect(parsedNative.habit_order).toEqual(["habit-1", "habit-2"]);
+      } finally {
+        window.parseYaml = originalParseYaml;
+      }
+    });
+  });
+
+  describe("Phase 3: Hierarchical Block Reordering", () => {
+    it("moves parent with all its children as a complete contiguous block without separating them", async () => {
+      const mockSettings = { habitOrder: ["parent-1", "child-1a", "child-1b", "standalone-2"], habitOrderVersion: 1 };
+      const plugin = {
+        settings: mockSettings,
+        saveSettings: vi.fn().mockResolvedValue(),
+        translationManager: { t: (k) => k }
+      };
+
+      const manager = new HabitManager(plugin, {});
+      manager.isInitialized = true;
+      manager.vaultOrderStore = {
+        getOrderFilePath: () => "_order.md",
+        writeOrder: vi.fn().mockImplementation((order, ver) => Promise.resolve({ orderVersion: ver + 1 }))
+      };
+
+      const p1 = { id: "parent-1", name: "Prayers", parentId: null, order: 0, archived: false, deleted: false };
+      const c1a = { id: "child-1a", name: "Fajr", parentId: "parent-1", order: 1, archived: false, deleted: false };
+      const c1b = { id: "child-1b", name: "Dhuhr", parentId: "parent-1", order: 2, archived: false, deleted: false };
+      const s2 = { id: "standalone-2", name: "Reading", parentId: null, order: 3, archived: false, deleted: false };
+
+      manager.habitsMap.set(p1.id, p1);
+      manager.habitsMap.set(c1a.id, c1a);
+      manager.habitsMap.set(c1b.id, c1b);
+      manager.habitsMap.set(s2.id, s2);
+
+      // Move parent-1 DOWN past standalone-2
+      await manager.moveHabitDown("parent-1");
+
+      // Verify that parent-1 and both children moved AFTER standalone-2 as a block
+      expect(plugin.settings.habitOrder).toEqual(["standalone-2", "parent-1", "child-1a", "child-1b"]);
+      expect(manager.getHabitById("standalone-2").order).toBe(0);
+      expect(manager.getHabitById("parent-1").order).toBe(1);
+      expect(manager.getHabitById("child-1a").order).toBe(2);
+      expect(manager.getHabitById("child-1b").order).toBe(3);
+
+      // Verify children internal order Fajr -> Dhuhr remained intact
+      const active = manager.getActiveHabits();
+      const prayersChildren = active.filter(h => h.parentId === "parent-1");
+      expect(prayersChildren.map(h => h.id)).toEqual(["child-1a", "child-1b"]);
+
+      // Move parent-1 UP past standalone-2
+      await manager.moveHabitUp("parent-1");
+      expect(plugin.settings.habitOrder).toEqual(["parent-1", "child-1a", "child-1b", "standalone-2"]);
+    });
+
+    it("reorders children strictly within their parent block without moving parents or other habits", async () => {
+      const mockSettings = { habitOrder: ["parent-1", "child-1a", "child-1b", "parent-2", "child-2a"], habitOrderVersion: 1 };
+      const plugin = {
+        settings: mockSettings,
+        saveSettings: vi.fn().mockResolvedValue(),
+        translationManager: { t: (k) => k }
+      };
+
+      const manager = new HabitManager(plugin, {});
+      manager.isInitialized = true;
+      manager.vaultOrderStore = {
+        getOrderFilePath: () => "_order.md",
+        writeOrder: vi.fn().mockImplementation((order, ver) => Promise.resolve({ orderVersion: ver + 1 }))
+      };
+
+      const p1 = { id: "parent-1", name: "Prayers", parentId: null, order: 0, archived: false, deleted: false };
+      const c1a = { id: "child-1a", name: "Fajr", parentId: "parent-1", order: 1, archived: false, deleted: false };
+      const c1b = { id: "child-1b", name: "Dhuhr", parentId: "parent-1", order: 2, archived: false, deleted: false };
+      const p2 = { id: "parent-2", name: "Work", parentId: null, order: 3, archived: false, deleted: false };
+      const c2a = { id: "child-2a", name: "Deep Work", parentId: "parent-2", order: 4, archived: false, deleted: false };
+
+      manager.habitsMap.set(p1.id, p1);
+      manager.habitsMap.set(c1a.id, c1a);
+      manager.habitsMap.set(c1b.id, c1b);
+      manager.habitsMap.set(p2.id, p2);
+      manager.habitsMap.set(c2a.id, c2a);
+
+      // Move child-1a DOWN past child-1b
+      await manager.moveHabitDown("child-1a");
+
+      expect(plugin.settings.habitOrder).toEqual(["parent-1", "child-1b", "child-1a", "parent-2", "child-2a"]);
+      expect(manager.getHabitById("child-1b").order).toBe(1);
+      expect(manager.getHabitById("child-1a").order).toBe(2);
+      expect(manager.getHabitById("parent-2").order).toBe(3);
+      expect(manager.getHabitById("child-2a").order).toBe(4);
+    });
+
+    it("keeps archived children within parent block when moving parent", async () => {
+      const mockSettings = { habitOrder: ["p-1", "c-active", "c-archived", "p-2"], habitOrderVersion: 1 };
+      const plugin = {
+        settings: mockSettings,
+        saveSettings: vi.fn().mockResolvedValue(),
+        translationManager: { t: (k) => k }
+      };
+
+      const manager = new HabitManager(plugin, {});
+      manager.isInitialized = true;
+      manager.vaultOrderStore = {
+        getOrderFilePath: () => "_order.md",
+        writeOrder: vi.fn().mockImplementation((order, ver) => Promise.resolve({ orderVersion: ver + 1 }))
+      };
+
+      const p1 = { id: "p-1", name: "P1", parentId: null, order: 0, archived: false, deleted: false };
+      const cActive = { id: "c-active", name: "Active Child", parentId: "p-1", order: 1, archived: false, deleted: false };
+      const cArchived = { id: "c-archived", name: "Archived Child", parentId: "p-1", order: 2, archived: true, deleted: false };
+      const p2 = { id: "p-2", name: "P2", parentId: null, order: 3, archived: false, deleted: false };
+
+      manager.habitsMap.set(p1.id, p1);
+      manager.habitsMap.set(cActive.id, cActive);
+      manager.habitsMap.set(cArchived.id, cArchived);
+      manager.habitsMap.set(p2.id, p2);
+
+      // Move p-1 DOWN past p-2
+      await manager.moveHabitDown("p-1");
+
+      // Archived child c-archived must move along with p-1 and c-active
+      expect(plugin.settings.habitOrder).toEqual(["p-2", "p-1", "c-active", "c-archived"]);
+    });
+  });
+
+  describe("Phase 4: Safe Restore & Version-Aware Reconciliation", () => {
+    it("preserves habit position when archived and then restored", async () => {
+      const mockSettings = { habitOrder: ["h-1", "h-2", "h-3"], habitOrderVersion: 1 };
+      const mockRepo = {
+        archive: vi.fn().mockResolvedValue(),
+        restore: vi.fn().mockResolvedValue(),
+        loadAll: vi.fn().mockResolvedValue([])
+      };
+
+      const plugin = {
+        settings: mockSettings,
+        habitRepository: mockRepo,
+        saveSettings: vi.fn().mockResolvedValue(),
+        translationManager: { t: (k) => k },
+        streakCalculator: { calculate: vi.fn().mockResolvedValue({ longestStreak: 5 }) }
+      };
+
+      const manager = new HabitManager(plugin);
+      manager.isInitialized = true;
+      manager.vaultOrderStore = {
+        getOrderFilePath: () => "_order.md",
+        writeOrder: vi.fn().mockImplementation((order, ver) => Promise.resolve({ orderVersion: ver + 1 }))
+      };
+
+      const h1 = { id: "h-1", name: "Read", order: 0, archived: false, deleted: false };
+      const h2 = { id: "h-2", name: "Meditate", order: 1, archived: false, deleted: false };
+      const h3 = { id: "h-3", name: "Exercise", order: 2, archived: false, deleted: false };
+
+      manager.habitsMap.set(h1.id, h1);
+      manager.habitsMap.set(h2.id, h2);
+      manager.habitsMap.set(h3.id, h3);
+
+      // Archive h-2 (middle habit)
+      await manager.archiveHabit("h-2");
+      expect(plugin.settings.habitOrder).toEqual(["h-1", "h-2", "h-3"]);
+
+      // Restore h-2
+      await manager.restoreHabit("h-2");
+
+      // Verify that h-2 is STILL in position 1 between h-1 and h-3!
+      expect(plugin.settings.habitOrder).toEqual(["h-1", "h-2", "h-3"]);
+      expect(manager.getHabitById("h-1").order).toBe(0);
+      expect(manager.getHabitById("h-2").order).toBe(1);
+      expect(manager.getHabitById("h-3").order).toBe(2);
+    });
+
+    it("adding a new child habit places it in parent block without reordering existing habits", async () => {
+      const mockSettings = { habitOrder: ["p-1", "c-1a", "p-2"], habitOrderVersion: 1 };
+      const mockRepo = {
+        create: vi.fn().mockResolvedValue(),
+        loadAll: vi.fn().mockResolvedValue([])
+      };
+
+      const plugin = {
+        settings: mockSettings,
+        habitRepository: mockRepo,
+        saveSettings: vi.fn().mockResolvedValue(),
+        translationManager: { t: (k) => k }
+      };
+
+      const manager = new HabitManager(plugin);
+      manager.isInitialized = true;
+      manager.vaultOrderStore = {
+        getOrderFilePath: () => "_order.md",
+        writeOrder: vi.fn().mockImplementation((order, ver) => Promise.resolve({ orderVersion: ver + 1 }))
+      };
+
+      const p1 = { id: "p-1", name: "Prayers", order: 0, archived: false, deleted: false };
+      const c1a = { id: "c-1a", name: "Fajr", parentId: "p-1", order: 1, archived: false, deleted: false };
+      const p2 = { id: "p-2", name: "Work", order: 2, archived: false, deleted: false };
+
+      manager.habitsMap.set(p1.id, p1);
+      manager.habitsMap.set(c1a.id, c1a);
+      manager.habitsMap.set(p2.id, p2);
+
+      // Add new child under p-1
+      await manager.addHabit({
+        id: "c-1b",
+        name: "Dhuhr",
+        parentId: "p-1",
+        schemaVersion: 3,
+        schedule: { type: "all-days" },
+        color: "teal"
+      });
+
+      // c-1b should be placed right after c-1a, before p-2!
+      expect(plugin.settings.habitOrder).toEqual(["p-1", "c-1a", "c-1b", "p-2"]);
+      expect(manager.getHabitById("p-1").order).toBe(0);
+      expect(manager.getHabitById("c-1a").order).toBe(1);
+      expect(manager.getHabitById("c-1b").order).toBe(2);
+      expect(manager.getHabitById("p-2").order).toBe(3);
+    });
   });
 });

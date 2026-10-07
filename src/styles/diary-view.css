@@ -287,6 +287,7 @@
 
 /* ── Day Sections ───────────────────────────────────────────────────────────── */
 .daily-habits-plugin .dh-diary-day-section {
+  position: relative;
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -298,8 +299,19 @@
   min-height: 46px;
   gap: 12px;
   padding: 7px 2px;
+  padding-inline-end: 80px;
   color: var(--text-normal);
   cursor: pointer;
+}
+
+.daily-habits-plugin .dh-diary-day-section > .day-header-end {
+  position: absolute;
+  top: 7px;
+  inset-inline-end: 2px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  z-index: 1;
 }
 
 .daily-habits-plugin .dh-diary-day-section.is-today .day-name-text {

@@ -117,10 +117,11 @@ body.is-mobile .daily-habits-plugin :is(.dh-modal-actions-end, .dh-modal-footer-
 /* Note popups split footer on mobile: compact secondary action, clear CTA */
 body.is-mobile .daily-habits-plugin .dh-popup-footer-split {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--dh-space-sm);
+  gap: var(--dh-space-sm, 8px);
 }
 
 body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-left {
@@ -132,7 +133,7 @@ body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-lef
 body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-right {
   display: flex;
   align-items: center;
-  gap: var(--dh-space-sm);
+  gap: var(--dh-space-sm, 8px);
   flex: 0 0 auto;
   margin-inline-start: auto;
 }
@@ -140,12 +141,20 @@ body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-rig
 body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-left button {
   flex: 0 0 auto;
   width: auto;
+  min-height: 38px;
+  padding: 6px 14px;
+  font-size: var(--dh-font-sm, 13px);
   margin: 0;
+  touch-action: manipulation;
 }
 
 body.is-mobile .daily-habits-plugin .dh-popup-footer-split .dh-popup-actions-right button {
   flex: 0 0 auto;
+  min-height: 38px;
+  padding: 6px 16px;
+  font-size: var(--dh-font-sm, 13px);
   margin: 0;
+  touch-action: manipulation;
 }
 
 /* Settings modal tabs: scrollable on mobile */

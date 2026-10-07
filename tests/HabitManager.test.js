@@ -1091,6 +1091,7 @@ describe("HabitManager CRUD Transactional Tests", () => {
 
     it("should reconcile habit order when syncFile is called with _order.md", async () => {
       const orderFile = { path: "Core Habits/_order.md" };
+      habitManager.isInitialized = true;
       habitManager.vaultOrderStore = {
         getOrderFilePath: () => "Core Habits/_order.md",
         readOrder: vi.fn().mockResolvedValue({ habitOrder: ["h-2", "h-1"], orderVersion: 1 })
@@ -1102,6 +1103,22 @@ describe("HabitManager CRUD Transactional Tests", () => {
 
       expect(habitManager.reconcileHabitOrder).toHaveBeenCalledOnce();
       expect(habitManager.invalidateCaches).toHaveBeenCalledOnce();
+    });
+
+    it("should ignore syncFile for _order.md when HabitManager is not initialized", async () => {
+      const orderFile = { path: "Core Habits/_order.md" };
+      habitManager.isInitialized = false;
+      habitManager.vaultOrderStore = {
+        getOrderFilePath: () => "Core Habits/_order.md",
+        readOrder: vi.fn().mockResolvedValue({ habitOrder: ["h-2", "h-1"], orderVersion: 1 })
+      };
+      habitManager.reconcileHabitOrder = vi.fn().mockResolvedValue();
+      habitManager.invalidateCaches = vi.fn();
+
+      await habitManager.syncFile(orderFile);
+
+      expect(habitManager.reconcileHabitOrder).not.toHaveBeenCalled();
+      expect(habitManager.invalidateCaches).not.toHaveBeenCalled();
     });
   });
 });

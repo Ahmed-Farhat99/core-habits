@@ -1,30 +1,32 @@
-# Core Habits 3.5.3
+# Core Habits 3.5.4
 
-This stability and data integrity release resolves critical startup resilience issues, eliminates daily note duplicate creation hazards, and ensures reliable habit renaming across lagging metadata cache conditions.
+This release delivers the permanent fix for audio recording duration metadata across Android, Desktop, and iOS, restores hierarchical block integrity when reordering parent habits, and enhances vault order persistence.
 
 ## Key Highlights & Improvements
 
-### 🛡️ Startup Resilience & Notice Contract
-- **Non-Fatal Startup Notice Safety**: Fixed a critical startup blocker where conflicting or malformed habit warnings failed to display and caused initialization errors. Harmonized the `NoticeService` API contract with a defensive `.warn` alias to guarantee graceful degradation.
-- **Quarantine Isolation Reliability**: Conflicting habit IDs and malformed notes are safely isolated into quarantine without halting the plugin lifecycle or losing user notes.
+### 🎙️ Audio Recording & Duration Architecture
+- **Injected EBML Duration Metadata**: Newly captured voice recordings now have accurate duration metadata injected directly into the WebM container via `fix-webm-duration` at recording completion. Obsidian's audio player now immediately displays the exact duration (e.g. `00:20`) instead of `Infinity` or blank timelines.
+- **Android & Mobile Playback Stability**: Completely eliminated the legacy `1e101` seeking workaround that caused Chromium/Android webviews to latch onto device uptime or cluster timestamps (previously displaying 18+ hours). Seeking, pausing, and replaying now behave predictably.
+- **Legacy Recording Graceful Playback**: Existing recordings without EBML metadata now stream naturally without seeking glitch loops or UI hangs.
+- **RTL/LTR Audio Player Hygiene**: Added explicit `dir="ltr"` on all audio player wrappers to prevent inverted scrubber or volume slider glitches in Arabic interfaces.
+- **Leak-Free Resource Cleanup**: Disconnecting or closing the recording modal immediately aborts media tracks and frees the hardware microphone, preventing orphan audio attachments.
 
-### 📝 Daily Note Deduplication & Write Safety
-- **Authoritative Provider Respect**: Resolved a split-brain issue where daily notes created by Obsidian's native `daily-notes` or `periodic-notes` plugins were discarded if their directory pattern differed slightly from calculated defaults, preventing duplicate note creation.
-- **Concurrency & Existing File Guards**: Added proactive checks before manual fallback creation to eliminate race condition exceptions and duplicate writes.
+### 🌳 Hierarchical Habit Reordering & Order Stability
+- **Block-Preserving Parent Reordering**: Moving a top-level parent habit up or down now moves the entire family block (parent + all child sub-habits) together, eliminating parent-child hierarchy fragmentation.
+- **Archive Position Preservation**: Restoring an archived habit now restores it to its exact original slot if previously present in `_order.md`.
+- **Robust `_order.md` Parsing**: Added a regex fallback parser for `_order.md` in headless and test environments where `window.parseYaml` is absent.
 
-### 🔄 Resilient Manual Habit Rename Handling
-- **Multi-Tiered Identifier Resolution**: When users rename habit notes directly in the Obsidian File Explorer, `handleVaultRename` now seamlessly falls back to the in-memory indexed path (`getHabitIdByPath`) or direct frontmatter disk parsing if Obsidian's `metadataCache` has not completed indexing yet.
-- **Intact Name History & Link Tracking**: Guarantees that historical link text (`nameHistory`) and active links are reliably updated during external and explorer renames.
+### 📱 Diary & Mobile View Refinements
+- **HTML5 Compliant Accordion Summary**: Moved the "+ Note" button out of the `<summary>` element in Diary day sections into an absolute logically positioned end-cluster (`inset-inline-end`), preventing disallowed interactive element conflicts while maintaining seamless RTL and LTR support.
+- **Mobile Touch Targets**: Enlarged modal button hit areas (`touch-action: manipulation`, min-height 38px) on mobile viewports.
 
-### 🧹 Code Hygiene & Strict Verification
-- **Zero Warnings Linter Cleanliness**: Removed all unused imports and stale references across the codebase.
-- **Complete Test Suite Verification**: All 58 test suites (687 tests) pass with 100% compliance.
+---
 
-## Verification Checklist
+## Verification & Release Checklist
 
-1. `npm ci` completes cleanly with exact lockfile resolution.
+1. `npm ci` completes cleanly with exact reproducible lockfile resolution.
 2. `npm run lint` and `npm run typecheck` pass with zero errors and zero warnings.
-3. `npm run ui:check` confirms CSS ownership, token references, and no duplicate declarations.
-4. All 58 test files in `npm run test:run` pass.
-5. `npm run build` bundles `main.js` and `styles.css`.
-6. `npm run release:check -- 3.5.3` validates metadata coherence across `manifest.json`, `package.json`, `package-lock.json`, and `versions.json`.
+3. `npm run ui:check` confirms CSS token compliance across 14 files and 125 properties.
+4. All 61 test files (724 tests) in `npm run test:run` pass with 100% compliance.
+5. `npm run build` produces verified production assets matching the root directory.
+6. `npm run release:check` passes with full version coherence across all metadata descriptors.
