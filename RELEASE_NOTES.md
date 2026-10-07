@@ -1,11 +1,11 @@
-# Core Habits 3.5.5
+# Core Habits 3.5.6
 
-This maintenance release ensures strict npm lockfile synchronization for automated dependency verification, alongside the permanent voice recording duration fixes, hierarchical habit reordering, and vault order resilience.
+This maintenance release delivers complete npm 10 lockfile tree compatibility for automated review verification, alongside permanent voice recording duration metadata, hierarchical habit reordering, and vault order resilience.
 
 ## Key Highlights & Improvements
 
-### 📦 Strict Dependency & Lockfile Synchronization
-- **Reproducible Package Lock**: Fully resolved and synchronized dependency trees across all development and build environments, ensuring deterministic `npm ci` execution without lockfile drift.
+### 📦 Deterministic Lockfile & Ecosystem Compatibility
+- **Reproducible Package Lock**: Fully resolved and synchronized transitive dependencies (`@emnapi/core`, `@emnapi/runtime`) across all environments, ensuring deterministic `npm ci` execution without lockfile drift under both npm 10 and npm 11.
 - **Automated Verification Readiness**: Passed comprehensive build and dependency review checks without warnings or unresolved optional packages.
 
 ### 🎙️ Audio Recording & Duration Architecture
@@ -33,4 +33,4 @@ This maintenance release ensures strict npm lockfile synchronization for automat
 3. `npm run ui:check` confirms CSS token compliance across 14 files and 125 properties.
 4. All 61 test files (724 tests) in `npm run test:run` pass with 100% compliance.
 5. `npm run build` produces verified production assets matching the root directory.
-6. `npm run release:check -- 3.5.5` passes with full version coherence across all metadata descriptors.
+6. `npm run release:check -- 3.5.6` passes with full version coherence across all metadata descriptors.
